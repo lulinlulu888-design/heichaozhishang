@@ -1,0 +1,19 @@
+{
+  "format": "hczs-city-preview-v1",
+  "encounter": 10405,
+  "monster": 6605,
+  "level": 40,
+  "sourcePins": {
+    "monster-properties": "5bb8c084ef58659ce125117d61eb10275955963b1c2367d4bccde8c5794db049",
+    "battle-skills": "39d91427fe90e4780776e81bf1915b1481af40124db62ec77fca61738d943b92"
+  },
+  "maxRounds": 30,
+  "assumptions": [
+    "Level40 is an explicit local preview setting, not a recovered challenge level.",
+    "Player baseline/cards/deck and neutral damage/shield modifiers reuse the existing tutorial reconstruction.",
+    "Maze and challenge multipliers are explicitly neutral; opening buff89999 and defenses/counters are not implemented.",
+    "Single-opponent target substitution; source area attack does not imply multi-target support.",
+    "Every third round starting at1 uses66054; other rounds use source weights with local SHA256 seeded selection, not the original RNG.",
+    "Breakdown uses existing breakdown-reconstruction-v1 semantics, not original event dispatch."
+  ]
+}

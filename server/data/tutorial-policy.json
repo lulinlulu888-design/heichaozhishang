@@ -1,0 +1,712 @@
+{
+  "schemaVersion": 1,
+  "id": "first-encounter-reconstruction-v1",
+  "title": "序章首战 · 重建规则",
+  "notice": "这是基于 APK 静态证据制作的重建规则演示，并非原服务器或原版完整战斗。玩家基础伤害临时采用卡表 RPG_DEFAULT_FORMULA 的 AP 系数；状态按 OwnerIndex 顺序执行属于新设计；怪物缺失 RPG 字段时基础值显式设为 0；未恢复的增益、防御、克制、压制等采用显式中性值。疾驰抽牌采用卡表 DIY VALUE=0，保留原状态 VALUE=1 的冲突。角色基础生命和攻击保留 binary64，原最终战斗属性未恢复。抽牌、能量、手牌及回合上限为重建政策。",
+  "sourceApkSha256": "aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4",
+  "rules": {
+    "deckEntry": {
+      "kind": "recovered-course-field-meaning",
+      "tuple": ["cardId", "ownerCharacterId"],
+      "source": "5947 getAvatarCharInitCardPile filters CardPile by character ID; second entry is not card level."
+    },
+    "playerBaseDamage": {
+      "kind": "reconstruction-choice",
+      "formula": "binary64(AP) * integer(card.RPG_DEFAULT_FORMULA[0][0]) / binary64(100.0)",
+      "symbol": "AP maps to player-baseline.baseStatsTagged.PropAtk",
+      "providerRecovered": false
+    },
+    "stateOrder": {
+      "kind": "reconstruction-choice",
+      "order": "ascending OwnerIndex",
+      "originalSchedulerRecovered": false
+    },
+    "targets": {
+      "kind": "reconstruction-choice",
+      "damage": "opponent",
+      "shield": "self",
+      "draw": "acting player; count zero is allowed"
+    },
+    "monsterMissingRpgBase": {
+      "kind": "reconstruction-choice",
+      "value": "0",
+      "originalMissingFieldBehaviorRecovered": false
+    },
+    "neutralModifiers": {
+      "kind": "reconstruction-choice",
+      "originalRuntimeValuesRecovered": false
+    },
+    "card410102Draw": {
+      "kind": "explicit-reconstruction-override",
+      "cardField": "SKILL_DIY_VALUE[SKILL_DIY_PARAMETER.indexOf(VALUE)]",
+      "value": 0,
+      "originalStateRow": 367,
+      "originalStateValue": 1
+    },
+    "playerBaseline": {
+      "kind": "reconstruction-choice",
+      "configuration": "elsa-level100-rarity4-base-only",
+      "statsRecovered": false,
+      "preserve": "baseStatsTagged binary64; no HP/attack integer conversion"
+    },
+    "enemyHp": {
+      "kind": "reconstruction-choice",
+      "source": "monster_table[991].enforce_maxHp",
+      "value": "4600",
+      "originalFinalCombatStatsRecovered": false
+    },
+    "enemyTurns": {
+      "kind": "reconstruction-choice-informed-by-static-BT",
+      "intentions": [
+        [
+          "990"
+        ],
+        [
+          "991"
+        ],
+        [
+          "992"
+        ]
+      ],
+      "fallback": [
+        "990"
+      ],
+      "originalBehaviorTreeRuntimeRecovered": false
+    },
+    "limits": {
+      "kind": "reconstruction-choice",
+      "initialDraw": 6,
+      "roundDraw": 6,
+      "energyPerRound": 5,
+      "handLimit": 10,
+      "maxRounds": 30,
+      "referenceOnly": "Client constants and battle_table[5000].MaxRoundFail are references, not proof of original server rules."
+    }
+  },
+  "neutralDamage": {
+    "rpgAttackType": 1,
+    "addAttackValue": 0,
+    "combatCounterRatioValue": 1,
+    "dstEntityDefenseValue": 1,
+    "attackFactorValue": 0,
+    "attackedFactorValue": 0,
+    "criticalRatioValue": 1,
+    "propDamageIncValue": 0,
+    "propDamageReduceValue": 0,
+    "propAtkDamageIncValue": 0,
+    "propAtkDamageReduceValue": 0,
+    "propMgcDamageIncValue": 0,
+    "propMgcDamageReduceValue": 0,
+    "overwhelmRatio": 1,
+    "extraAttackValue": 0,
+    "extraAttackedValue": 0,
+    "isPVP": false,
+    "pvpAtkRatio": 1,
+    "isDamageSkillPreview": false,
+    "slowHp": 0
+  },
+  "neutralShield": {
+    "card": null,
+    "source": {
+      "propAddTargetShield": 0,
+      "shieldFactor": 0
+    },
+    "target": {
+      "propBeAddShield": 0,
+      "shieldFactor": 0,
+      "isPVP": false,
+      "pvpShieldRatio": 1
+    }
+  },
+  "formulaSource": {
+    "moduleIndex": 7042,
+    "filename": "common\\formula.py",
+    "decodedSha256": "ea9b0bb6c277d605e039bbbc6e18d4eabad98fb8316659948129efa4709586fc",
+    "calcDamage": "7042:[7]",
+    "calcBlock": "7042:[11]",
+    "blockCallCaveat": "At 0x12 CALL_FUNCTION3 binds outer cardObj to helper strengthFactor; helper cardObj remains None. This scenario supplies card=null."
+  },
+  "sourcePins": {
+    "new-player-course.table.json": {
+      "sha256": "44591edd62a44036137d17a2fec650bb6248e14cba36cdabaebc75514558a9e8",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 4105,
+          "filename": "common\\cdata\\new_player_course_table.py",
+          "decoded_sha256": "230956d4a7d2068f340490aa50a47d2f2323954307416d0f4a16add7b04432ab"
+        },
+        "rows": {
+          "1": {
+            "BattleChar": [
+              1
+            ],
+            "CardPile": [
+              [
+                410101,
+                1
+              ],
+              [
+                110001,
+                1
+              ],
+              [
+                210003,
+                1
+              ],
+              [
+                110009,
+                1
+              ],
+              [
+                210003,
+                1
+              ],
+              [
+                110001,
+                1
+              ],
+              [
+                410102,
+                1
+              ]
+            ],
+            "CharLevel": [
+              100
+            ],
+            "DisableSpecialSkill": true,
+            "FirstBattleID": 5000,
+            "SkipChooseChar": true
+          }
+        }
+      }
+    },
+    "player-cards.json": {
+      "sha256": "79be14525ec202b3bde88fbed08d758652091ed18d6feb103458a2c3c950866d",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 3391,
+          "filename": "common\\cdata\\card_table.py",
+          "decoded_sha256": "c506ea0dd24ab8b7f35b2c563521ea83657668905345573de22a6273827c1d09"
+        },
+        "rows": {
+          "110001": {
+            "COST": 1,
+            "LEVEL": 1,
+            "NAME": "斩击",
+            "RPG_DEFAULT_FORMULA": [
+              [
+                80
+              ]
+            ],
+            "RPG_FORMULA": [
+              [
+                "AP"
+              ]
+            ],
+            "SKILL_DIY_PARAMETER": [
+              "FACTOR"
+            ],
+            "SKILL_DIY_VALUE": [
+              80
+            ],
+            "SKILL_ID": 110001
+          },
+          "110009": {
+            "COST": 2,
+            "LEVEL": 1,
+            "NAME": "猛力斩击",
+            "RPG_DEFAULT_FORMULA": [
+              [
+                150
+              ]
+            ],
+            "RPG_FORMULA": [
+              [
+                "AP"
+              ]
+            ],
+            "SKILL_DIY_PARAMETER": [
+              "FACTOR"
+            ],
+            "SKILL_DIY_VALUE": [
+              150
+            ],
+            "SKILL_ID": 110009
+          },
+          "210003": {
+            "COST": 1,
+            "LEVEL": 1,
+            "NAME": "强力斩击",
+            "RPG_DEFAULT_FORMULA": [
+              [
+                100
+              ]
+            ],
+            "RPG_FORMULA": [
+              [
+                "AP"
+              ]
+            ],
+            "SKILL_DIY_PARAMETER": [
+              "FACTOR"
+            ],
+            "SKILL_DIY_VALUE": [
+              100
+            ],
+            "SKILL_ID": 210003
+          },
+          "410101": {
+            "COST": 1,
+            "LEVEL": 1,
+            "NAME": "二连斩击",
+            "RPG_DEFAULT_FORMULA": [
+              [
+                75
+              ]
+            ],
+            "RPG_FORMULA": [
+              [
+                "AP"
+              ]
+            ],
+            "SKILL_DIY_PARAMETER": [
+              "FACTOR"
+            ],
+            "SKILL_DIY_VALUE": [
+              75
+            ],
+            "SKILL_ID": 410101
+          },
+          "410102": {
+            "COST": 2,
+            "LEVEL": 1,
+            "NAME": "疾驰斩击",
+            "RPG_DEFAULT_FORMULA": [
+              [
+                300
+              ]
+            ],
+            "RPG_FORMULA": [
+              [
+                "AP"
+              ]
+            ],
+            "SKILL_DIY_PARAMETER": [
+              "FACTOR",
+              "VALUE"
+            ],
+            "SKILL_DIY_VALUE": [
+              300,
+              0
+            ],
+            "SKILL_ID": 410102
+          }
+        }
+      }
+    },
+    "skills.json": {
+      "sha256": "8db88ef25aa6adfa22433128bdd701301579d394f4071fb80a53a4010decc513",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 9333,
+          "filename": "common\\cdata\\skill_table.py",
+          "decoded_sha256": "fc547f5c9239e1119840cb6fd3e155278b0e7311665eb74f40ceafc1929218a9"
+        },
+        "rows": {
+          "990": {
+            "NAME": "新手-幻方-攻15",
+            "SHOW_NAME": "轻击",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "991": {
+            "NAME": "新手-幻方-攻20",
+            "SHOW_NAME": "重击",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "992": {
+            "NAME": "新手-幻方-盾15",
+            "SHOW_NAME": "防护",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "110001": {
+            "NAME": "斩击",
+            "SHOW_NAME": "斩击",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "110009": {
+            "NAME": "猛力斩击",
+            "SHOW_NAME": "猛力斩击",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "210003": {
+            "NAME": "强力斩击",
+            "SHOW_NAME": "强力斩击",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "410101": {
+            "NAME": "二连斩击",
+            "SHOW_NAME": "二连斩击",
+            "SKILL_TARGET_TYPE": 1
+          },
+          "410102": {
+            "NAME": "疾驰斩击",
+            "SHOW_NAME": "疾驰斩击",
+            "SKILL_TARGET_TYPE": 1
+          }
+        }
+      }
+    },
+    "skill-states.json": {
+      "sha256": "86317d31ed2287003b2a2b1a829535339287f7e2bd86edb45192a8c3d210b214",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 8903,
+          "filename": "common\\cdata\\skill_state_table.py",
+          "decoded_sha256": "be8c1ea4abc43f7dab5e38187e6ac286f2f338aef1581313eb99d099dbea090c"
+        },
+        "rows": {
+          "2": {
+            "DAMAGE_TYPE": 1,
+            "DATA": {
+              "TIMES": 1
+            },
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 990,
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 18,
+            "STORYLINE_NAME": "SkillState_MonsterCauseDamage",
+            "STORYLINE_PARAM": {
+              "VALUE": 302
+            }
+          },
+          "3": {
+            "DAMAGE_TYPE": 1,
+            "DATA": {
+              "TIMES": 1
+            },
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 991,
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 18,
+            "STORYLINE_NAME": "SkillState_MonsterCauseDamage",
+            "STORYLINE_PARAM": {
+              "VALUE": 402
+            }
+          },
+          "4": {
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 992,
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 0,
+            "STORYLINE_NAME": "SkillState_AddShield",
+            "STORYLINE_PARAM": {
+              "VALUE": 300
+            }
+          },
+          "294": {
+            "DAMAGE_TYPE": 1,
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 110001,
+            "RPG_DEFAULT_FORMULA": "80",
+            "RPG_FORMULA": "PropAtk",
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 16,
+            "STORYLINE_NAME": "SkillState_CauseDamage",
+            "STORYLINE_PARAM": {
+              "#EXTRA_DAMAGE": 0
+            }
+          },
+          "296": {
+            "DAMAGE_TYPE": 1,
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 110009,
+            "RPG_DEFAULT_FORMULA": "80",
+            "RPG_FORMULA": "PropAtk",
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 16,
+            "STORYLINE_NAME": "SkillState_CauseDamage",
+            "STORYLINE_PARAM": {
+              "#EXTRA_DAMAGE": 0
+            }
+          },
+          "311": {
+            "DAMAGE_TYPE": 1,
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 210003,
+            "RPG_DEFAULT_FORMULA": "100",
+            "RPG_FORMULA": "PropAtk",
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 16,
+            "STORYLINE_NAME": "SkillState_CauseDamage",
+            "STORYLINE_PARAM": {
+              "#EXTRA_DAMAGE": 0
+            }
+          },
+          "365": {
+            "DAMAGE_TYPE": 1,
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 410101,
+            "RPG_DEFAULT_FORMULA": "75",
+            "RPG_FORMULA": "PropAtk",
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 16,
+            "STORYLINE_NAME": "SkillState_CauseDamage",
+            "STORYLINE_PARAM": {
+              "#EXTRA_DAMAGE": 0
+            }
+          },
+          "366": {
+            "DAMAGE_TYPE": 1,
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 1,
+            "OwnerSkill": 410101,
+            "RPG_DEFAULT_FORMULA": "75",
+            "RPG_FORMULA": "PropAtk",
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 16,
+            "STORYLINE_NAME": "SkillState_CauseDamage",
+            "STORYLINE_PARAM": {
+              "#EXTRA_DAMAGE": 0
+            }
+          },
+          "367": {
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 1,
+            "OwnerSkill": 410102,
+            "SKILL_STATE_CAMP_TYPE": 1,
+            "SKILL_STATE_TARGET_TYPE": 0,
+            "STORYLINE_NAME": "SkillState_getCard",
+            "STORYLINE_PARAM": {
+              "VALUE": 1
+            }
+          },
+          "368": {
+            "DAMAGE_TYPE": 1,
+            "DO_NOT_DESTROY": false,
+            "OwnerIndex": 0,
+            "OwnerSkill": 410102,
+            "RPG_DEFAULT_FORMULA": "200",
+            "RPG_FORMULA": "PropAtk",
+            "SKILL_STATE_CAMP_TYPE": 0,
+            "SKILL_STATE_TARGET_TYPE": 16,
+            "STORYLINE_NAME": "SkillState_CauseDamage",
+            "STORYLINE_PARAM": {
+              "#EXTRA_DAMAGE": 0
+            }
+          }
+        }
+      }
+    },
+    "player-character.json": {
+      "sha256": "f54c86d7bf80c520a0b8015f044de89418b2c8a0a094573958d42348d7ecdb20",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 8995,
+          "filename": "common\\cdata\\character_basic_info.py",
+          "decoded_sha256": "1998f8eb7ff9598936b27e61197f96b364a305c01f0f1ca6d1481aba716b6ffb"
+        },
+        "rows": {
+          "1": {
+            "CHARRARITY": 4,
+            "CHARTYPE": 1,
+            "CHAR_SUB_RARITY": 0,
+            "NAME": "艾尔莎"
+          }
+        }
+      }
+    },
+    "monster-991.json": {
+      "sha256": "87de9d5cc3e52e7fa144b97b6e3811201c4cdccd75e706479d28b5ec83fe5567",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 2363,
+          "filename": "common\\cdata\\monster_table.py",
+          "decoded_sha256": "fa267879bc19a7361c0712450d089618541e789e0f4751d56b2433a31dfaa7d8"
+        },
+        "rows": {
+          "991": {
+            "BT_PATH": "newbie_cube.xml",
+            "NAME": "幻眼魔方",
+            "enforce_PropAtk": 2.0,
+            "enforce_maxHp": 4600
+          }
+        }
+      }
+    },
+    "battles.json": {
+      "sha256": "6bc45ea0ad9d293395db0194ec65c338be10e9afaffa5fa7fae23cf7aecb9618",
+      "table": {
+        "source": {
+          "apk_member": "assets/script.npk",
+          "index": 4664,
+          "filename": "common\\cdata\\maze_battle_table_6.py",
+          "decoded_sha256": "96c573ad42991794244674694386b14cc9e4c4e8de7bde8f97ca98e8cc126c73"
+        },
+        "rows": {
+          "5000": {
+            "MaxRoundFail": 30,
+            "MonsterInfo": [
+              {
+                "MonsterID": 991,
+                "SpawnPointIdx": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    "player-baseline.json": {
+      "sha256": "dec00b062bb51247db916a60a69e879b6c2fa352906c62486e4a87888f29edc2",
+      "encoding": "json"
+    },
+    "player-baseline.evidence.json": {
+      "sha256": "48d8ed7296d4b9f1a5a2f55559e0751a697195adceecda4aa5fb502ddbbf0ad0",
+      "encoding": "json",
+      "tables": {
+        "character": {
+          "source": {
+            "apk_member": "assets/script.npk",
+            "index": 8995,
+            "filename": "common\\cdata\\character_basic_info.py",
+            "decoded_sha256": "1998f8eb7ff9598936b27e61197f96b364a305c01f0f1ca6d1481aba716b6ffb"
+          },
+          "rows": {
+            "1": {
+              "CHARRARITY": 4,
+              "CHARTYPE": 1,
+              "CHAR_SUB_RARITY": 0,
+              "NAME": "艾尔莎"
+            }
+          }
+        },
+        "course": {
+          "source": {
+            "apk_member": "assets/script.npk",
+            "index": 4105,
+            "filename": "common\\cdata\\new_player_course_table.py",
+            "decoded_sha256": "230956d4a7d2068f340490aa50a47d2f2323954307416d0f4a16add7b04432ab"
+          },
+          "rows": {
+            "1": {
+              "BattleChar": [
+                1
+              ],
+              "CardPile": [
+                [
+                  410101,
+                  1
+                ],
+                [
+                  110001,
+                  1
+                ],
+                [
+                  210003,
+                  1
+                ],
+                [
+                  110009,
+                  1
+                ],
+                [
+                  210003,
+                  1
+                ],
+                [
+                  110001,
+                  1
+                ],
+                [
+                  410102,
+                  1
+                ]
+              ],
+              "CharLevel": [
+                100
+              ],
+              "DisableSpecialSkill": true,
+              "FirstBattleID": 5000,
+              "SkipChooseChar": true
+            }
+          }
+        },
+        "quality": {
+          "source": {
+            "apk_member": "assets/script.npk",
+            "index": 6181,
+            "filename": "common\\cdata\\character_quality_table.py",
+            "decoded_sha256": "2c56bd29762cf857948cc5a8f8e7a5da5e8139daa2f00418b2cebd9d9480d1b7"
+          },
+          "rows": {
+            "4": {
+              "rarityBaseValue": 0.0,
+              "rarityRatio": 1.0
+            }
+          }
+        },
+        "level": {
+          "source": {
+            "apk_member": "assets/script.npk",
+            "index": 8577,
+            "filename": "common\\cdata\\role_level_rank_table.py",
+            "decoded_sha256": "fd37de51322087cc1184b73f53f7dfcc746d9cb73270a1e4589a6fd1e71ad14f"
+          },
+          "rows": {
+            "100": {
+              "totalCultivateValue": 704.0
+            }
+          }
+        },
+        "occupation": {
+          "source": {
+            "apk_member": "assets/script.npk",
+            "index": 1617,
+            "filename": "common\\cdata\\character_type_cultivate_ratio_table.py",
+            "decoded_sha256": "e12672bf28340321ceba1cea017607ea2f6392c7f22768613c4aebe121a3dda4"
+          },
+          "rows": {
+            "1": {
+              "PropAtk": 0.6,
+              "maxHp": 2.2
+            }
+          }
+        },
+        "formula": {
+          "source": {
+            "apk_member": "assets/script.npk",
+            "index": 4879,
+            "filename": "common\\cdata\\char_basic_prop.py",
+            "decoded_sha256": "fa3a7c02e7633e3358dc6752b65e29aba8a20d0073761efdcb13a9a99f40dca5"
+          },
+          "rows": {
+            "1": {
+              "PropAtk": "occupation*((100+increase)*rarityratio*1+raritybase)",
+              "maxHp": "occupation*((100+increase)*rarityratio*1+raritybase)"
+            }
+          }
+        }
+      }
+    },
+    "newbie_cube.xml": {
+      "sha256": "b7286ce138ec548dc4f6cf50ae95d7857bb3c146f22bc7f69fb5bc51b5b8a809",
+      "encoding": "text"
+    },
+    "newbie_cube.xml.provenance.json": {
+      "sha256": "87230ef25ae926b2f65e04de575699aee8027aa4f639286c52d00837742ebd96",
+      "encoding": "json"
+    }
+  }
+}

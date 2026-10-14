@@ -1,0 +1,13 @@
+*.apk
+*.apks
+*.xapk
+*.obb
+analysis/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+tools/runtime/
+.tools/
+runtime/
+*.log

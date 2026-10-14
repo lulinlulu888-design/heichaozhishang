@@ -1,0 +1,27 @@
+{
+  "name": "hczs-cocos-poc",
+  "platform": "mac",
+  "debug": true,
+  "buildPath": "project://build",
+  "outputName": "mac",
+  "startScene": "1cce6d16-610f-45bd-8b9f-63628732ec0f",
+  "scenes": [{ "url": "db://assets/ToolchainProof.scene", "uuid": "1cce6d16-610f-45bd-8b9f-63628732ec0f" }],
+  "packages": {
+    "mac": {
+      "executableName": "hczs-cocos-poc",
+      "packageName": "local.hczs.rebuild",
+      "renderBackEnd": { "metal": true, "gles3": false, "gles2": false },
+      "supportM1": true,
+      "skipUpdateXcodeProject": false,
+      "targetVersion": "11.0"
+    },
+    "native": {
+      "encrypted": false,
+      "compressZip": false,
+      "runAfterMake": false,
+      "JobSystem": "none",
+      "serverMode": false,
+      "netMode": 0
+    }
+  }
+}

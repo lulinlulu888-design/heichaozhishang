@@ -1,0 +1,28 @@
+{
+  "name": "hczs-cocos-poc",
+  "platform": "ios",
+  "debug": true,
+  "buildPath": "project://build",
+  "outputName": "ios",
+  "startScene": "1cce6d16-610f-45bd-8b9f-63628732ec0f",
+  "scenes": [{ "url": "db://assets/ToolchainProof.scene", "uuid": "1cce6d16-610f-45bd-8b9f-63628732ec0f" }],
+  "packages": {
+    "ios": {
+      "executableName": "hczs-cocos-poc",
+      "packageName": "local.hczs.rebuild",
+      "orientation": { "landscapeRight": true, "landscapeLeft": true, "portrait": false, "upsideDown": false },
+      "skipUpdateXcodeProject": false,
+      "renderBackEnd": { "metal": true, "gles3": false, "gles2": false },
+      "osTarget": { "iphoneos": true, "simulator": false },
+      "targetVersion": "13.0"
+    },
+    "native": {
+      "encrypted": false,
+      "compressZip": false,
+      "runAfterMake": false,
+      "JobSystem": "none",
+      "serverMode": false,
+      "netMode": 0
+    }
+  }
+}

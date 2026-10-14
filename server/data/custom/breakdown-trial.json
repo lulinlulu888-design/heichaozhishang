@@ -1,0 +1,24 @@
+{
+  "format": "hczs-custom-tutorial-v2",
+  "id": "breakdown-trial",
+  "title": "分解试炼",
+  "description": "自定义状态试炼：敌人施加分解，回合结束结算；使用净化治疗恢复生命并减层。不是原版城市关卡。",
+  "statusRules": {
+    "policy": "breakdown-reconstruction-v1",
+    "attack": {
+      "player": {"numeric_type": "integer", "decimal": "500"},
+      "enemy": {"numeric_type": "integer", "decimal": "600"}
+    }
+  },
+  "addCards": {
+    "custom:recovery": {"name": "净化治疗", "cost": 1, "effects": [{"type": "heal", "target": "self", "amount": "300"}]},
+    "custom:breakdown": {"name": "分解印记", "cost": 1, "effects": [{"type": "breakdown", "target": "opponent", "stacks": 2}]}
+  },
+  "addEnemySkills": {
+    "custom:decompose": {"effects": [{"type": "breakdown", "target": "opponent", "stacks": 2}, {"type": "damage", "target": "opponent", "amount": "100"}]}
+  },
+  "enemyIntents": [["custom:decompose"], ["990"], ["custom:decompose"]],
+  "enemyFallback": ["990"],
+  "deck": ["custom:recovery", "custom:breakdown", "110001", "210003", "110009", "410102"],
+  "rules": {"initialDraw": 6, "roundDraw": 6, "energyPerRound": 5, "handLimit": 6, "maxRounds": 20}
+}

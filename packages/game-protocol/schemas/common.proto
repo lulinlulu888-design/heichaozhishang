@@ -1,0 +1,168 @@
+// Recovered from an embedded FileDescriptorProto; options are preserved in .bin/.json.
+syntax = "proto2";
+package mobile.server;
+
+message Void {
+}
+
+message ConnectServerRequest {
+  enum RequestType {
+    NEW_CONNECTION = 0;
+    RE_CONNECTION = 1;
+    BIND_AVATAR = 2;
+  }
+  optional bytes routes = 1;
+  required .mobile.server.ConnectServerRequest.RequestType type = 2;
+  optional bytes deviceid = 3;
+  optional bytes entityid = 4;
+  optional bytes authmsg = 5;
+}
+
+message ConnectServerReply {
+  enum ReplyType {
+    BUSY = 0;
+    CONNECTED = 1;
+    RECONNECT_SUCCEEDED = 2;
+    RECONNECT_FAILED = 3;
+    FORBIDDEN = 4;
+    MAX_CONNECTION = 5;
+  }
+  optional bytes routes = 1;
+  required .mobile.server.ConnectServerReply.ReplyType type = 2 [default = BUSY];
+  optional bytes entityid = 3;
+  optional bytes extramsg = 4;
+}
+
+message Md5OrIndex {
+  optional bytes md5 = 1;
+  optional sint32 index = 2 [default = -1];
+}
+
+message FilterObj {
+  required bytes strexp = 1;
+  optional int32 index = 2 [default = -1];
+}
+
+message FilterRule {
+  enum RuleType {
+    BROAD_CAST = 0;
+    FILTER_EXP = 1;
+    ID_LIST = 2;
+  }
+  optional .mobile.server.FilterRule.RuleType type = 1;
+  optional .mobile.server.FilterObj filter = 2;
+  repeated bytes idlist = 3;
+}
+
+message FilterMessage {
+  optional bytes rule = 1;
+  required .mobile.server.Md5OrIndex method = 2;
+  optional bytes parameters = 3 [default = ""];
+}
+
+message EntityMessage {
+  optional bytes routes = 1;
+  optional bytes id = 2 [default = ""];
+  required .mobile.server.Md5OrIndex method = 3;
+  optional bytes parameters = 4;
+  optional bool reliable = 5 [default = true];
+  optional int32 localid = 6 [default = -1];
+}
+
+message RouteData {
+  enum RouteType {
+    Default = 0;
+    Client2Server = 1;
+    Server2Client = 2;
+    Server2Sserver = 3;
+    Client2Service = 4;
+    Service2Client = 5;
+    Server2Service = 6;
+    Service2Server = 7;
+  }
+  optional .mobile.server.RouteData.RouteType type = 1 [default = Default];
+  optional bytes strid = 2 [default = ""];
+  optional int32 intid = 3 [default = -1];
+}
+
+message CustomMessage {
+  optional .mobile.server.RouteData route = 1;
+  optional bytes msg = 2;
+}
+
+message ServiceId {
+  required bytes service_type = 1;
+  optional int32 service_subid = 2 [default = 0];
+  optional bytes id = 3;
+}
+
+message ServiceMessage {
+  required .mobile.server.EntityMessage entity_msg = 1;
+  optional .mobile.server.ServiceId service_id = 2;
+  optional int32 hash_key = 3 [default = 0];
+}
+
+message GlobalEntityMessage {
+  optional bytes target = 1;
+  required .mobile.server.Md5OrIndex method = 2;
+  optional bytes parameters = 3;
+  optional bool reliable = 4 [default = true];
+}
+
+message EntityInfo {
+  optional bytes routes = 1;
+  optional .mobile.server.Md5OrIndex type = 2;
+  optional bytes id = 3;
+  optional bytes info = 4;
+}
+
+message ServiceInfo {
+  enum ForwardType {
+    Any = 0;
+    Every = 1;
+    Hash = 2;
+  }
+  enum LayoutType {
+    AnyWhere = 0;
+    EveryWhere = 1;
+  }
+  required .mobile.server.EntityInfo entity_info = 1;
+  required .mobile.server.ServiceId service_id = 2;
+  optional int32 forward_type = 3 [default = 2];
+  optional int32 layout_type = 4 [default = 0];
+}
+
+message OutBandInfo {
+  optional bytes routes = 1;
+  required bytes message = 2;
+}
+
+message ServerInfo {
+  enum SvrType {
+    NormalServer = 1;
+  }
+  required bytes ip = 1;
+  required int32 port = 2;
+  optional int32 sid = 3;
+  optional bool banclient = 4;
+  optional int32 svrtype = 5;
+  optional bytes servername = 6;
+  optional bytes dip = 7;
+  optional int32 dport = 8;
+}
+
+message EntityMailbox {
+  required bytes entityid = 1;
+  optional .mobile.server.ServerInfo serverinfo = 2;
+}
+
+message ServiceMailbox {
+  required .mobile.server.EntityMailbox entitymb = 1;
+  required .mobile.server.ServiceId service_id = 2;
+}
+
+message ForwardAoiInfo {
+  optional bytes routes = 1;
+  optional bytes id = 2;
+  optional bytes info = 3;
+}

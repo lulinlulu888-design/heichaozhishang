@@ -1,0 +1,32 @@
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: city-vs:vert
+      frag: city-fs:frag
+      rasterizerState: { cullMode: none }
+      properties:
+        mainTexture: { value: white }
+}%
+CCProgram city-vs %{
+  precision highp float;
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/local-batch>
+  out vec2 v_uv;
+  vec4 vert () {
+    vec4 p; CCVertInput(p);
+    mat4 world; CCGetWorldMatrix(world);
+    v_uv = a_texCoord;
+    return cc_matProj * cc_matView * world * p;
+  }
+}%
+CCProgram city-fs %{
+  precision highp float;
+  #include <legacy/output-standard>
+  in vec2 v_uv;
+  uniform sampler2D mainTexture;
+  vec4 frag () {
+    // glTF OPAQUE ignores texture alpha, including in RenderTexture output.
+    return CCFragOutput(vec4(SRGBToLinear(texture(mainTexture, v_uv).rgb), 1.0));
+  }
+}%

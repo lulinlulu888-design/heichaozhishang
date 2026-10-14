@@ -1,0 +1,33 @@
+
+#///////////////////////////
+# Cocos Creator Project
+#///////////////////////////
+
+/library/
+/temp/
+/local/
+/build/
+/profiles/
+/native/engine/android/**/*/assets
+
+#//////////////////////////
+# NPM
+#//////////////////////////
+node_modules/
+
+#//////////////////////////
+# VSCode
+#//////////////////////////
+.vscode/
+
+#//////////////////////////
+# WebStorm
+#//////////////////////////
+.idea/
+
+# Local APK-derived examples and their generated import metadata.
+/assets/resources/recovered/
+/assets/resources/recovered.meta
+/assets/imported-models/
+/assets/imported-models.meta
+/settings/v2/packages/information.json

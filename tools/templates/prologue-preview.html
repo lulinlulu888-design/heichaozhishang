@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>黑潮之上 · 原序章场景</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#15161b;color:#eee;font:14px system-ui}canvas{display:block}header{position:absolute;left:24px;top:20px;pointer-events:none;text-shadow:0 2px 8px #000}h1{font-size:23px;font-weight:500;margin:0 0 8px}p{color:#bcbec8;margin:5px 0}nav{position:absolute;bottom:24px;left:24px;display:flex;gap:8px}button{border:1px solid #797b83;background:#202128dc;color:white;padding:10px 16px;cursor:pointer}#status{position:absolute;right:24px;top:24px;color:#d6d7df}</style>
+<header><h1>黑潮之上 · 序章场景</h1><p>原包场景与烘焙光照参考 · 动态光照、雾及特效待恢复</p><p>拖动旋转 · 滚轮缩放 · 右键平移</p></header><div id="status">正在加载场景…</div>
+<nav><button id="camera1">原镜头 1</button><button id="camera2">原镜头 2</button><button id="camera3">原镜头 3</button><button id="overview">全景检查</button></nav>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<button id="lighting" style="position:absolute;right:24px;bottom:24px" disabled>光照载入中…</button>
+<script type="module">
+import { prepareLighting } from './prologue-lightmaps.js';
+import * as THREE from 'three';
+import { GLTFLoader } from './vendor/loaders/GLTFLoader.js';
+import { OrbitControls } from './vendor/controls/OrbitControls.js';
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+renderer.setClearColor(0x15161b);document.body.prepend(renderer.domElement);
+const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,1,10000);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;
+const status=document.querySelector('#status');let cameras=[],bounds,mixer;const clock=new THREE.Clock();
+function original(index){
+ const row=cameras[index];if(!row)return;
+ new THREE.Matrix4().fromArray(row.Transform.split(',').map(Number)).decompose(camera.position,camera.quaternion,camera.scale);
+ camera.scale.set(1,1,1);camera.rotateY(Math.PI);
+ camera.fov=Number(row.Fov);camera.near=Number(row.Near);camera.far=Number(row.Far);camera.updateProjectionMatrix();
+ controls.target.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(350));controls.update();
+ status.textContent=`镜头 ${index+1} · 方向约定待原版对照`;
+}
+for(let i=0;i<3;i++)document.querySelector(`#camera${i+1}`).onclick=()=>original(i);
+document.querySelector('#overview').onclick=()=>{if(!bounds)return;const center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3()).length();camera.position.copy(center).add(new THREE.Vector3(.65,.6,.8).multiplyScalar(size));controls.target.copy(center);controls.update();status.textContent='全景检查';};
+try{const gltf=await new GLTFLoader().loadAsync('./prologue-scene.glb');scene.add(gltf.scene);cameras=gltf.parser.json.extras.sourceCameras;bounds=new THREE.Box3().setFromObject(gltf.scene);original(1);console.info('[PROLOGUE] loaded',gltf.parser.json.nodes.length,'instances');
+ const lighting=await prepareLighting(gltf.scene);let enabled=true;lighting.set(true);const button=document.querySelector('#lighting');button.disabled=false;button.textContent='返回原颜色贴图';button.onclick=()=>{enabled=!enabled;lighting.set(enabled);button.textContent=enabled?'返回原颜色贴图':'查看光照参考';};console.info('[PROLOGUE] lightmaps bound',lighting.count);
+ const actors=[];gltf.scene.traverse(node=>{if(node.userData.sourceInstance?.UUID==='07E30815-1037001E-608F28A4-67844AE1')actors.push(node);});
+ if(actors.length!==1)throw new Error('Expected exactly one source Elsa instance');
+ const actor=await new GLTFLoader().loadAsync('./prologue-elsa.glb');
+ const instance=actors[0];instance.clear();instance.add(actor.scene);
+ const idle=actor.animations.find(clip=>clip.name==='stand_idle');if(!idle)throw new Error('Source idle absent');
+ mixer=new THREE.AnimationMixer(actor.scene);mixer.clipAction(idle).play();console.info('[PROLOGUE] original scene actor idle playing',idle.duration);
+}
+catch(error){status.textContent='场景加载失败，请查看日志';console.error(error);}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+renderer.setAnimationLoop(()=>{const delta=Math.min(clock.getDelta(),.1);mixer?.update(delta);controls.update();renderer.render(scene,camera);});
+</script></html>

@@ -1,0 +1,53 @@
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: city-vs:vert
+      frag: city-fs:frag
+      rasterizerState: { cullMode: none }
+      depthStencilState: { depthTest: true, depthWrite: false }
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      properties:
+        mainTexture: { value: white }
+        noiseTexture: { value: white }
+        maskTexture: { value: white }
+        tint: { value: [1, 1, 1, 1] }
+        flow: { value: [1, 1, 0, 0] }
+        distortionFlow: { value: [1, 1, 0, 0] }
+        strengths: { value: [0.2, 0.2, 0, 0] }
+}%
+CCProgram city-vs %{
+  precision highp float;
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/local-batch>
+  out vec2 v_uv;
+  vec4 vert () {
+    vec4 p; CCVertInput(p);
+    mat4 world; CCGetWorldMatrix(world);
+    v_uv = a_texCoord;
+    return cc_matProj * cc_matView * world * p;
+  }
+}%
+CCProgram city-fs %{
+  precision highp float;
+  #include <legacy/output-standard>
+  #include <builtin/uniforms/cc-global>
+  in vec2 v_uv;
+  uniform sampler2D mainTexture;
+  uniform sampler2D noiseTexture;
+  uniform sampler2D maskTexture;
+  uniform CloudParams { vec4 tint; vec4 flow; vec4 distortionFlow; vec4 strengths; };
+  vec4 frag () {
+    float n = texture(noiseTexture, fract(v_uv * distortionFlow.xy + cc_time.x * distortionFlow.zw)).r;
+    vec4 c = texture(mainTexture, fract(v_uv * flow.xy + vec2(n * strengths.x) + cc_time.x * flow.zw));
+    c.rgb = SRGBToLinear(c.rgb) * SRGBToLinear(tint.rgb);
+    c.a *= texture(maskTexture, fract(v_uv)).r * strengths.y;
+    return CCFragOutput(c);
+  }
+}%

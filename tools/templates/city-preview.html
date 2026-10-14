@@ -1,0 +1,61 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>黑潮之上 · 城市场景</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#161b24;color:#fff;font:14px system-ui}canvas{display:block}header{position:absolute;left:24px;top:20px;text-shadow:0 2px 8px #000;pointer-events:none}h1{font-size:23px;font-weight:500;margin:0 0 8px}p{margin:5px 0;color:#ddd}nav{position:absolute;bottom:24px;left:24px;display:flex;gap:8px;flex-wrap:wrap}button,select{border:1px solid #797b83;background:#202128ed;color:white;padding:10px 16px;cursor:pointer}#status{position:absolute;right:24px;top:24px;text-shadow:0 2px 8px #000}button:disabled{opacity:.5}</style>
+<header><h1>黑潮之上 · 城市场景</h1><p>原包场景与艾尔莎 · 画面恢复预览</p></header><div id="status" role="status">正在加载…</div>
+<nav><select id="scene" aria-label="城市场景"><option value="city_battle_1">城市战场一</option><option value="city_battle_2">城市战场二</option></select><button id="original" disabled>原镜头参数</button><button id="overview" disabled>全景检查</button></nav>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from './vendor/loaders/GLTFLoader.js';
+import {OrbitControls} from './vendor/controls/OrbitControls.js';
+import {prepareCityMaterials} from './city-materials.js';
+import {attachElsaWeapon} from './city-weapon.js';
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x627490);document.body.prepend(renderer.domElement);
+renderer.domElement.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scaleX(-1)';
+const world=new THREE.Scene(),camera=new THREE.PerspectiveCamera(45,16/9,1,10000),controls=new OrbitControls(camera,renderer.domElement);
+function resize(){const width=Math.min(innerWidth,innerHeight*16/9);renderer.setSize(width,width*9/16);}
+resize();
+controls.enableDamping=true;
+const status=document.querySelector('#status'),select=document.querySelector('#scene'),originalButton=document.querySelector('#original'),overviewButton=document.querySelector('#overview');
+const cache=new Map();let active,cameraRow,bounds,request=0,updateMaterials=()=>{},mixers=[],weaponUpdates=[];const clock=new THREE.Clock();let elapsed=0;
+async function prepareActors(gltf){
+ const result=[];gltf.weaponUpdates=[];
+ for(const row of gltf.parser.json.extras.sourceActorInstances??[]){
+  if(row.path!=='character/player/ailisha/ailisha.gim')continue;
+  const actor=await new GLTFLoader().loadAsync('./elsa.glb');
+  gltf.weaponUpdates.push(await attachElsaWeapon(actor));
+  const placement=new THREE.Group();placement.name=`Source Elsa ${row.sourceInstance.UUID}`;
+  placement.userData.sourceInstance=row.sourceInstance;
+  placement.matrix.fromArray(row.matrix);placement.matrixAutoUpdate=false;
+  placement.add(actor.scene);gltf.scene.add(placement);
+  const idle=actor.animations.find(clip=>clip.name==='idle_1');if(!idle)throw Error('Battle idle missing');
+  const mixer=new THREE.AnimationMixer(actor.scene);mixer.clipAction(idle).play();mixer.update(0);result.push(mixer);
+ }
+ return result;
+}
+function original(){
+ if(!cameraRow)return;
+ new THREE.Matrix4().fromArray(cameraRow.Transform.split(',').map(Number)).decompose(camera.position,camera.quaternion,camera.scale);
+ camera.scale.set(1,1,1);camera.rotateY(Math.PI);
+ camera.fov=Number(cameraRow.Fov);camera.near=Number(cameraRow.Near);camera.far=Number(cameraRow.Far);camera.updateProjectionMatrix();
+ controls.target.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(50));controls.update();
+ status.textContent='原镜头参数 · 方向约定待原版对照';
+}
+originalButton.onclick=original;
+overviewButton.onclick=()=>{const center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3()).length();camera.position.copy(center).add(new THREE.Vector3(.45,.3,.9).multiplyScalar(size));controls.target.copy(center);controls.update();status.textContent='全景检查 · 拖动旋转，滚轮缩放';};
+async function load(name){
+ const token=++request;status.textContent='正在加载…';originalButton.disabled=overviewButton.disabled=true;
+ try{
+  if(!cache.has(name))cache.set(name,new GLTFLoader().loadAsync(`./${name}.glb`).then(async gltf=>{gltf.updateMaterials=await prepareCityMaterials(gltf);gltf.mixers=await prepareActors(gltf);return gltf;}));
+  const gltf=await cache.get(name);if(token!==request)return;
+  if(active)world.remove(active);active=gltf.scene;world.add(active);updateMaterials=gltf.updateMaterials;mixers=gltf.mixers;weaponUpdates=gltf.weaponUpdates;
+  cameraRow=gltf.parser.json.extras.sourceCameras[0];bounds=new THREE.Box3().setFromObject(active);
+  originalButton.disabled=overviewButton.disabled=false;original();
+  console.info('[CITY] loaded',name,gltf.parser.json.nodes.length,'source instances');
+ }catch(error){if(token===request)status.textContent='场景加载失败';cache.delete(name);console.error(error);}
+}
+select.onchange=()=>load(select.value);load(select.value);
+addEventListener('resize',resize);
+renderer.setAnimationLoop(()=>{const delta=Math.min(clock.getDelta(),.1);elapsed+=delta;updateMaterials(elapsed);for(const mixer of mixers)mixer.update(delta);for(const update of weaponUpdates)update(elapsed);controls.update();renderer.render(world,camera);});
+</script></html>

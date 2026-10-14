@@ -1,0 +1,30 @@
+{
+  "name": "hczs-cocos-poc",
+  "platform": "windows",
+  "debug": true,
+  "buildPath": "project://build",
+  "outputName": "windows",
+  "startScene": "1cce6d16-610f-45bd-8b9f-63628732ec0f",
+  "scenes": [
+    {
+      "url": "db://assets/ToolchainProof.scene",
+      "uuid": "1cce6d16-610f-45bd-8b9f-63628732ec0f"
+    }
+  ],
+  "packages": {
+    "windows": {
+      "executableName": "hczs-cocos-poc",
+      "targetPlatform": "x64",
+      "renderBackEnd": { "vulkan": false, "gles3": true, "gles2": false },
+      "serverMode": false
+    },
+    "native": {
+      "encrypted": false,
+      "compressZip": false,
+      "runAfterMake": false,
+      "JobSystem": "none",
+      "serverMode": false,
+      "netMode": 0
+    }
+  }
+}

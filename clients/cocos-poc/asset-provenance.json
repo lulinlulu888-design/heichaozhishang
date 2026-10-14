@@ -1,0 +1,88 @@
+{
+  "scope": "Recovered character portraits plus independent texture/mesh examples; no texture/mesh shared identity inferred",
+  "files": [
+    {
+      "source": "analysis/assets/converted-ktx/uires.03481.KTX1.c6557b5b2a4e.m0.f0.png",
+      "destination": "assets/resources/recovered/portrait.png",
+      "sha256": "c603f26e3394fabd8cae655535783dcce3f016bb5f5cb681a047bb7fe76a309e",
+      "source_manifest": "analysis/assets/converted-ktx/manifest.json"
+    },
+    {
+      "source": "analysis\\model-conversion\\character.06424.skinned.glb",
+      "destination": "assets/imported-models/character.06424.skinned.glb",
+      "sha256": "5067d493fa21bb7f9218fd1e0131c2dae35353192635e91211d3b894129e2560",
+      "source_manifest": "analysis/model-conversion/"
+    },
+    {
+      "source": "analysis/resource-mapping/characters/elsa.CharImage.295c1e4964e2.m0.f0.png",
+      "destination": "assets/resources/recovered/characters/1.png",
+      "sha256": "69f5ec990045165e00710f7e9ae1846334c381277838c137ac5ed87f8dff5e04",
+      "source_manifest": "analysis/resource-mapping/characters/portraits.json",
+      "character_id": 1,
+      "logical_path": "uires/CommonRes/BigSan/Char_detail/img_char_photo_elsa.png",
+      "apk_member": "assets/res/uires.npk",
+      "npk_index": 4995,
+      "name_hash": "dfe85ea9",
+      "texture_sha256": "295c1e4964e29e05d93d1734e357ce8beb945791c350b1f85c6c95a185f77072"
+    },
+    {
+      "source": "analysis/resource-mapping/characters/lynn.CharImage.a7c8a8ad1412.m0.f0.png",
+      "destination": "assets/resources/recovered/characters/2.png",
+      "sha256": "ce866b931bcaaf73f75efc034a3145a5abf098d92aa28bb61479cc1164dc8dcc",
+      "source_manifest": "analysis/resource-mapping/characters/portraits.json",
+      "character_id": 2,
+      "logical_path": "uires/CommonRes/BigSan/Char_detail/img_char_photo_lynn.png",
+      "apk_member": "assets/res/uires.npk",
+      "npk_index": 5664,
+      "name_hash": "fe037f73",
+      "texture_sha256": "a7c8a8ad1412c9fa792c45f635ae97dfc73353cf08d04c8a7766cd3fe57adc88"
+    },
+    {
+      "source": "analysis/resource-mapping/characters/mirai.CharImage.632fd6793ef2.m0.f0.png",
+      "destination": "assets/resources/recovered/characters/3.png",
+      "sha256": "6d77dad8396b3e4c7f1fdaf1ef442ac956f547be17c74dda9a463e1395de0aaf",
+      "source_manifest": "analysis/resource-mapping/characters/portraits.json",
+      "character_id": 3,
+      "logical_path": "uires/CommonRes/BigSan/Char_detail/img_char_photo_future.png",
+      "apk_member": "assets/res/uires.npk",
+      "npk_index": 3395,
+      "name_hash": "9834d4c4",
+      "texture_sha256": "632fd6793ef217cd59467bbf625d9aeac1a200c1044875ea4639be1a2afb7ca3"
+    },
+    {
+      "source": "analysis/elsa-animation/elsa-yangcheng.animated.glb",
+      "destination": "assets/resources/recovered/models/elsa/elsa.glb",
+      "sha256": "fcb17d9b88dc7ba726dbb7cb1a37fa4879065896cc969874424a5390c679b63b",
+      "source_manifest": "analysis/elsa-animation/manifest.json",
+      "character_id": 1,
+      "clips": [
+        "stand_idle",
+        "skin"
+      ],
+      "scope": "Original sampled poses; colour-reference materials, not original toon shading"
+    },
+    {
+      "source": "analysis/characters/lynn/export/lynn-idle.colour-reference.glb",
+      "destination": "assets/resources/recovered/models/lynn/lynn.glb",
+      "sha256": "1fe243d976468bf16373d5e3db6685dd2c3221772423fef9b7032ac8ac41d6c7",
+      "character_id": 2,
+      "source_manifest": "analysis/characters/lynn/export/export-report.json",
+      "clips": [
+        "idle_1"
+      ],
+      "scope": "Original local TRS and inverse binds; unlit colour reference only"
+    },
+    {
+      "source": "analysis/tutorial-enemy-animated/tutorial-enemy-991.animated.glb",
+      "destination": "assets/resources/recovered/models/enemy991/enemy991.glb",
+      "sha256": "fb9286f587c7c24b7344e5116318c45224add56deaacf36d21ed22b2aa0276ea",
+      "source_manifest": "analysis/tutorial-enemy-animated/manifest.json",
+      "monster_id": 991,
+      "clips": [
+        "idle",
+        "fire"
+      ],
+      "scope": "Original idle/fire samples; Tex0 colour reference only, no original emission or skill mapping"
+    }
+  ]
+}

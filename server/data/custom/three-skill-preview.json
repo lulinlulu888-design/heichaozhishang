@@ -1,0 +1,57 @@
+{
+  "format": "hczs-custom-tutorial-v1",
+  "id": "three-skill-preview",
+  "title": "三技能演出验证",
+  "description": "测试关卡：首回合攻击、护盾、攻击。非原版关卡。",
+  "addCards": {
+    "custom:guard-draw": {
+      "name": "蓄势屏障",
+      "cost": 1,
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "amount": "600"
+        },
+        {
+          "type": "draw",
+          "count": 1
+        }
+      ]
+    },
+    "custom:finisher": {
+      "name": "突破斩击",
+      "cost": 2,
+      "effects": [
+        {
+          "type": "damage",
+          "target": "opponent",
+          "amount": "1600"
+        }
+      ]
+    }
+  },
+  "deck": [
+    "custom:guard-draw",
+    "110001",
+    "custom:finisher",
+    "210003",
+    "custom:guard-draw",
+    "110009",
+    "410102"
+  ],
+  "rules": {
+    "initialDraw": 3,
+    "roundDraw": 3,
+    "energyPerRound": 3,
+    "handLimit": 6,
+    "maxRounds": 20
+  },
+  "enemyIntents": [
+    [
+      "990",
+      "992",
+      "990"
+    ]
+  ]
+}

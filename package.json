@@ -1,0 +1,20 @@
+{
+  "name": "hczs-local-revival",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "test": "pnpm -r test",
+    "test:protocol": "pnpm --filter @hczs/game-protocol test",
+    "test:battle": "pnpm --filter @hczs/battle-core test",
+    "test:presentation": "pnpm --filter @hczs/battle-presentation test",
+    "test:session": "pnpm --filter @hczs/battle-session test",
+    "test:server": "pnpm --filter @hczs/server test",
+    "test:client": "node tools/test_tutorial_client.mjs",
+    "test:creator": "node tools/test_battle_audio.mjs --compiled && node tools/test_tutorial_client.mjs --compiled",
+    "server": "node server/src/index.js",
+    "tutorial": "node tools/play_tutorial_cli.mjs"
+  }
+}

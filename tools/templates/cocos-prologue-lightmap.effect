@@ -1,0 +1,49 @@
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: scene-vs:vert
+      frag: scene-fs:frag
+      rasterizerState:
+        cullMode: none
+      properties:
+        mainTexture: { value: white }
+        lightTexture: { value: white }
+        lightScale: { value: [1, 1, 1, 0] }
+        lightAdd: { value: [0, 0, 0, 0] }
+        lightUV: { value: [1, 1, 0, 0] }
+}%
+CCProgram scene-vs %{
+  precision highp float;
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/local-batch>
+  in vec2 a_texCoord1;
+  out vec2 v_uv;
+  out vec2 v_lightUV;
+  uniform LightParams { vec4 lightScale; vec4 lightAdd; vec4 lightUV; };
+  vec4 vert () {
+    vec4 position; CCVertInput(position);
+    mat4 world; CCGetWorldMatrix(world);
+    v_uv = a_texCoord;
+    v_lightUV = a_texCoord1 * lightUV.xy + lightUV.zw;
+    return cc_matProj * cc_matView * world * position;
+  }
+}%
+CCProgram scene-fs %{
+  precision highp float;
+  #include <legacy/output-standard>
+  in vec2 v_uv;
+  in vec2 v_lightUV;
+  uniform sampler2D mainTexture;
+  uniform sampler2D lightTexture;
+  uniform LightParams { vec4 lightScale; vec4 lightAdd; vec4 lightUV; };
+  vec4 frag () {
+    vec4 color = texture(mainTexture, v_uv);
+    color.rgb = SRGBToLinear(color.rgb);
+    vec3 encoded = texture(lightTexture, v_lightUV).rgb * lightScale.xyz + lightAdd.xyz;
+    float logL = dot(vec3(0.299, 0.587, 0.114), encoded);
+    float luma = (exp2(logL * 16.0 - 8.0) - 0.00390625) * 0.6;
+    color.rgb *= encoded * (luma / max(logL, 0.00001));
+    return CCFragOutput(color);
+  }
+}%

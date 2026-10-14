@@ -1,0 +1,2 @@
+# Keep reviewed source hashes reproducible across Windows, macOS and Linux.
+* text=auto eol=lf

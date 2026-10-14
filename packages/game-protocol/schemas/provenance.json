@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "source_kind": "statically recovered native FileDescriptorProto",
+  "compatibility": "No runtime packet or original-client compatibility validation",
+  "schemas": [
+    {
+      "name": "client_gate.proto",
+      "apk_member": "lib/armeabi-v7a/libclient.so",
+      "source_sha256": "54f7cfbc5c62c8ded1fec86d8aac5bae78a52548da56bd138278f8e1f38bc9ef",
+      "descriptor_offset": 42795056,
+      "descriptor_offset_hex": "0x28d0030",
+      "descriptor_size": 1628,
+      "descriptor_sha256": "874258db3ef718c889857831e244b0ef47c41d12d18c01bb993d7e6b0b152ba7",
+      "schema_text_sha256": "4caa21f7b1a92cb4833bb9c3413459a5b9634a4190a85fc831baf75635dc015c",
+      "extraction_index": "analysis/bootstrap/proto/inventory.json",
+      "evidence": "Embedded protobuf descriptor parsed statically. No runtime packet observation."
+    },
+    {
+      "name": "common.proto",
+      "apk_member": "lib/armeabi-v7a/libclient.so",
+      "source_sha256": "54f7cfbc5c62c8ded1fec86d8aac5bae78a52548da56bd138278f8e1f38bc9ef",
+      "descriptor_offset": 42798264,
+      "descriptor_offset_hex": "0x28d0cb8",
+      "descriptor_size": 2553,
+      "descriptor_sha256": "07d0583ee39eb7d7b6178b6ee9441ae73d422dc73b5f2a325ee91d9e40d0ba44",
+      "schema_text_sha256": "2b4ec94623e97f669bbf5e8321a43c1ad9980d92be8d4307af80f57d5abc2614",
+      "extraction_index": "analysis/bootstrap/proto/inventory.json",
+      "evidence": "Embedded protobuf descriptor parsed statically. No runtime packet observation."
+    }
+  ],
+  "python_frame_reference": {
+    "source_apk_member": "assets/script.npk",
+    "extraction_index": "analysis/assets/decoded/script/index.json",
+    "evidence_directory": "analysis/bootstrap/scripts",
+    "entries": [
+      {
+        "index": 996,
+        "filename": "net\\mbsengine\\mobilerpc\\MobileRequest.py",
+        "name_hash": 454038815,
+        "offset": 5646968,
+        "stored_size": 1336,
+        "payload_sha256": "2cede68d7b965f013de44a84b1013c8fe2580fd0ab42e599b740d09ec4d9ff46",
+        "decoded_sha256": "2c8f981db920239c3b807f747df528c04aa606092425b0552e1b804dfaa8fe19",
+        "decoded_size": 2885
+      },
+      {
+        "index": 8758,
+        "filename": "net\\mbsengine\\mobilerpc\\RpcChannel.py",
+        "name_hash": 3894684082,
+        "offset": 5679104,
+        "stored_size": 2709,
+        "payload_sha256": "9bea2d975f9ca568872afaee2b44446c7f9cc615b5ee6a70b365fa532cbbe3ab",
+        "decoded_sha256": "44298d4c95bc03f23ca61d15ae30fc0f0e012328f50bb500d3d75dbbeea2903c",
+        "decoded_size": 6523
+      },
+      {
+        "index": 9509,
+        "filename": "net\\CConnector.py",
+        "name_hash": 4203522189,
+        "offset": 4563136,
+        "stored_size": 4040,
+        "payload_sha256": "d97297ee17c5bfb2b747e7c4bb3a6b92a49f463b6730dd382b96c8f6ac8ee722",
+        "decoded_sha256": "c9013fadb46f5dfdda04e775e1fd9780900d51bc74b9110cf716f894dca80cba",
+        "decoded_size": 9833
+      }
+    ],
+    "framing": "uint32 LE bodyLength + uint16 LE methodIndex + protobuf payload",
+    "body_length": "includes methodIndex (2 bytes), excludes length prefix (4 bytes)",
+    "body_length_min": 2,
+    "body_length_max": 16777215,
+    "send_method_index_max": 65534,
+    "limitation": "Static Python reference only; actual CConnector uses AsioGateClient with encryption and compressed channel enabled. Native transport and method dispatch remain unverified."
+  }
+}

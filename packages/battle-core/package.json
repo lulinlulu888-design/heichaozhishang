@@ -1,0 +1,13 @@
+{
+  "name": "@hczs/battle-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": { "types": "./src/index.d.ts", "import": "./src/index.js" },
+    "./piles": { "types": "./src/piles.d.ts", "import": "./src/piles.js" }
+  },
+  "scripts": { "test": "node --test" }
+}

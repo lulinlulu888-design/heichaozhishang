@@ -1,0 +1,54 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>艾尔莎 · 武器绑定检查</title>
+<style>body{margin:0;background:#20232c;color:#eee;font:15px system-ui}canvas{display:block}header,nav{position:absolute;left:24px;right:24px;padding:15px;background:#171b24db}header{top:16px;pointer-events:none}h1{font-size:22px;margin:0 0 8px}p{margin:5px 0}nav{bottom:18px;display:flex;gap:15px;align-items:center}select,button{padding:8px;background:#293442;color:white;border:1px solid #748095}input{flex:1}#status{color:#f0c978}</style>
+<header><h1>艾尔莎 · 原武器绑定检查</h1><p>原模型、原动作与武器颜色图；挂载采用待验证的“动画骨骼 × 武器逆绑定”关系。</p><p>拖动旋转、滚轮缩放。这里是诊断视图，未修改战斗客户端。</p><p id="status">加载中…</p></header>
+<nav><select id="clip" aria-label="动画" disabled></select><button id="pause" disabled>暂停</button><input id="time" aria-label="动画进度" type="range" min="0" max="1" step="0.001" value="0" disabled><button id="weapon" disabled>隐藏武器</button></nav>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+import * as T from 'three';
+import {GLTFLoader} from './vendor/loaders/GLTFLoader.js';
+import {OrbitControls} from './vendor/controls/OrbitControls.js';
+const renderer=new T.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);document.body.prepend(renderer.domElement);
+renderer.setClearColor(0x252a35);const scene=new T.Scene(),camera=new T.PerspectiveCamera(38,innerWidth/innerHeight,.1,500);
+camera.position.set(29,18,35);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,8,0);controls.update();
+const grid=new T.GridHelper(50,25,0x68737e,0x3a424e);scene.add(grid);
+let mixer,action,weapon,effectMaterial,paused=false;const clock=new T.Clock();let effectTime=0;
+const select=document.querySelector('#clip'),slider=document.querySelector('#time'),pause=document.querySelector('#pause'),toggle=document.querySelector('#weapon'),status=document.querySelector('#status');
+try{
+ const loader=new GLTFLoader();const [actor,attachment,report]=await Promise.all([loader.loadAsync('./weapon-actor.glb'),loader.loadAsync('./elsa-weapon-static.glb'),fetch('./weapon-binding.json').then(r=>{if(!r.ok)throw Error('Binding report unavailable');return r.json();})]);
+ scene.add(actor.scene);const binding=report.used_bones;
+ if(binding.length!==1||!report.all_vertices_single_joint_unit_weight)throw Error('Not a single rigid influence');
+ // Resolve the source node identity through the GLTF parser association, not
+ // assumptions about Three.js sanitisation of spaces in imported bone names.
+ const nodeIndex=actor.parser.json.nodes.findIndex(n=>n.name===binding[0].name);
+ if(nodeIndex<0)throw Error('Source attachment bone absent');
+ const bone=await actor.parser.getDependency('node',nodeIndex);
+ weapon=new T.Group();weapon.name='CandidateWeaponInverseBind';weapon.matrixAutoUpdate=false;
+ weapon.matrix.fromArray(binding[0].source_bind).invert();weapon.add(attachment.scene);bone.add(weapon);
+ const [overlay,noise,distortion]=await Promise.all([loader.loadAsync('./weapon-overlay.glb'),new T.TextureLoader().loadAsync('./weapon-noise.png'),new T.TextureLoader().loadAsync('./weapon-distortion.png')]);
+ for(const texture of [noise,distortion]){texture.wrapS=texture.wrapT=T.RepeatWrapping;texture.flipY=false;}
+ effectMaterial=new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.DoubleSide,
+  uniforms:{noise:{value:noise},distortion:{value:distortion},time:{value:0}},
+  vertexShader:`varying vec2 uv0;void main(){uv0=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform sampler2D noise;uniform sampler2D distortion;uniform float time;varying vec2 uv0;
+  void main(){float offset=texture2D(distortion,uv0+time*vec2(.1,-.1)).r*.1;
+  vec4 n=texture2D(noise,uv0+vec2(offset)+time*vec2(.1,.2));
+  vec3 linearColor=pow(n.rgb,vec3(2.2))*3.0*pow(vec3(1.,.207843,.470588),vec3(2.2));
+  gl_FragColor=vec4(linearColor,n.a);
+  #include <colorspace_fragment>
+  }`});
+ overlay.scene.traverse(node=>{if(node.isMesh)node.material=effectMaterial;});weapon.add(overlay.scene);
+ mixer=new T.AnimationMixer(actor.scene);
+ for(const clip of actor.animations){const option=document.createElement('option');option.value=clip.name;option.textContent=clip.name;select.append(option);}
+ function play(){mixer.stopAllAction();action=mixer.clipAction(actor.animations.find(c=>c.name===select.value));action.reset().play();action.paused=paused;slider.max=String(action.getClip().duration);slider.value='0';mixer.update(0);}
+ select.value='stand_idle';select.onchange=play;play();
+ pause.onclick=()=>{paused=!paused;action.paused=paused;pause.textContent=paused?'播放':'暂停';};
+ slider.oninput=()=>{paused=true;action.paused=true;pause.textContent='播放';action.time=Number(slider.value);mixer.update(0);};
+ toggle.onclick=()=>{weapon.visible=!weapon.visible;toggle.textContent=weapon.visible?'隐藏武器':'显示武器';};
+ [select,slider,pause,toggle].forEach(e=>e.disabled=false);
+ status.textContent='原噪声流动公式预览：暂选 gamma 2.2、普通透明混合；原 HDR/Bloom/混合模式尚未确认。';
+ console.info('[WEAPON_INSPECTION] candidate loaded',binding[0].name,nodeIndex,report.bind_validation);
+}catch(e){status.textContent='加载失败：'+e.message;console.error(e);}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+renderer.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),.1);mixer?.update(dt);effectTime+=dt;if(effectMaterial)effectMaterial.uniforms.time.value=effectTime;if(action&&!paused)slider.value=String(action.time);controls.update();renderer.render(scene,camera);});
+</script></html>

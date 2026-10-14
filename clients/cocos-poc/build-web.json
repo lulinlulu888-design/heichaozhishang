@@ -1,0 +1,14 @@
+{
+  "name": "hczs-cocos-poc",
+  "platform": "web-desktop",
+  "debug": true,
+  "buildPath": "project://build",
+  "outputName": "web-desktop",
+  "startScene": "1cce6d16-610f-45bd-8b9f-63628732ec0f",
+  "scenes": [
+    {
+      "url": "db://assets/ToolchainProof.scene",
+      "uuid": "1cce6d16-610f-45bd-8b9f-63628732ec0f"
+    }
+  ]
+}

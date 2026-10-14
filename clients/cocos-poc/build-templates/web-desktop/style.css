@@ -1,0 +1,18 @@
+:root { color-scheme: dark; background: #090b10; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; }
+/* Keep the original 1280 x 720 design ratio. Cocos reads this frame's
+   client size on resize; CSS must not stretch an independently sized canvas. */
+#GameDiv {
+  position: relative;
+  width: min(100vw, 177.77777778vh);
+  height: min(56.25vw, 100vh);
+  flex: none;
+}
+@supports (height: 100dvh) {
+  #GameDiv { width: min(100vw, 177.77777778dvh); height: min(56.25vw, 100dvh); }
+}
+#Cocos3dGameContainer, #GameCanvas { width: 100%; height: 100%; }
+canvas { display: block; outline: none; touch-action: none; }
+body, canvas, div { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
