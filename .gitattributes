@@ -1,2 +1,4 @@
 # Keep reviewed source hashes reproducible across Windows, macOS and Linux.
 * text=auto eol=lf
+# Reference implementations/schemas retain the exact downloaded bytes.
+tools/reference/** -text
