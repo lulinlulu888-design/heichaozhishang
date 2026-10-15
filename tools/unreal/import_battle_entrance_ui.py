@@ -1,7 +1,8 @@
 """Import source entrance UI textures into a dedicated, ownership-checked folder.
 
 Ordinary Python only validates/prints a plan. Explicit run(apply=True) inside UE
-imports textures; it never edits a level, widget, material, or existing client.
+imports textures and a dedicated runtime timeline DataAsset; it never edits a
+level, widget, material, or existing presentation asset.
 Original per-node animation/shader limitations stay in playback-recipe.json.
 """
 from __future__ import annotations
@@ -70,6 +71,31 @@ def plan():
             'limitations': recipe['limitations'], 'mutatedAssets': False}
 
 
+def runtime_clip(recipe, name, animation):
+    layout = recipe['layouts'][name]
+    interval = next(a for a in layout['timeline']['animations'] if a['name'] == animation)
+    nodes = []
+    indices = {}
+    for original in layout['nodes']:
+        node = dict(original)
+        parents = node.pop('parents')
+        node['parent'] = indices[parents[-1]['actionTag']] if parents else -1
+        indices[node['action_tag']] = len(nodes)
+        limitations = []
+        if any(t['action_tag'] == node['action_tag'] and t['property'].startswith('Splendor_')
+               for t in layout['timeline']['timelines']):
+            limitations.append('source-custom-shader-not-rendered')
+        if node.get('blend_func') == [1, 1]:
+            limitations.append('source-additive-blend-not-rendered')
+        if node['classname'] == 'Particle':
+            limitations.append('source-particle-not-rendered')
+        node['unsupported'] = limitations
+        nodes.append(node)
+    return dict(schema='hczs-source-ui-timeline-v1', fps=60,
+                speed=layout['timeline']['speed'], startFrame=interval['start'], endFrame=interval['end'],
+                easingPolicy='cocos2d-x-3.17.2', nodes=nodes, tracks=layout['timeline']['timelines'])
+
+
 def run(*, apply=False):
     result = plan()
     if apply is not True:
@@ -132,6 +158,36 @@ def run(*, apply=False):
         if not assetlib.save_loaded_asset(obj, only_if_is_dirty=False):
             raise RuntimeError('Could not save source UI texture: ' + row['name'])
         row['objectPath'] = obj.get_path_name()
+    # Separate presentation asset: never overwrite the existing battle HUD.
+    recipe = json.loads(SOURCE.read_text('utf8'))
+    payload = dict(schema='hczs-source-battle-opening-v1', sourceRecipeSha256=result['recipeSha256'],
+                   clips={name: runtime_clip(recipe, name, animation) for name, animation in
+                          [('elite', 'In'), ('boss', 'in'), ('hud', 'In')]},
+                   selection=dict(encounterId='tutorial-5000', enemyId='991', difficultyType=1,
+                                  branch='elite', source='monster_table991 + CMonster.IsElite + MonsterType.Elite=1'),
+                   limitations=recipe['limitations'])
+    cls = unreal.load_class(None, '/Script/Hczs.HczsBattlePresentationAsset')
+    if not cls: raise RuntimeError('Hczs presentation class unavailable')
+    package = DEST + '/BattleEntrancePresentation'
+    asset = unreal.load_asset(package) if assetlib.does_asset_exist(package) else None
+    if asset:
+        if asset.get_class().get_name() != 'HczsBattlePresentationAsset' or assetlib.get_metadata_tag(asset, 'HczsOwner') != OWNER:
+            raise RuntimeError('Foreign opening presentation retained')
+    else:
+        factory = unreal.DataAssetFactory()
+        factory.set_editor_property('data_asset_class', cls)
+        asset = unreal.AssetToolsHelpers.get_asset_tools().create_asset('BattleEntrancePresentation', DEST,
+                                                                      cls, factory)
+    if not asset:
+        raise RuntimeError('Opening DataAsset creation failed')
+    asset.set_editor_property('LayoutJson', json.dumps(payload, ensure_ascii=False, separators=(',', ':')))
+    asset.set_editor_property('SourceManifestSha256', result['recipeSha256'])
+    asset.set_editor_property('Sprites', texture_objects)
+    assetlib.set_metadata_tag(asset, 'HczsOwner', OWNER)
+    assetlib.set_metadata_tag(asset, 'HczsSourceSHA256', result['recipeSha256'])
+    if not assetlib.save_loaded_asset(asset, only_if_is_dirty=False):
+        raise RuntimeError('Opening DataAsset save failed')
+    result['presentationAsset'] = asset.get_path_name()
     result.update(passed=True, mutatedAssets=True, resumedPartialImports=resumed,
                   engine=unreal.SystemLibrary.get_engine_version(),
                   originalApkExecuted=False, runtimeAnimationVerified=False)

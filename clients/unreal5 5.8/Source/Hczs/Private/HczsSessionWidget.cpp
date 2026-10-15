@@ -2,6 +2,7 @@
 #include "HczsGameInstance.h"
 #include "HczsSessionTypes.h"
 #include "HczsWorldlineWidget.h"
+#include "HczsBattlePresentation.h"
 #include "Engine/FontFace.h"
 #include "Engine/Texture2D.h"
 #include "Dom/JsonObject.h"
@@ -253,6 +254,29 @@ void UHczsSessionWidget::NativeConstruct()
     SetIsFocusable(true);
     Presentation = LoadObject<UHczsBattlePresentationAsset>(nullptr,
         TEXT("/Game/Recovered/Battle/UI/BattlePresentation.BattlePresentation"));
+    EntrancePresentation = LoadObject<UHczsBattlePresentationAsset>(nullptr,
+        TEXT("/Game/Recovered/Battle/Entrance/UI/BattleEntrancePresentation.BattleEntrancePresentation"));
+    if (EntrancePresentation)
+    {
+        TSharedPtr<FJsonObject> Root;
+        if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(EntrancePresentation->LayoutJson), Root) && Root &&
+            Root->GetStringField(TEXT("schema")) == TEXT("hczs-source-battle-opening-v1"))
+        {
+            EliteOpeningJson = Root->GetObjectField(TEXT("clips"))->GetObjectField(TEXT("elite"));
+            FString Json, Error;
+            FJsonSerializer::Serialize(EliteOpeningJson.ToSharedRef(), TJsonWriterFactory<>::Create(&Json));
+            if (!HczsSourceUiTimeline::Parse(Json, EliteOpening, Error))
+                UE_LOG(LogTemp, Error, TEXT("HCZS original opening timeline rejected: %s"), *Error);
+            for (const auto& Pair : EntrancePresentation->Sprites)
+            {
+                if (!Pair.Value) continue;
+                FSlateBrush Brush; Brush.SetResourceObject(Pair.Value);
+                Brush.DrawAs = ESlateBrushDrawType::Image;
+                Brush.ImageSize = FVector2f(Pair.Value->GetSizeX(), Pair.Value->GetSizeY());
+                Brushes.Add(TEXT("entrance-") + Pair.Key, Brush);
+            }
+        }
+    }
     if (Presentation)
     {
         for (const auto& Pair : Presentation->Sprites)
@@ -557,6 +581,54 @@ void UHczsSessionWidget::UpdateVisibility()
     SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
+double UHczsSessionWidget::FreshOpeningSeconds() const
+{
+    if (!Session || !GetWorld() || Session->Phase != EHczsSessionPhase::Battle || !bBattleScene ||
+        Session->CurrentBattle.EncounterId != TEXT("tutorial-5000") || Session->CurrentBattle.EnemyId != TEXT("991")) return -1;
+    for (TActorIterator<AHczsBattlePresentation> It(GetWorld()); It; ++It)
+        return It->GetFreshOpeningSeconds(Session->CurrentBattle.Id);
+    return -1;
+}
+
+int32 UHczsSessionWidget::PaintFreshOpening(const FGeometry& Canvas, FSlateWindowElementList& Elements,
+    int32 Layer, double Seconds) const
+{
+    // Source 6601: popup at +1s; 991 difficulty_type=1 selects elite / In.
+    // Local adapter anchors BattleBeginAction to first fresh scene tick. This
+    // does not claim recovery of the original multi-action scheduler.
+    if (Seconds < 1 || Seconds >= 3 || !EliteOpening.bValid || !EliteOpeningJson) return Layer;
+    HczsSourceUiTimeline::FSample Sample; FString Error;
+    if (!HczsSourceUiTimeline::Evaluate(EliteOpening, Seconds - 1, FVector2D(640, 360), Sample, Error)) return Layer;
+    const auto& Metadata = EliteOpeningJson->GetArrayField(TEXT("nodes"));
+    for (int32 Index : Sample.DrawOrder)
+    {
+        const auto& Node = Sample.Nodes[Index];
+        if (!Node.bVisible || !Node.bTransformSupported || Node.Tint.A <= 0 || Node.Size.X <= 0 || Node.Size.Y <= 0) continue;
+        const auto Json = Metadata[Index]->AsObject();
+        bool bUnrendered = false;
+        for (const auto& Limitation : EliteOpening.Nodes[Index].Unsupported)
+            if (Limitation == TEXT("source-custom-shader-not-rendered") || Limitation == TEXT("source-additive-blend-not-rendered")) bUnrendered = true;
+        if (bUnrendered) continue; // Never draw a shader texture as an opaque rectangle.
+        const auto& M = Node.LocalToDesign;
+        const FMatrix2x2 Matrix(static_cast<float>(M.M00), static_cast<float>(M.M10),
+            static_cast<float>(M.M01), static_cast<float>(M.M11));
+        const FGeometry Child = Canvas.MakeChild(FVector2f(Node.Size), FSlateLayoutTransform(),
+            FSlateRenderTransform(Matrix, FVector2f(M.TX, M.TY)), FVector2f::ZeroVector);
+        FSessionPainter P(Child, Elements, Layer, Brushes, IconDrawAdjustments, CompositeFont,
+            &LastPaintedTexts, &LastPaintedSprites);
+        if (!Node.SpriteId.IsEmpty()) P.Image(TEXT("entrance-") + Node.SpriteId, 0, 0, Node.Size.X, Node.Size.Y, Node.Tint);
+        else if (Node.ClassName == TEXT("Text"))
+        {
+            FString Text;
+            if (Json->TryGetStringField(TEXT("text"), Text))
+                P.Text(Text, 0, 0, Node.Size.X, Node.Size.Y, Json->GetIntegerField(TEXT("font_size")), Node.Tint, true, false);
+        }
+        if (P.Layer > Layer) LastOpeningNodes.Add(Node.Name);
+        Layer = P.Layer;
+    }
+    return Layer;
+}
+
 int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geometry,
     const FSlateRect& CullingRect, FSlateWindowElementList& Elements, int32 LayerId,
     const FWidgetStyle& Style, bool bParentEnabled) const
@@ -566,6 +638,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     LastPaintGeometry = Geometry;
     ++LastPaintSerial;
     LastPaintedTexts.Reset();
+    LastOpeningNodes.Reset();
+    LastOpeningSeconds = FreshOpeningSeconds();
     bLastPaintedDragCue = false;
     LastPaintedSprites.Reset();
     LastPaintedMap = GetWorld() ? GetWorld()->GetMapName() : FString();
@@ -627,6 +701,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     if (bBattle)
     {
         const FHczsBattleView& Battle = Session->CurrentBattle;
+        if (LastOpeningSeconds >= 0 && LastOpeningSeconds < 2)
+            return PaintFreshOpening(Canvas, Elements, P.Layer, LastOpeningSeconds);
         const bool bPlaying = Battle.Status == TEXT("player-turn");
         P.Health(Battle.PlayerName, Battle.PlayerId == TEXT("1") ? TEXT("player-1") : TEXT(""),
             Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, 28, false);
@@ -775,6 +851,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 P.Text(TEXT("本地主线进度适配 · 本次不发放奖励"), 340, 568, 600, 22, 14, Muted, true);
             }
         }
+        P.Layer = PaintFreshOpening(Canvas, Elements, P.Layer, LastOpeningSeconds);
     }
     else if (bEncounterPanel && !Session->SelectedProfileId.IsEmpty())
     {
@@ -1344,6 +1421,9 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
     Root->SetStringField(TEXT("map"), LastPaintedMap);
     Root->SetNumberField(TEXT("paintSerial"), static_cast<double>(LastPaintSerial));
     Root->SetBoolField(TEXT("battleScene"), bBattleScene);
+    Root->SetNumberField(TEXT("openingSeconds"), LastOpeningSeconds);
+    Root->SetNumberField(TEXT("openingPaintedNodes"), LastOpeningNodes.Num());
+    Root->SetBoolField(TEXT("openingTimelineValid"), EliteOpening.bValid);
     Root->SetBoolField(TEXT("dragPreviewPainted"), bLastPaintedDragCue);
     Root->SetBoolField(TEXT("sourceArrowResourcesReady"), Brushes.Contains(TEXT("target-arrow-ribbon")) && Brushes.Contains(TEXT("target-arrow-head")));
     Root->SetStringField(TEXT("sourceArrowGeometry"), TEXT("apk-native-parabolic-60x2"));

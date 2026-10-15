@@ -176,6 +176,7 @@ void AHczsBattlePresentation::Tick(float DeltaSeconds)
             Session && Session->IsFreshBattleEntranceActive(EntranceBattleId))
         {
             EntranceHiddenWorldStart = GetWorld()->GetTimeSeconds();
+            OpeningWorldStart = EntranceHiddenWorldStart;
             EntranceHiddenRealStart = FPlatformTime::Seconds();
             GetWorldTimerManager().SetTimer(EntranceStartTimer, this, &AHczsBattlePresentation::StartEntranceClip, .5f, false);
             UE_LOG(LogTemp, Display, TEXT("HCZS entrance fresh-start: battle=%s source=fight_idle_show delay=0.5 worldTime=%.6f atUnixMs=%lld"),
@@ -185,6 +186,13 @@ void AHczsBattlePresentation::Tick(float DeltaSeconds)
     }
     ObserveLocalImpact();
     ReleaseLocalReaction();
+}
+
+double AHczsBattlePresentation::GetFreshOpeningSeconds(const FString& BattleId) const
+{
+    if (BattleId != EntranceBattleId || OpeningWorldStart < 0 || !GetWorld() ||
+        (EntrancePhase != TEXT("complete") && !bEntrancePlaying)) return -1.0;
+    return FMath::Max(0.0, GetWorld()->GetTimeSeconds() - OpeningWorldStart);
 }
 
 float AHczsBattlePresentation::GetEntrancePosition() const
@@ -198,6 +206,7 @@ bool AHczsBattlePresentation::TryPlayFreshEntrance(const FHczsBattleView& View)
 {
     if (!Session) Session = Cast<UHczsGameInstance>(GetGameInstance());
     if (!Session || !Session->ConsumeFreshBattleEntrance(View.Id)) return false;
+    OpeningWorldStart = -1.0;
     EntranceBattleId = View.Id; EntranceLastPosition = 0; bEntranceEventEmitted = false;
     EntranceAnimation = LoadObject<UAnimSequence>(nullptr,
         TEXT("/Game/Recovered/Battle/Entrance/elsa_entrance.elsa_entrance"));

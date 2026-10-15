@@ -113,6 +113,8 @@ public:
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsSceneReady() const { return bSceneReady; }
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsEntrancePlaying() const { return bEntrancePlaying; }
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") float GetEntrancePosition() const;
+    /** Fresh-only source BattleBeginAction UI clock; reconnects return -1. */
+    double GetFreshOpeningSeconds(const FString& BattleId) const;
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") FString GetEntrancePhase() const { return EntrancePhase; }
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") FString GetEntranceDiagnostic() const { return EntranceDiagnostic; }
     bool CanPresentBattle(const FHczsBattleView& View) const;
@@ -131,6 +133,7 @@ private:
     FString EntranceDiagnostic;
     float EntranceLastPosition = 0.0f;
     double EntranceDeadline = 0.0;
+    double OpeningWorldStart = -1.0;
     double EntranceHiddenWorldStart = -1.0;
     double EntranceHiddenRealStart = -1.0;
     double EntranceShowWorldStart = -1.0;

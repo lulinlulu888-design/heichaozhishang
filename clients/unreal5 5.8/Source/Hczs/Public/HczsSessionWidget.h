@@ -5,6 +5,7 @@
 #include "Engine/DataAsset.h"
 #include "Styling/SlateBrush.h"
 #include "Fonts/SlateFontInfo.h"
+#include "HczsSourceUiTimeline.h"
 #include "HczsSessionWidget.generated.h"
 
 class UTexture2D;
@@ -88,6 +89,8 @@ protected:
     virtual FReply NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
 private:
     void SessionChanged();
+    double FreshOpeningSeconds() const;
+    int32 PaintFreshOpening(const FGeometry& Canvas, FSlateWindowElementList& Elements, int32 Layer, double Seconds) const;
     FReply PressAt(const FGeometry& Geometry, const FPointerEvent& Event);
     void MoveCardGesture(const FGeometry& Geometry, const FPointerEvent& Event);
     FReply FinishCardGesture(const FGeometry& Geometry, const FPointerEvent& Event);
@@ -104,6 +107,11 @@ private:
     UPROPERTY() TObjectPtr<UHczsGameInstance> Session;
     UPROPERTY() TObjectPtr<UHczsBattlePresentationAsset> Presentation;
     UPROPERTY() TObjectPtr<UHczsBattlePresentationAsset> IconVariant;
+    UPROPERTY() TObjectPtr<UHczsBattlePresentationAsset> EntrancePresentation;
+    HczsSourceUiTimeline::FClip EliteOpening;
+    TSharedPtr<class FJsonObject> EliteOpeningJson;
+    mutable TArray<FString> LastOpeningNodes;
+    mutable double LastOpeningSeconds = -1;
     UPROPERTY() TObjectPtr<UHczsWorldlineWidget> WorldlineWidget;
     UPROPERTY() TArray<TObjectPtr<UObject>> TargetingResources;
     TSharedPtr<const FCompositeFont> CompositeFont;

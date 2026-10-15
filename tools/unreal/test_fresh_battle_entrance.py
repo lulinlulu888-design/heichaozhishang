@@ -138,6 +138,19 @@ def run():
                     guard.check(clip==SHOW and math.isfinite(sample['position']) and abs(sample['position']-sample['actualClipPosition'])<.002,
                                 'Entrance is not using the real source clip position')
                 if sample['entrancePhase']=='show-visible': guard.check(sample['visible'] and not sample['actorHidden'], 'Source SHOW did not reveal player')
+        if level == BATTLE:
+            widgets = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), False)
+            guard.check(len(widgets) == 1, 'Battle session widget missing/duplicated')
+            ui = json.loads(widgets[0].development_describe_ui())
+            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid')}
+            opening = sample['opening']
+            if opening['openingSeconds'] is not None and 1.85 < opening['openingSeconds'] < 2.4:
+                guard.check(opening['openingTimelineValid'] and opening['openingPaintedNodes'] > 0,
+                            'Original elite opening timeline did not paint')
+                if 'openingShot' not in state:
+                    target = path.parent/(prefix+'-elite-opening.png')
+                    state['openingShot'] = target
+                    u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
         report['samples'].append(sample)
         return sample
 
@@ -220,6 +233,13 @@ def run():
                     guard.check(hidden and len(shown)>3 and sample['position']>=3.698 and not sample['locked'] and sample['canSubmit'] and not sample['busy'], 'Source wait/SHOW/completion/unlock was not observed')
                     guard.check(shown[-1]['position']>shown[0]['position']+.5 and shown[-1]['bones']!=shown[0]['bones'], 'Real source pose did not advance')
                     report['sampledHiddenToShowLowerBoundSeconds']=shown[0]['worldTime']-hidden[0]['worldTime']
+                    opening_samples = [r['opening'] for r in history if r.get('opening', {}).get('openingSeconds', -1) > 1.85
+                                       and r.get('opening', {}).get('openingSeconds', 4) < 2.4]
+                    guard.check(opening_samples and all(o['openingTimelineValid'] and o['openingPaintedNodes'] > 0 for o in opening_samples),
+                                'Native elite banner paint was not observed')
+                    guard.check(state.get('openingShot') and state['openingShot'].exists(), 'Opening screenshot missing')
+                    report['openingScreenshot'] = str(state['openingShot'])
+                    passed('original-elite-banner-source-timeline-paints')
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
                     capture('complete-source2133'); stage('capture-first')
                 else: guard.check(sample.get('playing'), 'Fresh GI creation did not start the source entrance')
@@ -233,7 +253,9 @@ def run():
             elif current=='hall-continue' and game.is_hall_scene_ready() and sample['map']==HALL:
                 guard.check(not sample['locked'],'Hall retained first entrance lock'); game.continue_battle(state['ids'][0]); stage('continue')
             elif current=='continue' and sample['map']==BATTLE:
-                guard.check(not sample.get('playing') and not sample['locked'] and sample.get('entrancePhase')=='none', 'Continue replayed an entrance')
+                guard.check(not sample.get('playing') and not sample['locked'] and sample.get('entrancePhase')=='none'
+                            and sample.get('opening', {}).get('openingSeconds') == -1
+                            and sample.get('opening', {}).get('openingPaintedNodes') == 0, 'Continue replayed an entrance/banner')
                 state.setdefault('continueObservedAt',time.monotonic())
                 if time.monotonic()-state['continueObservedAt']>=5 and sample['canSubmit']:
                     passed('continue-no-replay-for-five-seconds'); capture('continue-source2133'); stage('capture-continue')
