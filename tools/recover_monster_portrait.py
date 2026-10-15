@@ -110,7 +110,7 @@ def main(actor='monster'):
     portrait.paste(sprite, (sx, sy))
     output = OUT/(stem+'.png')
     portrait.save(output)
-    destination = ROOT/f'clients/cocos-poc/assets/resources/recovered/battle-ui/{asset}.png'
+    destination = ROOT/f'legacy/cocos-poc/assets/resources/recovered/battle-ui/{asset}.png'
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(output, destination)
     report = dict(apk_sha256=APK_SHA256, actor=actor, source_table=table, source_field=field, logical=logical, alias=alias,

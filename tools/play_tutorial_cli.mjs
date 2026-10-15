@@ -16,12 +16,15 @@ const { values } = parseArgs({ options: {
   seed: { type: 'string', default: '5000' },
   'custom-scenario': { type: 'string' },
   'save-path': { type: 'string' },
+  storage: { type: 'string', default: 'mongodb' },
+  'mongo-database': { type: 'string' },
 } });
 const seed = Number(values.seed);
 if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('seed must be uint32');
-const options = { port: 0, dataDirectory: resolve(root, 'analysis/game-data'),
+const options = { port: 0, storage: values.storage, dataDirectory: resolve(root, 'analysis/game-data'),
   tutorialDirectory: resolve(root, 'analysis/first-encounter'),
-  savePath: resolve(values['save-path'] ?? resolve(root, values['custom-scenario'] ? 'runtime/server/custom-cli.sqlite' : 'runtime/server/tutorial-cli.sqlite')),
+  savePath: values['save-path'] ? resolve(values['save-path']) : undefined,
+  mongoDatabase: values['mongo-database'] ?? (values['custom-scenario'] ? 'hczs_custom_cli' : 'hczs_tutorial_cli'),
   customScenarioPath: values['custom-scenario'] ? resolve(values['custom-scenario']) : undefined };
 let app = await createApp(options);
 let reader;
@@ -55,7 +58,7 @@ try {
     : (await api(base, { requestId: randomUUID(), seed })).battle;
   console.log(battle.scenario.title);
   console.log(battle.scenario.notice);
-  console.log(`战斗 ${battle.id}，存档 ${options.savePath}.battles`);
+  console.log(`战斗 ${battle.id}，存档 ${options.storage === 'sqlite' ? options.savePath + '.battles' : options.mongoDatabase}`);
   if (!values.auto) reader = createInterface({ input: process.stdin, output: process.stdout });
   let count = 0;
   while (battle.state.status === 'player-turn') {

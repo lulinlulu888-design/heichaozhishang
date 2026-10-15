@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 source=ROOT/'analysis/battle-ui/target-arrow'
-destination=ROOT/'clients/cocos-poc/assets/resources/recovered/target-arrow'
+destination=ROOT/'legacy/cocos-poc/assets/resources/recovered/target-arrow'
 manifest=json.loads((source/'manifest.json').read_text('utf8'))
 destination.mkdir(parents=True,exist_ok=True)
 files=[]

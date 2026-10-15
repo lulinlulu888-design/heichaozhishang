@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $creator = Join-Path $workspace '.tools\cocos\3.8.8\CocosCreator.exe'
-$project = Join-Path $workspace 'clients\cocos-poc'
+$project = Join-Path $workspace 'legacy\cocos-poc'
 $windowsConfig = if ($WindowsVariant -eq 'model') { 'build-windows-model.json' } else { 'build-windows.json' }
 $windowsOutput = if ($WindowsVariant -eq 'model') { 'build\windows-model' } else { 'build\windows' }
 $androidConfig = if ($AndroidVariant -eq 'emulator') { 'build-android-emulator.json' } else { 'build-android.json' }
@@ -62,6 +62,9 @@ function Save-ExportFingerprints([string]$ConfigName) {
         'settings\v2\packages\engine.json', 'asset-provenance.json', $ConfigName) |
         ForEach-Object { Join-Path $project $_ }
     $sourcePaths += Join-Path $project 'assets\CitySceneView.ts'
+    $sourcePaths += @('assets\HallSceneView.ts', 'assets\HallLighting.ts', 'assets\ShiranuiFlames.ts') |
+        ForEach-Object { Join-Path $project $_ }
+    $sourcePaths += @(Get-ChildItem -LiteralPath (Join-Path $project 'assets\resources\recovered\hall') -File -Recurse | ForEach-Object { $_.FullName })
     $sourcePaths += Join-Path $project 'assets\resources\recovered\battle-ui\breakdown-icon.png'
     $sourcePaths += @(Get-ChildItem -LiteralPath (Join-Path $project 'assets\resources\recovered\city') -File -Recurse | ForEach-Object { $_.FullName })
     Get-FileHash -LiteralPath $sourcePaths -Algorithm SHA256 |

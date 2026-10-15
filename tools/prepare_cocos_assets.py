@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT / "clients/cocos-poc"
+PROJECT = ROOT / "legacy/cocos-poc"
 
 
 def main():

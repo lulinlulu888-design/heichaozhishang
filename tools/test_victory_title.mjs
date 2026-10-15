@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFile, writeFile} from 'node:fs/promises';
 import {readCocosTestBuild} from './load_cocos_test_module.mjs';
 
-const manifest=JSON.parse(await readFile(new URL('../clients/cocos-poc/assets/resources/recovered/result-ui/victory-title.json',import.meta.url),'utf8'));
+const manifest=JSON.parse(await readFile(new URL('../legacy/cocos-poc/assets/resources/recovered/result-ui/victory-title.json',import.meta.url),'utf8'));
 const allocated=[], callbacks=new Map();
 class Asset { refs=0; constructor(){allocated.push(this);} addRef(){this.refs++;} decRef(){this.refs--;} }
 class JsonAsset extends Asset { json=manifest; }

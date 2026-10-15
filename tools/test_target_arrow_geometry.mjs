@@ -5,7 +5,7 @@ import { stripTypeScriptTypes } from 'node:module';
 
 const root = new URL('../', import.meta.url);
 const source = await readFile(new URL('tools/templates/cocos-target-arrow-geometry.ts', root), 'utf8');
-assert.equal(await readFile(new URL('clients/cocos-poc/assets/TargetArrowGeometry.ts', root), 'utf8'), source);
+assert.equal(await readFile(new URL('legacy/cocos-poc/assets/TargetArrowGeometry.ts', root), 'utf8'), source);
 const { createTargetArrowGeometry: geometry } = await import('data:text/javascript;base64,' +
   Buffer.from(stripTypeScriptTypes(source)).toString('base64'));
 const close = (actual, expected, epsilon = 1e-8) => assert.ok(Math.abs(actual - expected) < epsilon, `${actual} != ${expected}`);

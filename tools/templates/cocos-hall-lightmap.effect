@@ -1,0 +1,103 @@
+// Source UE4_lm decoder. Diffuse reference only; original BRDF/HDR is not ported.
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: hall-light-vs:vert
+      frag: hall-light-fs:frag
+      properties:
+        mainTexture: { value: white }
+        lightTexture: { value: white }
+        mainColor: { value: [1, 1, 1, 1], linear: true, editor: { type: color } }
+        colorScale: { value: [1, 1, 1], target: colorScalePadding.xyz }
+        tilingOffset: { value: [1, 1, 0, 0] }
+        lightScale: { value: [1, 1, 1, 0] }
+        lightAdd: { value: [0, 0, 0, 0] }
+        lightUV: { value: [1, 1, 0, 0] }
+        renderOptions: { value: [0, 0, 0, 0] }
+}%
+CCProgram hall-light-vs %{
+  precision highp float;
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/local-batch>
+  #if HALL_LIGHTMAP
+    in vec2 a_texCoord1;
+  #endif
+  out vec2 v_uv;
+  out vec2 v_lightUV;
+  uniform HallLightParams {
+    vec4 mainColor;
+    vec4 colorScalePadding;
+    vec4 tilingOffset;
+    vec4 lightScale;
+    vec4 lightAdd;
+    vec4 lightUV;
+    vec4 renderOptions;
+  };
+  vec4 vert () {
+    vec4 position; CCVertInput(position);
+    mat4 world; CCGetWorldMatrix(world);
+    v_uv = a_texCoord * tilingOffset.xy + tilingOffset.zw;
+    #if HALL_LIGHTMAP
+      v_lightUV = a_texCoord1 * lightUV.xy + lightUV.zw;
+    #else
+      v_lightUV = vec2(0.0);
+    #endif
+    return cc_matProj * cc_matView * world * position;
+  }
+}%
+CCProgram hall-light-fs %{
+  precision highp float;
+  #include <legacy/output-standard>
+  in vec2 v_uv;
+  in vec2 v_lightUV;
+  uniform sampler2D mainTexture;
+  uniform sampler2D lightTexture;
+  uniform HallLightParams {
+    vec4 mainColor;
+    vec4 colorScalePadding;
+    vec4 tilingOffset;
+    vec4 lightScale;
+    vec4 lightAdd;
+    vec4 lightUV;
+    vec4 renderOptions;
+  };
+  // Cocos 3.8's SRGBToLinear uses gamma*gamma. Use the same piecewise sRGB
+  // transfer as the validated Three reference before multiplying irradiance.
+  vec3 HallSRGBToLinear(vec3 c) {
+    return mix(pow((c + vec3(0.055)) / 1.055, vec3(2.4)),
+      c / 12.92, step(c, vec3(0.04045)));
+  }
+  vec3 HallLinearToSRGB(vec3 c) {
+    return mix(1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - vec3(0.055),
+      12.92 * c, step(c, vec3(0.0031308)));
+  }
+  vec4 HallOutput(vec4 color) {
+    #if CC_USE_RGBE_OUTPUT
+      color = packRGBE(color.rgb);
+    #elif !CC_USE_FLOAT_OUTPUT
+      #if CC_USE_HDR && CC_TONE_MAPPING_TYPE == HDR_TONE_MAPPING_ACES
+        color.rgb = ACESToneMap(color.rgb);
+      #endif
+      color.rgb = HallLinearToSRGB(color.rgb);
+    #endif
+    return color;
+  }
+  vec4 frag () {
+    vec4 color = texture(mainTexture, v_uv);
+    // lightTexture is encoded LINEAR data and must not be sRGB-decoded.
+    color.rgb = HallSRGBToLinear(color.rgb) * mainColor.rgb * colorScalePadding.xyz;
+    color.a *= mainColor.a;
+    // glTF MASK discards first, then writes opaque alpha like Three's opaque_fragment.
+    if (renderOptions.y > 0.5 && color.a < renderOptions.z) discard;
+    #if HALL_LIGHTMAP
+      vec3 encoded = texture(lightTexture, v_lightUV).rgb * lightScale.xyz + lightAdd.xyz;
+      float logL = dot(vec3(0.299, 0.587, 0.114), encoded);
+      float luma = (exp2(logL * 16.0 - 8.0) - 0.00390625) * 0.6;
+      color.rgb *= encoded * (luma / max(logL, 0.00001));
+    #endif
+    if (renderOptions.x > 0.5) color.a = 1.0;
+    // Source lightmap alpha is not substituted for base alpha; baked alpha-shadow pending.
+    return HallOutput(color);
+  }
+}%

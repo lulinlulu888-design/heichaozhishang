@@ -21,7 +21,7 @@ def main():
     output = ROOT / ('analysis/cocos-android-emulator' if emulator else 'analysis/cocos-android')
     output.mkdir(parents=True, exist_ok=True)
     config_file = 'build-android-emulator.json' if emulator else 'build-android.json'
-    config = json.loads((ROOT / 'clients/cocos-poc' / config_file).read_text(encoding="utf-8"))["packages"]["android"]
+    config = json.loads((ROOT / 'legacy/cocos-poc' / config_file).read_text(encoding="utf-8"))["packages"]["android"]
     if config['appABIs'] != [expected_abi]:
         raise ValueError('Build variant ABI configuration mismatch')
     build_tools = Path(config["sdkPath"]) / "build-tools/35.0.0"

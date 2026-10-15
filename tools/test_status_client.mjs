@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { createBattle, endTurn, playCard } from '../packages/battle-session/src/index.js';
 import { int, toTagged } from '../packages/battle-core/src/index.js';
 import { readCocosTestBuild } from './load_cocos_test_module.mjs';
-const source = await readFile(new URL('../clients/cocos-poc/assets/TutorialBattleController.ts', import.meta.url), 'utf8');
+const source = await readFile(new URL('../legacy/cocos-poc/assets/TutorialBattleController.ts', import.meta.url), 'utf8');
 assert.equal(source, await readFile(new URL('./templates/cocos-tutorial-battle-controller.ts', import.meta.url), 'utf8'));
 const ts = createRequire(import.meta.url)('../.tools/cocos/3.8.8/resources/app.asar.unpacked/node_modules/typescript/lib/typescript.js');
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });

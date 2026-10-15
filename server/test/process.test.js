@@ -8,7 +8,7 @@ import { fixture, request } from './helpers.js';
 
 async function start(files, tutorialDirectory) {
   const process = spawn(globalThis.process.execPath, [fileURLToPath(new URL('../src/index.js', import.meta.url)),
-    '--port', '0', '--data-directory', files.dataDirectory, '--save-path', files.savePath,
+    '--storage', 'sqlite', '--port', '0', '--data-directory', files.dataDirectory, '--save-path', files.savePath,
     ...(tutorialDirectory ? ['--tutorial-directory', tutorialDirectory] : ['--no-tutorial'])],
   { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const ended = once(process, 'exit');

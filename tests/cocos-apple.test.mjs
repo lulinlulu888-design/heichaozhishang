@@ -31,7 +31,7 @@ async function projectFixture(t) {
     await mkdir(dirname(join(directory, path)), { recursive: true });
     await writeFile(join(directory, path), typeof value === 'object' ? JSON.stringify(value) : value);
   };
-  const config = JSON.parse(await readFile(join(root, 'clients/cocos-poc/build-mac.json'), 'utf8'));
+  const config = JSON.parse(await readFile(join(root, 'legacy/cocos-poc/build-mac.json'), 'utf8'));
   await put('build-mac.json', config);
   await put('package.json', { creator: { version: '3.8.8' } });
   for (const name of ['ToolchainProof', 'TutorialBattleController', 'TutorialBattleView', 'RecoveredCharacterView']) {
@@ -55,9 +55,9 @@ async function projectFixture(t) {
   return { directory, put, config };
 }
 test('Apple configurations use the actual shared scene, Metal and synchronized generator templates', async () => {
-  const meta = JSON.parse(await readFile(join(root, 'clients/cocos-poc/assets/ToolchainProof.scene.meta'), 'utf8'));
+  const meta = JSON.parse(await readFile(join(root, 'legacy/cocos-poc/assets/ToolchainProof.scene.meta'), 'utf8'));
   for (const platform of ['mac', 'ios']) {
-    const bytes = await readFile(join(root, `clients/cocos-poc/build-${platform}.json`));
+    const bytes = await readFile(join(root, `legacy/cocos-poc/build-${platform}.json`));
     assert.deepEqual(bytes, await readFile(join(root, `tools/templates/cocos-build-${platform}.json`)));
     const config = validateConfig(JSON.parse(bytes), platform);
     assert.equal(config.startScene, meta.uuid);

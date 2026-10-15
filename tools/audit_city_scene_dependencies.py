@@ -40,7 +40,7 @@ def main(scene_names=('city_battle_1', 'city_battle_2'), output=None):
         record = records[path]
         suffix = Path(path).suffix.lower()
         candidates = [path]
-        if suffix in ('.dds', '.tga', '.png'):
+        if suffix in ('.dds', '.tga', '.png', '.cube'):
             candidates.append(path.rsplit('.', 1)[0] + '.ktx')
         matches = [(p, lookup_logical(catalogue, p)) for p in candidates]
         available = [(p, rows) for p, rows in matches if rows]

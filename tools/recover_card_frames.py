@@ -96,7 +96,7 @@ def main():
     cards = json.loads((ROOT/'analysis/first-encounter/player-cards.json').read_text('utf8'))['rows']
     if {r['id'] for r in cards} != {110001,110009,210003,410101,410102} or any(r['fields']['CARD_TYPE'] != 0 for r in cards):
         raise ValueError('Preview card types need explicit frame mapping')
-    dest = ROOT/'clients/cocos-poc/assets/resources/recovered/card-frames'
+    dest = ROOT/'legacy/cocos-poc/assets/resources/recovered/card-frames'
     dest.mkdir(parents=True,exist_ok=True)
     for name in ('atk.png','skill.png','def.png','cost.png','cost_normal.png','cost_normal.fnt','big-atk.png','provenance.json'):
         shutil.copyfile(OUT/name,dest/name)

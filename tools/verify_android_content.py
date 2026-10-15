@@ -12,7 +12,7 @@ from verify_result_content import verify_result
 from verify_city_content import verify_city
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT/'clients/cocos-poc'
+PROJECT = ROOT/'legacy/cocos-poc'
 EVIDENCE = ROOT/'analysis/cocos-android'
 
 

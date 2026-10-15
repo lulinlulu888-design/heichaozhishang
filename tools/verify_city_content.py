@@ -8,7 +8,7 @@ from export_elsa_model import split_glb
 ROOT = Path(__file__).resolve().parents[1]
 
 def verify_city(check, bundle, paths, png_hashes, resource_root):
-    assets = ROOT/'clients/cocos-poc/assets'
+    assets = ROOT/'legacy/cocos-poc/assets'
     staged = assets/'resources/recovered/city'
     digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
     check('City client templates match', all((assets/name).read_bytes() == (ROOT/'tools/templates'/template).read_bytes()

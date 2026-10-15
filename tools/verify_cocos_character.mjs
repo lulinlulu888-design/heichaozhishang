@@ -394,8 +394,8 @@ function selfTest() {
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   if (process.argv.includes('--self-test')) selfTest();
   else {
-    const options = { project: path.join(ROOT, 'clients/cocos-poc'), creator: path.join(ROOT, '.tools/cocos/3.8.8'),
-      config: path.join(ROOT, 'clients/cocos-poc/build/web-desktop/assets/resources/config.json'),
+    const options = { project: path.join(ROOT, 'legacy/cocos-poc'), creator: path.join(ROOT, '.tools/cocos/3.8.8'),
+      config: path.join(ROOT, 'legacy/cocos-poc/build/web-desktop/assets/resources/config.json'),
       output: path.join(ROOT, 'analysis/cocos-character/import-verification.json'), model: 'elsa' };
     for (let i = 2; i < process.argv.length; i += 2) {
       const key = process.argv[i].slice(2);

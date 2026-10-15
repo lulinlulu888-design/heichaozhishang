@@ -6,7 +6,7 @@ from pathlib import Path
 from export_elsa_model import split_glb
 
 ROOT = Path(__file__).resolve().parents[1]
-DEST = ROOT/'clients/cocos-poc/assets/resources/recovered/prologue'
+DEST = ROOT/'legacy/cocos-poc/assets/resources/recovered/prologue'
 
 
 def main():

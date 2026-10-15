@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def verify_health(check, bundle, paths, packaged_hashes):
-    assets = ROOT/'clients/cocos-poc/assets/resources/recovered/battle-ui'
+    assets = ROOT/'legacy/cocos-poc/assets/resources/recovered/battle-ui'
     sprites = json.loads((ROOT/'analysis/battle-ui/sprites.json').read_text('utf8'))['frames']
     expected = {row['name']: row['png_sha256'] for row in sprites}
     for actor in ('player', 'monster'):

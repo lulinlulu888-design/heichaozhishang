@@ -1,0 +1,4673 @@
+{
+  "fixtureSchemaVersion": 1,
+  "origin": "Offline production battle-session reducers with pinned city APK inputs; no live account or database",
+  "sourceSha256": "986d405c0ced3b796b4655e68b7887d4e7ce6e71e7a4dbc5fa7ad17cb8cdafe5",
+  "initial": {
+    "battle": {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "profileId": "11111111-1111-1111-1111-111111111111",
+      "revision": 1,
+      "scenario": {
+        "title": "城市试战 · 比克卢",
+        "notice": "本地40级重建试玩，非原服关卡数值。",
+        "encounterId": "city-preview-10405",
+        "definition": {
+          "player": {
+            "id": "1",
+            "name": "艾尔莎",
+            "maxHp": {
+              "numeric_type": "binary64",
+              "decimal": "1768.8000000000002",
+              "hex": "0x1.ba33333333334p+10"
+            }
+          },
+          "enemy": {
+            "id": "6605",
+            "name": "比克卢",
+            "maxHp": {
+              "numeric_type": "binary64",
+              "decimal": "6041.0",
+              "hex": "0x1.7990000000000p+12"
+            }
+          },
+          "deck": [
+            {
+              "instanceId": "tutorial-card-1",
+              "cardId": "410101"
+            },
+            {
+              "instanceId": "tutorial-card-2",
+              "cardId": "110001"
+            },
+            {
+              "instanceId": "tutorial-card-3",
+              "cardId": "210003"
+            },
+            {
+              "instanceId": "tutorial-card-4",
+              "cardId": "110009"
+            },
+            {
+              "instanceId": "tutorial-card-5",
+              "cardId": "210003"
+            },
+            {
+              "instanceId": "tutorial-card-6",
+              "cardId": "110001"
+            },
+            {
+              "instanceId": "tutorial-card-7",
+              "cardId": "410102"
+            }
+          ],
+          "cards": {
+            "110001": {
+              "name": "斩击",
+              "cost": 1,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "385"
+                }
+              ],
+              "ownerId": "1",
+              "cardType": 0,
+              "specialPoints": 1,
+              "removeOnLeaveHand": false
+            },
+            "110009": {
+              "name": "猛力斩击",
+              "cost": 2,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "723"
+                }
+              ],
+              "ownerId": "1",
+              "cardType": 0,
+              "specialPoints": 1,
+              "removeOnLeaveHand": false
+            },
+            "210003": {
+              "name": "强力斩击",
+              "cost": 1,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "482"
+                }
+              ],
+              "ownerId": "1",
+              "cardType": 0,
+              "specialPoints": 1,
+              "removeOnLeaveHand": false
+            },
+            "410101": {
+              "name": "二连斩击",
+              "cost": 1,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "361"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "361"
+                }
+              ],
+              "ownerId": "1",
+              "cardType": 0,
+              "specialPoints": 1,
+              "removeOnLeaveHand": false
+            },
+            "410102": {
+              "name": "疾驰斩击",
+              "cost": 2,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "1447"
+                },
+                {
+                  "type": "draw",
+                  "count": 0
+                }
+              ],
+              "ownerId": "1",
+              "cardType": 0,
+              "specialPoints": 1,
+              "removeOnLeaveHand": false
+            },
+            "410104": {
+              "name": "赤色地平线",
+              "cost": 0,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "72"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "72"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "144"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "144"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "144"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "289"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "289"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "289"
+                }
+              ],
+              "ownerId": "1",
+              "cardType": 7,
+              "specialPoints": 0,
+              "removeOnLeaveHand": true
+            }
+          },
+          "enemySkills": {
+            "66051": {
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "379"
+                },
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "379"
+                }
+              ]
+            },
+            "66052": {
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "opponent",
+                  "amount": "253"
+                }
+              ]
+            },
+            "66053": {
+              "effects": [
+                {
+                  "type": "shield",
+                  "target": "self",
+                  "amount": "906"
+                }
+              ]
+            },
+            "66054": {
+              "effects": [
+                {
+                  "type": "breakdown",
+                  "target": "opponent",
+                  "stacks": 2
+                }
+              ]
+            }
+          },
+          "enemyIntents": [
+            [
+              "66054"
+            ],
+            [
+              "66053"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66052"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66052"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66053"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66052"
+            ],
+            [
+              "66053"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66053"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66052"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66054"
+            ],
+            [
+              "66051"
+            ],
+            [
+              "66052"
+            ]
+          ],
+          "enemyFallback": [
+            "66054"
+          ],
+          "initialDraw": 6,
+          "roundDraw": 6,
+          "energyPerRound": 5,
+          "handLimit": 10,
+          "maxRounds": 30,
+          "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+          "statusRules": {
+            "policy": "breakdown-reconstruction-v1",
+            "attack": {
+              "player": {
+                "numeric_type": "binary64",
+                "decimal": "482.4",
+                "hex": "0x1.e266666666666p+8"
+              },
+              "enemy": {
+                "numeric_type": "binary64",
+                "decimal": "422.0",
+                "hex": "0x1.a600000000000p+8"
+              }
+            }
+          },
+          "ultimateRules": {
+            "policy": "elsa-combo-reconstruction-v1",
+            "ownerId": "1",
+            "cardId": "410104",
+            "pointsRequired": 3,
+            "maxPerRound": 3
+          }
+        }
+      },
+      "state": {
+        "format": "hczs-battle-session-v3",
+        "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+        "round": 1,
+        "status": "player-turn",
+        "outcomeReason": null,
+        "energy": 5,
+        "actionIndex": 0,
+        "ultimate": {
+          "chainOwnerId": null,
+          "points": 0,
+          "generatedThisRound": 0,
+          "generatedTotal": 0
+        },
+        "breakdown": {
+          "player": 0,
+          "enemy": 0
+        },
+        "player": {
+          "hp": {
+            "numeric_type": "binary64",
+            "decimal": "1768.8000000000002",
+            "hex": "0x1.ba33333333334p+10"
+          },
+          "shield": {
+            "numeric_type": "integer",
+            "decimal": "0"
+          }
+        },
+        "enemy": {
+          "hp": {
+            "numeric_type": "binary64",
+            "decimal": "6041.0",
+            "hex": "0x1.7990000000000p+12"
+          },
+          "shield": {
+            "numeric_type": "integer",
+            "decimal": "0"
+          }
+        },
+        "cards": [
+          {
+            "instanceId": "tutorial-card-1",
+            "cardId": "410101"
+          },
+          {
+            "instanceId": "tutorial-card-2",
+            "cardId": "110001"
+          },
+          {
+            "instanceId": "tutorial-card-3",
+            "cardId": "210003"
+          },
+          {
+            "instanceId": "tutorial-card-4",
+            "cardId": "110009"
+          },
+          {
+            "instanceId": "tutorial-card-5",
+            "cardId": "210003"
+          },
+          {
+            "instanceId": "tutorial-card-6",
+            "cardId": "110001"
+          },
+          {
+            "instanceId": "tutorial-card-7",
+            "cardId": "410102"
+          }
+        ],
+        "piles": {
+          "hand": [
+            "tutorial-card-1",
+            "tutorial-card-2",
+            "tutorial-card-3",
+            "tutorial-card-4",
+            "tutorial-card-5",
+            "tutorial-card-6"
+          ],
+          "draw": [
+            "tutorial-card-7"
+          ],
+          "discard": [],
+          "exhausted": [],
+          "powerUsed": [],
+          "removed": []
+        },
+        "rng": {
+          "algorithm": "mulberry32-v1",
+          "state": 0
+        }
+      },
+      "createdAt": 100,
+      "updatedAt": 100
+    },
+    "events": [
+      {
+        "type": "BattleStarted",
+        "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+        "seed": 0
+      },
+      {
+        "type": "TurnStarted",
+        "round": 1
+      },
+      {
+        "type": "CardDrawn",
+        "instanceId": "tutorial-card-1"
+      },
+      {
+        "type": "CardDrawn",
+        "instanceId": "tutorial-card-2"
+      },
+      {
+        "type": "CardDrawn",
+        "instanceId": "tutorial-card-3"
+      },
+      {
+        "type": "CardDrawn",
+        "instanceId": "tutorial-card-4"
+      },
+      {
+        "type": "CardDrawn",
+        "instanceId": "tutorial-card-5"
+      },
+      {
+        "type": "CardDrawn",
+        "instanceId": "tutorial-card-6"
+      },
+      {
+        "type": "StateUpdated",
+        "state": {
+          "format": "hczs-battle-session-v3",
+          "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+          "round": 1,
+          "status": "player-turn",
+          "outcomeReason": null,
+          "energy": 5,
+          "actionIndex": 0,
+          "ultimate": {
+            "chainOwnerId": null,
+            "points": 0,
+            "generatedThisRound": 0,
+            "generatedTotal": 0
+          },
+          "breakdown": {
+            "player": 0,
+            "enemy": 0
+          },
+          "player": {
+            "hp": {
+              "numeric_type": "binary64",
+              "decimal": "1768.8000000000002",
+              "hex": "0x1.ba33333333334p+10"
+            },
+            "shield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          "enemy": {
+            "hp": {
+              "numeric_type": "binary64",
+              "decimal": "6041.0",
+              "hex": "0x1.7990000000000p+12"
+            },
+            "shield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          "cards": [
+            {
+              "instanceId": "tutorial-card-1",
+              "cardId": "410101"
+            },
+            {
+              "instanceId": "tutorial-card-2",
+              "cardId": "110001"
+            },
+            {
+              "instanceId": "tutorial-card-3",
+              "cardId": "210003"
+            },
+            {
+              "instanceId": "tutorial-card-4",
+              "cardId": "110009"
+            },
+            {
+              "instanceId": "tutorial-card-5",
+              "cardId": "210003"
+            },
+            {
+              "instanceId": "tutorial-card-6",
+              "cardId": "110001"
+            },
+            {
+              "instanceId": "tutorial-card-7",
+              "cardId": "410102"
+            }
+          ],
+          "piles": {
+            "hand": [
+              "tutorial-card-1",
+              "tutorial-card-2",
+              "tutorial-card-3",
+              "tutorial-card-4",
+              "tutorial-card-5",
+              "tutorial-card-6"
+            ],
+            "draw": [
+              "tutorial-card-7"
+            ],
+            "discard": [],
+            "exhausted": [],
+            "powerUsed": [],
+            "removed": []
+          },
+          "rng": {
+            "algorithm": "mulberry32-v1",
+            "state": 0
+          }
+        }
+      }
+    ],
+    "replayed": false
+  },
+  "steps": [
+    {
+      "name": "first",
+      "command": {
+        "requestId": "first",
+        "expectedRevision": 1,
+        "type": "play-card",
+        "instanceId": "tutorial-card-1"
+      },
+      "receipt": {
+        "battle": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "profileId": "11111111-1111-1111-1111-111111111111",
+          "revision": 2,
+          "scenario": {
+            "title": "城市试战 · 比克卢",
+            "notice": "本地40级重建试玩，非原服关卡数值。",
+            "encounterId": "city-preview-10405",
+            "definition": {
+              "player": {
+                "id": "1",
+                "name": "艾尔莎",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                }
+              },
+              "enemy": {
+                "id": "6605",
+                "name": "比克卢",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "6041.0",
+                  "hex": "0x1.7990000000000p+12"
+                }
+              },
+              "deck": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "cards": {
+                "110001": {
+                  "name": "斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "385"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "110009": {
+                  "name": "猛力斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "723"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "210003": {
+                  "name": "强力斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "482"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410101": {
+                  "name": "二连斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410102": {
+                  "name": "疾驰斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "1447"
+                    },
+                    {
+                      "type": "draw",
+                      "count": 0
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410104": {
+                  "name": "赤色地平线",
+                  "cost": 0,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 7,
+                  "specialPoints": 0,
+                  "removeOnLeaveHand": true
+                }
+              },
+              "enemySkills": {
+                "66051": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    }
+                  ]
+                },
+                "66052": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "253"
+                    }
+                  ]
+                },
+                "66053": {
+                  "effects": [
+                    {
+                      "type": "shield",
+                      "target": "self",
+                      "amount": "906"
+                    }
+                  ]
+                },
+                "66054": {
+                  "effects": [
+                    {
+                      "type": "breakdown",
+                      "target": "opponent",
+                      "stacks": 2
+                    }
+                  ]
+                }
+              },
+              "enemyIntents": [
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ]
+              ],
+              "enemyFallback": [
+                "66054"
+              ],
+              "initialDraw": 6,
+              "roundDraw": 6,
+              "energyPerRound": 5,
+              "handLimit": 10,
+              "maxRounds": 30,
+              "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "statusRules": {
+                "policy": "breakdown-reconstruction-v1",
+                "attack": {
+                  "player": {
+                    "numeric_type": "binary64",
+                    "decimal": "482.4",
+                    "hex": "0x1.e266666666666p+8"
+                  },
+                  "enemy": {
+                    "numeric_type": "binary64",
+                    "decimal": "422.0",
+                    "hex": "0x1.a600000000000p+8"
+                  }
+                }
+              },
+              "ultimateRules": {
+                "policy": "elsa-combo-reconstruction-v1",
+                "ownerId": "1",
+                "cardId": "410104",
+                "pointsRequired": 3,
+                "maxPerRound": 3
+              }
+            }
+          },
+          "state": {
+            "format": "hczs-battle-session-v3",
+            "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+            "round": 1,
+            "status": "player-turn",
+            "outcomeReason": null,
+            "energy": 4,
+            "actionIndex": 1,
+            "ultimate": {
+              "chainOwnerId": "1",
+              "points": 1,
+              "generatedThisRound": 0,
+              "generatedTotal": 0
+            },
+            "breakdown": {
+              "player": 0,
+              "enemy": 0
+            },
+            "player": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "1768.8000000000002",
+                "hex": "0x1.ba33333333334p+10"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "enemy": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "5319.0",
+                "hex": "0x1.4c70000000000p+12"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "cards": [
+              {
+                "instanceId": "tutorial-card-1",
+                "cardId": "410101"
+              },
+              {
+                "instanceId": "tutorial-card-2",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-3",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-4",
+                "cardId": "110009"
+              },
+              {
+                "instanceId": "tutorial-card-5",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-6",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-7",
+                "cardId": "410102"
+              }
+            ],
+            "piles": {
+              "hand": [
+                "tutorial-card-2",
+                "tutorial-card-3",
+                "tutorial-card-4",
+                "tutorial-card-5",
+                "tutorial-card-6"
+              ],
+              "draw": [
+                "tutorial-card-7"
+              ],
+              "discard": [
+                "tutorial-card-1"
+              ],
+              "exhausted": [],
+              "powerUsed": [],
+              "removed": []
+            },
+            "rng": {
+              "algorithm": "mulberry32-v1",
+              "state": 0
+            }
+          },
+          "createdAt": 100,
+          "updatedAt": 101
+        },
+        "events": [
+          {
+            "type": "CardPlayed",
+            "instanceId": "tutorial-card-1",
+            "cardId": "410101",
+            "cost": 1
+          },
+          {
+            "type": "EnergyChanged",
+            "previousValue": 5,
+            "finalValue": 4
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 0,
+            "amount": "361",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "361"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "6041.0",
+              "hex": "0x1.7990000000000p+12"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "5680.0",
+              "hex": "0x1.6300000000000p+12"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 1,
+            "amount": "361",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "361"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "5680.0",
+              "hex": "0x1.6300000000000p+12"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "5319.0",
+              "hex": "0x1.4c70000000000p+12"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "CardMoved",
+            "instanceId": "tutorial-card-1",
+            "from": "in-flight",
+            "to": "discard"
+          },
+          {
+            "type": "StateUpdated",
+            "state": {
+              "format": "hczs-battle-session-v3",
+              "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "round": 1,
+              "status": "player-turn",
+              "outcomeReason": null,
+              "energy": 4,
+              "actionIndex": 1,
+              "ultimate": {
+                "chainOwnerId": "1",
+                "points": 1,
+                "generatedThisRound": 0,
+                "generatedTotal": 0
+              },
+              "breakdown": {
+                "player": 0,
+                "enemy": 0
+              },
+              "player": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "enemy": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "5319.0",
+                  "hex": "0x1.4c70000000000p+12"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "cards": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "piles": {
+                "hand": [
+                  "tutorial-card-2",
+                  "tutorial-card-3",
+                  "tutorial-card-4",
+                  "tutorial-card-5",
+                  "tutorial-card-6"
+                ],
+                "draw": [
+                  "tutorial-card-7"
+                ],
+                "discard": [
+                  "tutorial-card-1"
+                ],
+                "exhausted": [],
+                "powerUsed": [],
+                "removed": []
+              },
+              "rng": {
+                "algorithm": "mulberry32-v1",
+                "state": 0
+              }
+            }
+          }
+        ],
+        "replayed": false
+      }
+    },
+    {
+      "name": "second",
+      "command": {
+        "requestId": "second",
+        "expectedRevision": 2,
+        "type": "play-card",
+        "instanceId": "tutorial-card-2"
+      },
+      "receipt": {
+        "battle": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "profileId": "11111111-1111-1111-1111-111111111111",
+          "revision": 3,
+          "scenario": {
+            "title": "城市试战 · 比克卢",
+            "notice": "本地40级重建试玩，非原服关卡数值。",
+            "encounterId": "city-preview-10405",
+            "definition": {
+              "player": {
+                "id": "1",
+                "name": "艾尔莎",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                }
+              },
+              "enemy": {
+                "id": "6605",
+                "name": "比克卢",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "6041.0",
+                  "hex": "0x1.7990000000000p+12"
+                }
+              },
+              "deck": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "cards": {
+                "110001": {
+                  "name": "斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "385"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "110009": {
+                  "name": "猛力斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "723"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "210003": {
+                  "name": "强力斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "482"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410101": {
+                  "name": "二连斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410102": {
+                  "name": "疾驰斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "1447"
+                    },
+                    {
+                      "type": "draw",
+                      "count": 0
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410104": {
+                  "name": "赤色地平线",
+                  "cost": 0,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 7,
+                  "specialPoints": 0,
+                  "removeOnLeaveHand": true
+                }
+              },
+              "enemySkills": {
+                "66051": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    }
+                  ]
+                },
+                "66052": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "253"
+                    }
+                  ]
+                },
+                "66053": {
+                  "effects": [
+                    {
+                      "type": "shield",
+                      "target": "self",
+                      "amount": "906"
+                    }
+                  ]
+                },
+                "66054": {
+                  "effects": [
+                    {
+                      "type": "breakdown",
+                      "target": "opponent",
+                      "stacks": 2
+                    }
+                  ]
+                }
+              },
+              "enemyIntents": [
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ]
+              ],
+              "enemyFallback": [
+                "66054"
+              ],
+              "initialDraw": 6,
+              "roundDraw": 6,
+              "energyPerRound": 5,
+              "handLimit": 10,
+              "maxRounds": 30,
+              "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "statusRules": {
+                "policy": "breakdown-reconstruction-v1",
+                "attack": {
+                  "player": {
+                    "numeric_type": "binary64",
+                    "decimal": "482.4",
+                    "hex": "0x1.e266666666666p+8"
+                  },
+                  "enemy": {
+                    "numeric_type": "binary64",
+                    "decimal": "422.0",
+                    "hex": "0x1.a600000000000p+8"
+                  }
+                }
+              },
+              "ultimateRules": {
+                "policy": "elsa-combo-reconstruction-v1",
+                "ownerId": "1",
+                "cardId": "410104",
+                "pointsRequired": 3,
+                "maxPerRound": 3
+              }
+            }
+          },
+          "state": {
+            "format": "hczs-battle-session-v3",
+            "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+            "round": 1,
+            "status": "player-turn",
+            "outcomeReason": null,
+            "energy": 3,
+            "actionIndex": 2,
+            "ultimate": {
+              "chainOwnerId": "1",
+              "points": 2,
+              "generatedThisRound": 0,
+              "generatedTotal": 0
+            },
+            "breakdown": {
+              "player": 0,
+              "enemy": 0
+            },
+            "player": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "1768.8000000000002",
+                "hex": "0x1.ba33333333334p+10"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "enemy": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "4934.0",
+                "hex": "0x1.3460000000000p+12"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "cards": [
+              {
+                "instanceId": "tutorial-card-1",
+                "cardId": "410101"
+              },
+              {
+                "instanceId": "tutorial-card-2",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-3",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-4",
+                "cardId": "110009"
+              },
+              {
+                "instanceId": "tutorial-card-5",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-6",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-7",
+                "cardId": "410102"
+              }
+            ],
+            "piles": {
+              "hand": [
+                "tutorial-card-3",
+                "tutorial-card-4",
+                "tutorial-card-5",
+                "tutorial-card-6"
+              ],
+              "draw": [
+                "tutorial-card-7"
+              ],
+              "discard": [
+                "tutorial-card-1",
+                "tutorial-card-2"
+              ],
+              "exhausted": [],
+              "powerUsed": [],
+              "removed": []
+            },
+            "rng": {
+              "algorithm": "mulberry32-v1",
+              "state": 0
+            }
+          },
+          "createdAt": 100,
+          "updatedAt": 102
+        },
+        "events": [
+          {
+            "type": "CardPlayed",
+            "instanceId": "tutorial-card-2",
+            "cardId": "110001",
+            "cost": 1
+          },
+          {
+            "type": "EnergyChanged",
+            "previousValue": 4,
+            "finalValue": 3
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 0,
+            "amount": "385",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "385"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "5319.0",
+              "hex": "0x1.4c70000000000p+12"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "4934.0",
+              "hex": "0x1.3460000000000p+12"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "CardMoved",
+            "instanceId": "tutorial-card-2",
+            "from": "in-flight",
+            "to": "discard"
+          },
+          {
+            "type": "StateUpdated",
+            "state": {
+              "format": "hczs-battle-session-v3",
+              "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "round": 1,
+              "status": "player-turn",
+              "outcomeReason": null,
+              "energy": 3,
+              "actionIndex": 2,
+              "ultimate": {
+                "chainOwnerId": "1",
+                "points": 2,
+                "generatedThisRound": 0,
+                "generatedTotal": 0
+              },
+              "breakdown": {
+                "player": 0,
+                "enemy": 0
+              },
+              "player": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "enemy": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "4934.0",
+                  "hex": "0x1.3460000000000p+12"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "cards": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "piles": {
+                "hand": [
+                  "tutorial-card-3",
+                  "tutorial-card-4",
+                  "tutorial-card-5",
+                  "tutorial-card-6"
+                ],
+                "draw": [
+                  "tutorial-card-7"
+                ],
+                "discard": [
+                  "tutorial-card-1",
+                  "tutorial-card-2"
+                ],
+                "exhausted": [],
+                "powerUsed": [],
+                "removed": []
+              },
+              "rng": {
+                "algorithm": "mulberry32-v1",
+                "state": 0
+              }
+            }
+          }
+        ],
+        "replayed": false
+      }
+    },
+    {
+      "name": "generated",
+      "command": {
+        "requestId": "generated",
+        "expectedRevision": 3,
+        "type": "play-card",
+        "instanceId": "tutorial-card-3"
+      },
+      "receipt": {
+        "battle": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "profileId": "11111111-1111-1111-1111-111111111111",
+          "revision": 4,
+          "scenario": {
+            "title": "城市试战 · 比克卢",
+            "notice": "本地40级重建试玩，非原服关卡数值。",
+            "encounterId": "city-preview-10405",
+            "definition": {
+              "player": {
+                "id": "1",
+                "name": "艾尔莎",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                }
+              },
+              "enemy": {
+                "id": "6605",
+                "name": "比克卢",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "6041.0",
+                  "hex": "0x1.7990000000000p+12"
+                }
+              },
+              "deck": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "cards": {
+                "110001": {
+                  "name": "斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "385"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "110009": {
+                  "name": "猛力斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "723"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "210003": {
+                  "name": "强力斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "482"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410101": {
+                  "name": "二连斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410102": {
+                  "name": "疾驰斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "1447"
+                    },
+                    {
+                      "type": "draw",
+                      "count": 0
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410104": {
+                  "name": "赤色地平线",
+                  "cost": 0,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 7,
+                  "specialPoints": 0,
+                  "removeOnLeaveHand": true
+                }
+              },
+              "enemySkills": {
+                "66051": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    }
+                  ]
+                },
+                "66052": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "253"
+                    }
+                  ]
+                },
+                "66053": {
+                  "effects": [
+                    {
+                      "type": "shield",
+                      "target": "self",
+                      "amount": "906"
+                    }
+                  ]
+                },
+                "66054": {
+                  "effects": [
+                    {
+                      "type": "breakdown",
+                      "target": "opponent",
+                      "stacks": 2
+                    }
+                  ]
+                }
+              },
+              "enemyIntents": [
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ]
+              ],
+              "enemyFallback": [
+                "66054"
+              ],
+              "initialDraw": 6,
+              "roundDraw": 6,
+              "energyPerRound": 5,
+              "handLimit": 10,
+              "maxRounds": 30,
+              "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "statusRules": {
+                "policy": "breakdown-reconstruction-v1",
+                "attack": {
+                  "player": {
+                    "numeric_type": "binary64",
+                    "decimal": "482.4",
+                    "hex": "0x1.e266666666666p+8"
+                  },
+                  "enemy": {
+                    "numeric_type": "binary64",
+                    "decimal": "422.0",
+                    "hex": "0x1.a600000000000p+8"
+                  }
+                }
+              },
+              "ultimateRules": {
+                "policy": "elsa-combo-reconstruction-v1",
+                "ownerId": "1",
+                "cardId": "410104",
+                "pointsRequired": 3,
+                "maxPerRound": 3
+              }
+            }
+          },
+          "state": {
+            "format": "hczs-battle-session-v3",
+            "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+            "round": 1,
+            "status": "player-turn",
+            "outcomeReason": null,
+            "energy": 2,
+            "actionIndex": 3,
+            "ultimate": {
+              "chainOwnerId": null,
+              "points": 0,
+              "generatedThisRound": 1,
+              "generatedTotal": 1
+            },
+            "breakdown": {
+              "player": 0,
+              "enemy": 0
+            },
+            "player": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "1768.8000000000002",
+                "hex": "0x1.ba33333333334p+10"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "enemy": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "4452.0",
+                "hex": "0x1.1640000000000p+12"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "cards": [
+              {
+                "instanceId": "tutorial-card-1",
+                "cardId": "410101"
+              },
+              {
+                "instanceId": "tutorial-card-2",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-3",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-4",
+                "cardId": "110009"
+              },
+              {
+                "instanceId": "tutorial-card-5",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-6",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-7",
+                "cardId": "410102"
+              },
+              {
+                "instanceId": "ultimate:1",
+                "cardId": "410104"
+              }
+            ],
+            "piles": {
+              "hand": [
+                "tutorial-card-4",
+                "tutorial-card-5",
+                "tutorial-card-6",
+                "ultimate:1"
+              ],
+              "draw": [
+                "tutorial-card-7"
+              ],
+              "discard": [
+                "tutorial-card-1",
+                "tutorial-card-2",
+                "tutorial-card-3"
+              ],
+              "exhausted": [],
+              "powerUsed": [],
+              "removed": []
+            },
+            "rng": {
+              "algorithm": "mulberry32-v1",
+              "state": 0
+            }
+          },
+          "createdAt": 100,
+          "updatedAt": 103
+        },
+        "events": [
+          {
+            "type": "CardPlayed",
+            "instanceId": "tutorial-card-3",
+            "cardId": "210003",
+            "cost": 1
+          },
+          {
+            "type": "EnergyChanged",
+            "previousValue": 3,
+            "finalValue": 2
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 0,
+            "amount": "482",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "482"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "4934.0",
+              "hex": "0x1.3460000000000p+12"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "4452.0",
+              "hex": "0x1.1640000000000p+12"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "CardMoved",
+            "instanceId": "tutorial-card-3",
+            "from": "in-flight",
+            "to": "discard"
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "ultimate:1",
+            "generated": true
+          },
+          {
+            "type": "StateUpdated",
+            "state": {
+              "format": "hczs-battle-session-v3",
+              "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "round": 1,
+              "status": "player-turn",
+              "outcomeReason": null,
+              "energy": 2,
+              "actionIndex": 3,
+              "ultimate": {
+                "chainOwnerId": null,
+                "points": 0,
+                "generatedThisRound": 1,
+                "generatedTotal": 1
+              },
+              "breakdown": {
+                "player": 0,
+                "enemy": 0
+              },
+              "player": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "enemy": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "4452.0",
+                  "hex": "0x1.1640000000000p+12"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "cards": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                },
+                {
+                  "instanceId": "ultimate:1",
+                  "cardId": "410104"
+                }
+              ],
+              "piles": {
+                "hand": [
+                  "tutorial-card-4",
+                  "tutorial-card-5",
+                  "tutorial-card-6",
+                  "ultimate:1"
+                ],
+                "draw": [
+                  "tutorial-card-7"
+                ],
+                "discard": [
+                  "tutorial-card-1",
+                  "tutorial-card-2",
+                  "tutorial-card-3"
+                ],
+                "exhausted": [],
+                "powerUsed": [],
+                "removed": []
+              },
+              "rng": {
+                "algorithm": "mulberry32-v1",
+                "state": 0
+              }
+            }
+          }
+        ],
+        "replayed": false
+      }
+    },
+    {
+      "name": "zero-energy",
+      "command": {
+        "requestId": "zero-energy",
+        "expectedRevision": 4,
+        "type": "play-card",
+        "instanceId": "tutorial-card-4"
+      },
+      "receipt": {
+        "battle": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "profileId": "11111111-1111-1111-1111-111111111111",
+          "revision": 5,
+          "scenario": {
+            "title": "城市试战 · 比克卢",
+            "notice": "本地40级重建试玩，非原服关卡数值。",
+            "encounterId": "city-preview-10405",
+            "definition": {
+              "player": {
+                "id": "1",
+                "name": "艾尔莎",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                }
+              },
+              "enemy": {
+                "id": "6605",
+                "name": "比克卢",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "6041.0",
+                  "hex": "0x1.7990000000000p+12"
+                }
+              },
+              "deck": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "cards": {
+                "110001": {
+                  "name": "斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "385"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "110009": {
+                  "name": "猛力斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "723"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "210003": {
+                  "name": "强力斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "482"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410101": {
+                  "name": "二连斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410102": {
+                  "name": "疾驰斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "1447"
+                    },
+                    {
+                      "type": "draw",
+                      "count": 0
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410104": {
+                  "name": "赤色地平线",
+                  "cost": 0,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 7,
+                  "specialPoints": 0,
+                  "removeOnLeaveHand": true
+                }
+              },
+              "enemySkills": {
+                "66051": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    }
+                  ]
+                },
+                "66052": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "253"
+                    }
+                  ]
+                },
+                "66053": {
+                  "effects": [
+                    {
+                      "type": "shield",
+                      "target": "self",
+                      "amount": "906"
+                    }
+                  ]
+                },
+                "66054": {
+                  "effects": [
+                    {
+                      "type": "breakdown",
+                      "target": "opponent",
+                      "stacks": 2
+                    }
+                  ]
+                }
+              },
+              "enemyIntents": [
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ]
+              ],
+              "enemyFallback": [
+                "66054"
+              ],
+              "initialDraw": 6,
+              "roundDraw": 6,
+              "energyPerRound": 5,
+              "handLimit": 10,
+              "maxRounds": 30,
+              "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "statusRules": {
+                "policy": "breakdown-reconstruction-v1",
+                "attack": {
+                  "player": {
+                    "numeric_type": "binary64",
+                    "decimal": "482.4",
+                    "hex": "0x1.e266666666666p+8"
+                  },
+                  "enemy": {
+                    "numeric_type": "binary64",
+                    "decimal": "422.0",
+                    "hex": "0x1.a600000000000p+8"
+                  }
+                }
+              },
+              "ultimateRules": {
+                "policy": "elsa-combo-reconstruction-v1",
+                "ownerId": "1",
+                "cardId": "410104",
+                "pointsRequired": 3,
+                "maxPerRound": 3
+              }
+            }
+          },
+          "state": {
+            "format": "hczs-battle-session-v3",
+            "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+            "round": 1,
+            "status": "player-turn",
+            "outcomeReason": null,
+            "energy": 0,
+            "actionIndex": 4,
+            "ultimate": {
+              "chainOwnerId": "1",
+              "points": 1,
+              "generatedThisRound": 1,
+              "generatedTotal": 1
+            },
+            "breakdown": {
+              "player": 0,
+              "enemy": 0
+            },
+            "player": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "1768.8000000000002",
+                "hex": "0x1.ba33333333334p+10"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "enemy": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "3729.0",
+                "hex": "0x1.d220000000000p+11"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "cards": [
+              {
+                "instanceId": "tutorial-card-1",
+                "cardId": "410101"
+              },
+              {
+                "instanceId": "tutorial-card-2",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-3",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-4",
+                "cardId": "110009"
+              },
+              {
+                "instanceId": "tutorial-card-5",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-6",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-7",
+                "cardId": "410102"
+              },
+              {
+                "instanceId": "ultimate:1",
+                "cardId": "410104"
+              }
+            ],
+            "piles": {
+              "hand": [
+                "tutorial-card-5",
+                "tutorial-card-6",
+                "ultimate:1"
+              ],
+              "draw": [
+                "tutorial-card-7"
+              ],
+              "discard": [
+                "tutorial-card-1",
+                "tutorial-card-2",
+                "tutorial-card-3",
+                "tutorial-card-4"
+              ],
+              "exhausted": [],
+              "powerUsed": [],
+              "removed": []
+            },
+            "rng": {
+              "algorithm": "mulberry32-v1",
+              "state": 0
+            }
+          },
+          "createdAt": 100,
+          "updatedAt": 104
+        },
+        "events": [
+          {
+            "type": "CardPlayed",
+            "instanceId": "tutorial-card-4",
+            "cardId": "110009",
+            "cost": 2
+          },
+          {
+            "type": "EnergyChanged",
+            "previousValue": 2,
+            "finalValue": 0
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 0,
+            "amount": "723",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "723"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "4452.0",
+              "hex": "0x1.1640000000000p+12"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "3729.0",
+              "hex": "0x1.d220000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "CardMoved",
+            "instanceId": "tutorial-card-4",
+            "from": "in-flight",
+            "to": "discard"
+          },
+          {
+            "type": "StateUpdated",
+            "state": {
+              "format": "hczs-battle-session-v3",
+              "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "round": 1,
+              "status": "player-turn",
+              "outcomeReason": null,
+              "energy": 0,
+              "actionIndex": 4,
+              "ultimate": {
+                "chainOwnerId": "1",
+                "points": 1,
+                "generatedThisRound": 1,
+                "generatedTotal": 1
+              },
+              "breakdown": {
+                "player": 0,
+                "enemy": 0
+              },
+              "player": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "enemy": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "3729.0",
+                  "hex": "0x1.d220000000000p+11"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "cards": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                },
+                {
+                  "instanceId": "ultimate:1",
+                  "cardId": "410104"
+                }
+              ],
+              "piles": {
+                "hand": [
+                  "tutorial-card-5",
+                  "tutorial-card-6",
+                  "ultimate:1"
+                ],
+                "draw": [
+                  "tutorial-card-7"
+                ],
+                "discard": [
+                  "tutorial-card-1",
+                  "tutorial-card-2",
+                  "tutorial-card-3",
+                  "tutorial-card-4"
+                ],
+                "exhausted": [],
+                "powerUsed": [],
+                "removed": []
+              },
+              "rng": {
+                "algorithm": "mulberry32-v1",
+                "state": 0
+              }
+            }
+          }
+        ],
+        "replayed": false
+      }
+    },
+    {
+      "name": "used",
+      "command": {
+        "requestId": "used",
+        "expectedRevision": 5,
+        "type": "play-card",
+        "instanceId": "ultimate:1"
+      },
+      "receipt": {
+        "battle": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "profileId": "11111111-1111-1111-1111-111111111111",
+          "revision": 6,
+          "scenario": {
+            "title": "城市试战 · 比克卢",
+            "notice": "本地40级重建试玩，非原服关卡数值。",
+            "encounterId": "city-preview-10405",
+            "definition": {
+              "player": {
+                "id": "1",
+                "name": "艾尔莎",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                }
+              },
+              "enemy": {
+                "id": "6605",
+                "name": "比克卢",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "6041.0",
+                  "hex": "0x1.7990000000000p+12"
+                }
+              },
+              "deck": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "cards": {
+                "110001": {
+                  "name": "斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "385"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "110009": {
+                  "name": "猛力斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "723"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "210003": {
+                  "name": "强力斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "482"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410101": {
+                  "name": "二连斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410102": {
+                  "name": "疾驰斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "1447"
+                    },
+                    {
+                      "type": "draw",
+                      "count": 0
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410104": {
+                  "name": "赤色地平线",
+                  "cost": 0,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 7,
+                  "specialPoints": 0,
+                  "removeOnLeaveHand": true
+                }
+              },
+              "enemySkills": {
+                "66051": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    }
+                  ]
+                },
+                "66052": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "253"
+                    }
+                  ]
+                },
+                "66053": {
+                  "effects": [
+                    {
+                      "type": "shield",
+                      "target": "self",
+                      "amount": "906"
+                    }
+                  ]
+                },
+                "66054": {
+                  "effects": [
+                    {
+                      "type": "breakdown",
+                      "target": "opponent",
+                      "stacks": 2
+                    }
+                  ]
+                }
+              },
+              "enemyIntents": [
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ]
+              ],
+              "enemyFallback": [
+                "66054"
+              ],
+              "initialDraw": 6,
+              "roundDraw": 6,
+              "energyPerRound": 5,
+              "handLimit": 10,
+              "maxRounds": 30,
+              "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "statusRules": {
+                "policy": "breakdown-reconstruction-v1",
+                "attack": {
+                  "player": {
+                    "numeric_type": "binary64",
+                    "decimal": "482.4",
+                    "hex": "0x1.e266666666666p+8"
+                  },
+                  "enemy": {
+                    "numeric_type": "binary64",
+                    "decimal": "422.0",
+                    "hex": "0x1.a600000000000p+8"
+                  }
+                }
+              },
+              "ultimateRules": {
+                "policy": "elsa-combo-reconstruction-v1",
+                "ownerId": "1",
+                "cardId": "410104",
+                "pointsRequired": 3,
+                "maxPerRound": 3
+              }
+            }
+          },
+          "state": {
+            "format": "hczs-battle-session-v3",
+            "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+            "round": 1,
+            "status": "player-turn",
+            "outcomeReason": null,
+            "energy": 0,
+            "actionIndex": 5,
+            "ultimate": {
+              "chainOwnerId": "1",
+              "points": 1,
+              "generatedThisRound": 1,
+              "generatedTotal": 1
+            },
+            "breakdown": {
+              "player": 0,
+              "enemy": 0
+            },
+            "player": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "1768.8000000000002",
+                "hex": "0x1.ba33333333334p+10"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "enemy": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "2286.0",
+                "hex": "0x1.1dc0000000000p+11"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "cards": [
+              {
+                "instanceId": "tutorial-card-1",
+                "cardId": "410101"
+              },
+              {
+                "instanceId": "tutorial-card-2",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-3",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-4",
+                "cardId": "110009"
+              },
+              {
+                "instanceId": "tutorial-card-5",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-6",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-7",
+                "cardId": "410102"
+              },
+              {
+                "instanceId": "ultimate:1",
+                "cardId": "410104"
+              }
+            ],
+            "piles": {
+              "hand": [
+                "tutorial-card-5",
+                "tutorial-card-6"
+              ],
+              "draw": [
+                "tutorial-card-7"
+              ],
+              "discard": [
+                "tutorial-card-1",
+                "tutorial-card-2",
+                "tutorial-card-3",
+                "tutorial-card-4"
+              ],
+              "exhausted": [],
+              "powerUsed": [],
+              "removed": [
+                "ultimate:1"
+              ]
+            },
+            "rng": {
+              "algorithm": "mulberry32-v1",
+              "state": 0
+            }
+          },
+          "createdAt": 100,
+          "updatedAt": 105
+        },
+        "events": [
+          {
+            "type": "CardPlayed",
+            "instanceId": "ultimate:1",
+            "cardId": "410104",
+            "cost": 0
+          },
+          {
+            "type": "EnergyChanged",
+            "previousValue": 0,
+            "finalValue": 0
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 0,
+            "amount": "72",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "72"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "3729.0",
+              "hex": "0x1.d220000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "3657.0",
+              "hex": "0x1.c920000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 1,
+            "amount": "72",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "72"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "3657.0",
+              "hex": "0x1.c920000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "3585.0",
+              "hex": "0x1.c020000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 2,
+            "amount": "144",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "144"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "3585.0",
+              "hex": "0x1.c020000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "3441.0",
+              "hex": "0x1.ae20000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 3,
+            "amount": "144",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "144"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "3441.0",
+              "hex": "0x1.ae20000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "3297.0",
+              "hex": "0x1.9c20000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 4,
+            "amount": "144",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "144"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "3297.0",
+              "hex": "0x1.9c20000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "3153.0",
+              "hex": "0x1.8a20000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 5,
+            "amount": "289",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "289"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "3153.0",
+              "hex": "0x1.8a20000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "2864.0",
+              "hex": "0x1.6600000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 6,
+            "amount": "289",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "289"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "2864.0",
+              "hex": "0x1.6600000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "2575.0",
+              "hex": "0x1.41e0000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "DamageApplied",
+            "actor": "player",
+            "target": "enemy",
+            "effectIndex": 7,
+            "amount": "289",
+            "absorbed": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "hpLost": {
+              "numeric_type": "integer",
+              "decimal": "289"
+            },
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "2575.0",
+              "hex": "0x1.41e0000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "2286.0",
+              "hex": "0x1.1dc0000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "CardMoved",
+            "instanceId": "ultimate:1",
+            "from": "in-flight",
+            "to": "removed"
+          },
+          {
+            "type": "StateUpdated",
+            "state": {
+              "format": "hczs-battle-session-v3",
+              "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "round": 1,
+              "status": "player-turn",
+              "outcomeReason": null,
+              "energy": 0,
+              "actionIndex": 5,
+              "ultimate": {
+                "chainOwnerId": "1",
+                "points": 1,
+                "generatedThisRound": 1,
+                "generatedTotal": 1
+              },
+              "breakdown": {
+                "player": 0,
+                "enemy": 0
+              },
+              "player": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "enemy": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "2286.0",
+                  "hex": "0x1.1dc0000000000p+11"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "cards": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                },
+                {
+                  "instanceId": "ultimate:1",
+                  "cardId": "410104"
+                }
+              ],
+              "piles": {
+                "hand": [
+                  "tutorial-card-5",
+                  "tutorial-card-6"
+                ],
+                "draw": [
+                  "tutorial-card-7"
+                ],
+                "discard": [
+                  "tutorial-card-1",
+                  "tutorial-card-2",
+                  "tutorial-card-3",
+                  "tutorial-card-4"
+                ],
+                "exhausted": [],
+                "powerUsed": [],
+                "removed": [
+                  "ultimate:1"
+                ]
+              },
+              "rng": {
+                "algorithm": "mulberry32-v1",
+                "state": 0
+              }
+            }
+          }
+        ],
+        "replayed": false
+      }
+    },
+    {
+      "name": "next-round",
+      "command": {
+        "requestId": "next-round",
+        "expectedRevision": 6,
+        "type": "end-turn"
+      },
+      "receipt": {
+        "battle": {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "profileId": "11111111-1111-1111-1111-111111111111",
+          "revision": 7,
+          "scenario": {
+            "title": "城市试战 · 比克卢",
+            "notice": "本地40级重建试玩，非原服关卡数值。",
+            "encounterId": "city-preview-10405",
+            "definition": {
+              "player": {
+                "id": "1",
+                "name": "艾尔莎",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                }
+              },
+              "enemy": {
+                "id": "6605",
+                "name": "比克卢",
+                "maxHp": {
+                  "numeric_type": "binary64",
+                  "decimal": "6041.0",
+                  "hex": "0x1.7990000000000p+12"
+                }
+              },
+              "deck": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                }
+              ],
+              "cards": {
+                "110001": {
+                  "name": "斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "385"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "110009": {
+                  "name": "猛力斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "723"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "210003": {
+                  "name": "强力斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "482"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410101": {
+                  "name": "二连斩击",
+                  "cost": 1,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "361"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410102": {
+                  "name": "疾驰斩击",
+                  "cost": 2,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "1447"
+                    },
+                    {
+                      "type": "draw",
+                      "count": 0
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 0,
+                  "specialPoints": 1,
+                  "removeOnLeaveHand": false
+                },
+                "410104": {
+                  "name": "赤色地平线",
+                  "cost": 0,
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "72"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "144"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "289"
+                    }
+                  ],
+                  "ownerId": "1",
+                  "cardType": 7,
+                  "specialPoints": 0,
+                  "removeOnLeaveHand": true
+                }
+              },
+              "enemySkills": {
+                "66051": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    },
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "379"
+                    }
+                  ]
+                },
+                "66052": {
+                  "effects": [
+                    {
+                      "type": "damage",
+                      "target": "opponent",
+                      "amount": "253"
+                    }
+                  ]
+                },
+                "66053": {
+                  "effects": [
+                    {
+                      "type": "shield",
+                      "target": "self",
+                      "amount": "906"
+                    }
+                  ]
+                },
+                "66054": {
+                  "effects": [
+                    {
+                      "type": "breakdown",
+                      "target": "opponent",
+                      "stacks": 2
+                    }
+                  ]
+                }
+              },
+              "enemyIntents": [
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66053"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66052"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66054"
+                ],
+                [
+                  "66051"
+                ],
+                [
+                  "66052"
+                ]
+              ],
+              "enemyFallback": [
+                "66054"
+              ],
+              "initialDraw": 6,
+              "roundDraw": 6,
+              "energyPerRound": 5,
+              "handLimit": 10,
+              "maxRounds": 30,
+              "id": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "statusRules": {
+                "policy": "breakdown-reconstruction-v1",
+                "attack": {
+                  "player": {
+                    "numeric_type": "binary64",
+                    "decimal": "482.4",
+                    "hex": "0x1.e266666666666p+8"
+                  },
+                  "enemy": {
+                    "numeric_type": "binary64",
+                    "decimal": "422.0",
+                    "hex": "0x1.a600000000000p+8"
+                  }
+                }
+              },
+              "ultimateRules": {
+                "policy": "elsa-combo-reconstruction-v1",
+                "ownerId": "1",
+                "cardId": "410104",
+                "pointsRequired": 3,
+                "maxPerRound": 3
+              }
+            }
+          },
+          "state": {
+            "format": "hczs-battle-session-v3",
+            "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+            "round": 2,
+            "status": "player-turn",
+            "outcomeReason": null,
+            "energy": 5,
+            "actionIndex": 6,
+            "ultimate": {
+              "chainOwnerId": null,
+              "points": 0,
+              "generatedThisRound": 0,
+              "generatedTotal": 1
+            },
+            "breakdown": {
+              "player": 2,
+              "enemy": 0
+            },
+            "player": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "1768.8000000000002",
+                "hex": "0x1.ba33333333334p+10"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "enemy": {
+              "hp": {
+                "numeric_type": "binary64",
+                "decimal": "2286.0",
+                "hex": "0x1.1dc0000000000p+11"
+              },
+              "shield": {
+                "numeric_type": "integer",
+                "decimal": "0"
+              }
+            },
+            "cards": [
+              {
+                "instanceId": "tutorial-card-1",
+                "cardId": "410101"
+              },
+              {
+                "instanceId": "tutorial-card-2",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-3",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-4",
+                "cardId": "110009"
+              },
+              {
+                "instanceId": "tutorial-card-5",
+                "cardId": "210003"
+              },
+              {
+                "instanceId": "tutorial-card-6",
+                "cardId": "110001"
+              },
+              {
+                "instanceId": "tutorial-card-7",
+                "cardId": "410102"
+              },
+              {
+                "instanceId": "ultimate:1",
+                "cardId": "410104"
+              }
+            ],
+            "piles": {
+              "hand": [
+                "tutorial-card-7",
+                "tutorial-card-2",
+                "tutorial-card-5",
+                "tutorial-card-4",
+                "tutorial-card-1",
+                "tutorial-card-6"
+              ],
+              "draw": [
+                "tutorial-card-3"
+              ],
+              "discard": [],
+              "exhausted": [],
+              "powerUsed": [],
+              "removed": [
+                "ultimate:1"
+              ]
+            },
+            "rng": {
+              "algorithm": "mulberry32-v1",
+              "state": 567894473
+            }
+          },
+          "createdAt": 100,
+          "updatedAt": 106
+        },
+        "events": [
+          {
+            "type": "CardMoved",
+            "instanceId": "tutorial-card-5",
+            "from": "hand",
+            "to": "discard"
+          },
+          {
+            "type": "CardMoved",
+            "instanceId": "tutorial-card-6",
+            "from": "hand",
+            "to": "discard"
+          },
+          {
+            "type": "ShieldCleared",
+            "target": "enemy",
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "2286.0",
+              "hex": "0x1.1dc0000000000p+11"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "2286.0",
+              "hex": "0x1.1dc0000000000p+11"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "EnemySkillUsed",
+            "skillId": "66054",
+            "round": 1
+          },
+          {
+            "type": "BreakdownChanged",
+            "actor": "enemy",
+            "target": "player",
+            "previousStacks": 0,
+            "finalStacks": 2,
+            "reason": "applied"
+          },
+          {
+            "type": "ShieldCleared",
+            "target": "player",
+            "previousHp": {
+              "numeric_type": "binary64",
+              "decimal": "1768.8000000000002",
+              "hex": "0x1.ba33333333334p+10"
+            },
+            "finalHp": {
+              "numeric_type": "binary64",
+              "decimal": "1768.8000000000002",
+              "hex": "0x1.ba33333333334p+10"
+            },
+            "previousShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            },
+            "finalShield": {
+              "numeric_type": "integer",
+              "decimal": "0"
+            }
+          },
+          {
+            "type": "EnergyChanged",
+            "previousValue": 0,
+            "finalValue": 5
+          },
+          {
+            "type": "TurnStarted",
+            "round": 2
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "tutorial-card-7"
+          },
+          {
+            "type": "DiscardRecycled",
+            "order": [
+              "tutorial-card-2",
+              "tutorial-card-5",
+              "tutorial-card-4",
+              "tutorial-card-1",
+              "tutorial-card-6",
+              "tutorial-card-3"
+            ],
+            "rngBefore": 0,
+            "rngAfter": 567894473
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "tutorial-card-2"
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "tutorial-card-5"
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "tutorial-card-4"
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "tutorial-card-1"
+          },
+          {
+            "type": "CardDrawn",
+            "instanceId": "tutorial-card-6"
+          },
+          {
+            "type": "StateUpdated",
+            "state": {
+              "format": "hczs-battle-session-v3",
+              "definitionId": "city-preview-10405-75f55f32a58ee1cec0c7251f5187f3e10e804c27003fdfe5ad6a5031c038ec6e",
+              "round": 2,
+              "status": "player-turn",
+              "outcomeReason": null,
+              "energy": 5,
+              "actionIndex": 6,
+              "ultimate": {
+                "chainOwnerId": null,
+                "points": 0,
+                "generatedThisRound": 0,
+                "generatedTotal": 1
+              },
+              "breakdown": {
+                "player": 2,
+                "enemy": 0
+              },
+              "player": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "1768.8000000000002",
+                  "hex": "0x1.ba33333333334p+10"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "enemy": {
+                "hp": {
+                  "numeric_type": "binary64",
+                  "decimal": "2286.0",
+                  "hex": "0x1.1dc0000000000p+11"
+                },
+                "shield": {
+                  "numeric_type": "integer",
+                  "decimal": "0"
+                }
+              },
+              "cards": [
+                {
+                  "instanceId": "tutorial-card-1",
+                  "cardId": "410101"
+                },
+                {
+                  "instanceId": "tutorial-card-2",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-3",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-4",
+                  "cardId": "110009"
+                },
+                {
+                  "instanceId": "tutorial-card-5",
+                  "cardId": "210003"
+                },
+                {
+                  "instanceId": "tutorial-card-6",
+                  "cardId": "110001"
+                },
+                {
+                  "instanceId": "tutorial-card-7",
+                  "cardId": "410102"
+                },
+                {
+                  "instanceId": "ultimate:1",
+                  "cardId": "410104"
+                }
+              ],
+              "piles": {
+                "hand": [
+                  "tutorial-card-7",
+                  "tutorial-card-2",
+                  "tutorial-card-5",
+                  "tutorial-card-4",
+                  "tutorial-card-1",
+                  "tutorial-card-6"
+                ],
+                "draw": [
+                  "tutorial-card-3"
+                ],
+                "discard": [],
+                "exhausted": [],
+                "powerUsed": [],
+                "removed": [
+                  "ultimate:1"
+                ]
+              },
+              "rng": {
+                "algorithm": "mulberry32-v1",
+                "state": 567894473
+              }
+            }
+          }
+        ],
+        "replayed": false
+      }
+    }
+  ]
+}

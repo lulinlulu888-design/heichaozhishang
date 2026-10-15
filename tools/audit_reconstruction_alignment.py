@@ -39,9 +39,9 @@ def main():
     if not records:
         raise ValueError('No matching retained REA Evidence')
     pairs = [
-        ('tools/templates/cocos-city-scene-view.ts', 'clients/cocos-poc/assets/CitySceneView.ts'),
-        ('tools/templates/cocos-toolchain-proof.ts', 'clients/cocos-poc/assets/ToolchainProof.ts'),
-        ('tools/templates/cocos-recovered-character-view.ts', 'clients/cocos-poc/assets/RecoveredCharacterView.ts'),
+        ('tools/templates/cocos-city-scene-view.ts', 'legacy/cocos-poc/assets/CitySceneView.ts'),
+        ('tools/templates/cocos-toolchain-proof.ts', 'legacy/cocos-poc/assets/ToolchainProof.ts'),
+        ('tools/templates/cocos-recovered-character-view.ts', 'legacy/cocos-poc/assets/RecoveredCharacterView.ts'),
     ]
     templates = [{'template': a, 'client': b, 'identical':
                   (ROOT / a).read_bytes() == (ROOT / b).read_bytes()} for a, b in pairs]

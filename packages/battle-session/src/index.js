@@ -3,6 +3,7 @@
 import { int, fromTagged, toTagged, compare, add, subtract, multiply, rpgPropertyPercent } from '../../battle-core/src/index.js';
 export const FORMAT = 'hczs-battle-session-v1';
 export const STATUS_FORMAT = 'hczs-battle-session-v2';
+export const ULTIMATE_FORMAT = 'hczs-battle-session-v3';
 export const LIMITS = Object.freeze({ cards: 64, cardDefinitions: 256, enemySkills: 128,
   effects: 32, skillsPerTurn: 16, rounds: 1000, energy: 1000000, actions: 1000000,
   amountDigits: 64, healthDigits: 128 });
@@ -99,8 +100,15 @@ function effects(input, enemy, statusRules) {
 function definitionCopy(input) {
   record(input, null, 'definition');
   const usesStatuses = Object.prototype.hasOwnProperty.call(input, 'statusRules');
-  record(input, usesStatuses ? [...DEF_KEYS, 'statusRules'] : DEF_KEYS, 'definition');
+  const usesUltimates = Object.prototype.hasOwnProperty.call(input, 'ultimateRules');
+  record(input, [...DEF_KEYS, ...(usesStatuses ? ['statusRules'] : []), ...(usesUltimates ? ['ultimateRules'] : [])], 'definition');
   const result = { id: id(input.id, 'definition.id') };
+  if (usesUltimates) {
+    const rules = record(input.ultimateRules, ['policy', 'ownerId', 'cardId', 'pointsRequired', 'maxPerRound'], 'ultimateRules');
+    if (rules.policy !== 'elsa-combo-reconstruction-v1' || rules.ownerId !== '1' || rules.cardId !== '410104' ||
+        rules.pointsRequired !== 3 || rules.maxPerRound !== 3) error('unsupported ultimate policy');
+    result.ultimateRules = { ...rules };
+  }
   if (usesStatuses) {
     record(input.statusRules, ['policy', 'attack'], 'statusRules');
     if (input.statusRules.policy !== 'breakdown-reconstruction-v1') error('unknown status policy');
@@ -122,18 +130,30 @@ function definitionCopy(input) {
     for (const key of keys) {
       id(key, field);
       const entry = map[key], enemy = field === 'enemySkills';
-      record(entry, enemy ? ['effects'] : ['name', 'cost', 'effects'], `${field}.${key}`);
+      record(entry, enemy ? ['effects'] : ['name', 'cost', 'effects',
+        ...(usesUltimates ? ['ownerId', 'cardType', 'specialPoints', 'removeOnLeaveHand'] : [])], `${field}.${key}`);
       out[key] = enemy ? { effects: effects(entry.effects, true, usesStatuses) } : {
         name: name(entry.name), cost: integer(entry.cost, LIMITS.energy, 'card cost'), effects: effects(entry.effects, false, usesStatuses),
       };
+      if (!enemy && usesUltimates) {
+        const ultimate = key === result.ultimateRules.cardId;
+        if (entry.ownerId !== result.ultimateRules.ownerId ||
+            ![0, 1, 2, 3, 6, 7].includes(entry.cardType) || (entry.cardType === 7) !== ultimate ||
+            entry.specialPoints !== (ultimate ? 0 : 1) || entry.removeOnLeaveHand !== ultimate ||
+            (ultimate && entry.cost !== 0)) error('unsupported ultimate card metadata');
+        Object.assign(out[key], { ownerId: entry.ownerId, cardType: entry.cardType,
+          specialPoints: entry.specialPoints, removeOnLeaveHand: entry.removeOnLeaveHand });
+      }
     }
     result[field] = out;
   }
+  if (usesUltimates && !Object.hasOwn(result.cards, result.ultimateRules.cardId)) error('missing ultimate card definition');
   const instances = new Set();
   result.deck = list(input.deck, LIMITS.cards, 'deck').map(card => {
     record(card, ['instanceId', 'cardId'], 'deck card');
     id(card.instanceId, 'instanceId'); id(card.cardId, 'cardId');
     if (instances.has(card.instanceId) || !Object.prototype.hasOwnProperty.call(result.cards, card.cardId)) error('duplicate instance or unknown card ID');
+    if (usesUltimates && (card.instanceId.startsWith('ultimate:') || card.cardId === result.ultimateRules.cardId)) error('ultimate instances must be generated');
     instances.add(card.instanceId);
     return { instanceId: card.instanceId, cardId: card.cardId };
   });
@@ -154,14 +174,26 @@ function definitionCopy(input) {
 /** Validates and copies the public definition, without inferring any gameplay data. */
 export function validateDefinition(definition) { return freeze(definitionCopy(definition)); }
 function stateCopy(definition, input) {
-  const format = definition.statusRules ? STATUS_FORMAT : FORMAT;
-  record(input, definition.statusRules ? [...STATE_KEYS, 'breakdown'] : STATE_KEYS, 'state');
+  const format = definition.ultimateRules ? ULTIMATE_FORMAT : definition.statusRules ? STATUS_FORMAT : FORMAT;
+  record(input, [...STATE_KEYS, ...(definition.statusRules ? ['breakdown'] : []),
+    ...(definition.ultimateRules ? ['ultimate'] : [])], 'state');
   if (input.format !== format || input.definitionId !== definition.id) error('state format/definition mismatch');
   const out = { format, definitionId: definition.id,
     round: integer(input.round, definition.maxRounds, 'round', 1),
     status: input.status, outcomeReason: input.outcomeReason,
     energy: integer(input.energy, definition.energyPerRound, 'energy'),
     actionIndex: integer(input.actionIndex, LIMITS.actions, 'actionIndex') };
+  if (definition.ultimateRules) {
+    const rules = definition.ultimateRules;
+    record(input.ultimate, ['chainOwnerId', 'points', 'generatedThisRound', 'generatedTotal'], 'ultimate');
+    const points = integer(input.ultimate.points, rules.pointsRequired - 1, 'combo points');
+    if (input.ultimate.chainOwnerId !== (points ? rules.ownerId : null)) error('invalid combo owner');
+    const generatedThisRound = integer(input.ultimate.generatedThisRound, rules.maxPerRound, 'round ultimate count');
+    const generatedTotal = integer(input.ultimate.generatedTotal, out.round * rules.maxPerRound, 'total ultimate count');
+    if (generatedThisRound > generatedTotal || generatedTotal - generatedThisRound > (out.round - 1) * rules.maxPerRound ||
+        (generatedThisRound === rules.maxPerRound && points)) error('invalid ultimate counters');
+    out.ultimate = { chainOwnerId: input.ultimate.chainOwnerId, points, generatedThisRound, generatedTotal };
+  }
   if (definition.statusRules) {
     record(input.breakdown, ['player', 'enemy'], 'breakdown');
     out.breakdown = { player: integer(input.breakdown.player, 999, 'player stacks'),
@@ -180,11 +212,13 @@ function stateCopy(definition, input) {
     if (zero(out.enemy.hp) || !((out.outcomeReason === 'player-defeated' && zero(out.player.hp)) ||
         (out.outcomeReason === 'round-limit' && !zero(out.player.hp) && out.round === definition.maxRounds))) error('invalid lost state');
   } else error('unknown battle status');
-  const registry = list(input.cards, LIMITS.cards, 'state.cards');
-  if (registry.length !== definition.deck.length) error('card registry does not match definition');
+  const generated = out.ultimate?.generatedTotal ?? 0;
+  const registryLimit = definition.deck.length + (definition.ultimateRules ? definition.maxRounds * definition.ultimateRules.maxPerRound : 0);
+  const registry = list(input.cards, registryLimit, 'state.cards');
+  if (registry.length !== definition.deck.length + generated) error('card registry does not match definition');
   out.cards = registry.map((card, index) => {
     record(card, ['instanceId', 'cardId'], 'registry card');
-    const expected = definition.deck[index];
+    const expected = definition.deck[index] ?? { instanceId: `ultimate:${index - definition.deck.length + 1}`, cardId: definition.ultimateRules.cardId };
     if (card.instanceId !== expected.instanceId || card.cardId !== expected.cardId) error('card registry does not match definition');
     return { instanceId: card.instanceId, cardId: card.cardId };
   });
@@ -192,10 +226,11 @@ function stateCopy(definition, input) {
   const ids = new Set(out.cards.map(card => card.instanceId)), seen = new Set();
   out.piles = {};
   for (const zone of ZONES) {
-    const members = list(input.piles[zone], LIMITS.cards, zone);
-    if (['exhausted', 'powerUsed', 'removed'].includes(zone) && members.length) error('terminal pile zones are unsupported in this rules version');
+    const members = list(input.piles[zone], zone === 'removed' ? registryLimit : LIMITS.cards, zone);
+    if (['exhausted', 'powerUsed'].includes(zone) && members.length || (!definition.ultimateRules && zone === 'removed' && members.length)) error('terminal pile zones are unsupported in this rules version');
     for (const value of members) {
       if (!ids.has(value) || seen.has(value)) error('unknown or duplicate pile instance');
+      if (definition.ultimateRules && (value.startsWith('ultimate:') ? !['hand', 'removed'].includes(zone) : zone === 'removed')) error('invalid ultimate pile');
       seen.add(value);
     }
     out.piles[zone] = members;
@@ -311,15 +346,39 @@ function active(definition, input) {
   state.actionIndex = integer(state.actionIndex + 1, LIMITS.actions, 'actionIndex');
   return state;
 }
+// Source establishes three consecutive same-owner points and three creations per round.
+// Local edge policies: settle effects first; no creation after lethal; consume a full-hand
+// trigger without queuing it; zero-point ultimate cards leave an existing chain unchanged.
+function gainUltimate(definition, state, card, events) {
+  const rules = definition.ultimateRules, combo = state.ultimate;
+  if (!rules || !card.specialPoints || state.status !== 'player-turn' || combo.generatedThisRound >= rules.maxPerRound) return;
+  combo.points = (combo.chainOwnerId === card.ownerId ? combo.points : 0) + card.specialPoints;
+  combo.chainOwnerId = card.ownerId;
+  if (combo.points < rules.pointsRequired) return;
+  combo.points = 0; combo.chainOwnerId = null;
+  if (state.piles.hand.length >= definition.handLimit) return;
+  combo.generatedThisRound += 1; combo.generatedTotal += 1;
+  const instanceId = `ultimate:${combo.generatedTotal}`;
+  state.cards.push({ instanceId, cardId: rules.cardId });
+  state.piles.hand.push(instanceId);
+  events.push({ type: 'CardDrawn', instanceId, generated: true });
+}
+function leaveHand(definition, state, instanceId, from, events) {
+  const cardId = state.cards.find(card => card.instanceId === instanceId).cardId;
+  const to = definition.ultimateRules && definition.cards[cardId].removeOnLeaveHand ? 'removed' : 'discard';
+  state.piles[to].push(instanceId);
+  events.push({ type: 'CardMoved', instanceId, from, to });
+}
 export function createBattle(input, seed) {
   const definition = definitionCopy(input);
   seed = integer(seed, 0xffffffff, 'seed');
-  const state = { format: definition.statusRules ? STATUS_FORMAT : FORMAT, definitionId: definition.id, round: 1, status: 'player-turn', outcomeReason: null,
+  const state = { format: definition.ultimateRules ? ULTIMATE_FORMAT : definition.statusRules ? STATUS_FORMAT : FORMAT, definitionId: definition.id, round: 1, status: 'player-turn', outcomeReason: null,
     energy: definition.energyPerRound, player: { hp: definition.player.maxHp, shield: toTagged(ZERO) },
     enemy: { hp: definition.enemy.maxHp, shield: toTagged(ZERO) }, cards: definition.deck.map(card => ({ ...card })),
     piles: { hand: [], draw: definition.deck.map(card => card.instanceId), discard: [], exhausted: [], powerUsed: [], removed: [] },
     rng: { algorithm: 'mulberry32-v1', state: seed }, actionIndex: 0 };
   if (definition.statusRules) state.breakdown = { player: 0, enemy: 0 };
+  if (definition.ultimateRules) state.ultimate = { chainOwnerId: null, points: 0, generatedThisRound: 0, generatedTotal: 0 };
   const events = [{ type: 'BattleStarted', definitionId: definition.id, seed }, { type: 'TurnStarted', round: 1 }];
   draw(definition, state, definition.initialDraw, events);
   return finish(definition, state, events);
@@ -335,8 +394,8 @@ export function playCard(input, original, instanceId) {
   energy(state, state.energy - card.cost, events);
   state.piles.hand.splice(position, 1); // In flight: never included in same-card draw effects.
   applyEffects(state, 'player', card.effects, definition, events);
-  state.piles.discard.push(instanceId);
-  events.push({ type: 'CardMoved', instanceId, from: 'in-flight', to: 'discard' });
+  leaveHand(definition, state, instanceId, 'in-flight', events);
+  gainUltimate(definition, state, card, events);
   return finish(definition, state, events);
 }
 export function endTurn(input, original) {
@@ -344,10 +403,10 @@ export function endTurn(input, original) {
   tickBreakdown(definition, state, 'player', events);
   if (state.status !== 'player-turn') return finish(definition, state, events);
   for (const instanceId of state.piles.hand) {
-    state.piles.discard.push(instanceId);
-    events.push({ type: 'CardMoved', instanceId, from: 'hand', to: 'discard' });
+    leaveHand(definition, state, instanceId, 'hand', events);
   }
   state.piles.hand = [];
+  if (state.ultimate) { state.ultimate.points = 0; state.ultimate.chainOwnerId = null; }
   clearShield(state, 'enemy', events);
   const intent = definition.enemyIntents[state.round - 1] || definition.enemyFallback;
   for (const skillId of intent) {
@@ -360,6 +419,7 @@ export function endTurn(input, original) {
     if (state.round === definition.maxRounds) outcome(state, 'lost', 'round-limit', events);
     else {
       state.round += 1;
+      if (state.ultimate) state.ultimate.generatedThisRound = 0;
       clearShield(state, 'player', events);
       energy(state, definition.energyPerRound, events);
       events.push({ type: 'TurnStarted', round: state.round });

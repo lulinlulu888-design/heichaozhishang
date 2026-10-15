@@ -5,7 +5,7 @@ from pathlib import Path
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT / "clients/cocos-poc"
+PROJECT = ROOT / "legacy/cocos-poc"
 OUTPUT = ROOT / "analysis/tutorial-client/build-verification.json"
 
 

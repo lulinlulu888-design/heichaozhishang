@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'analysis/battle-visual/elsa-audio'
-OUT=ROOT/'clients/cocos-poc/assets/resources/recovered/result-audio'
+OUT=ROOT/'legacy/cocos-poc/assets/resources/recovered/result-audio'
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def main():
     links=json.loads((ROOT/'analysis/battle-ui/result/audio-links.json').read_text('utf8'))

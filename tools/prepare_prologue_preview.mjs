@@ -2,7 +2,7 @@ import { mkdir, copyFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const dest=path.join(root,'clients/cocos-poc/build/web-desktop/prologue');
+const dest=path.join(root,'legacy/cocos-poc/build/web-desktop/prologue');
 const vendor=path.join(root,'tools/runtime/scene-preview/node_modules/three');
 const pkg=JSON.parse(await readFile(path.join(vendor,'package.json'),'utf8'));
 if(pkg.version!=='0.180.0')throw new Error('Expected pinned three 0.180.0');

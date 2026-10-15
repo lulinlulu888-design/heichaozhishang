@@ -7,7 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const PROJECT = join(ROOT, 'clients/cocos-poc');
+const PROJECT = join(ROOT, 'legacy/cocos-poc');
 const SCENE = '1cce6d16-610f-45bd-8b9f-63628732ec0f';
 const ensure = (value, message) => { if (!value) throw new Error(message); };
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');

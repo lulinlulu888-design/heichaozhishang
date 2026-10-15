@@ -76,7 +76,7 @@ const restored = fromTagged(wireValue);
 
 本机实际核查：
 
-- `clients/cocos-poc/temp/tsconfig.cocos.json` 当前 target/module 均为 ES2015，isolatedModules=true。本包提供已写好的 JS + d.ts，避免 TypeScript 对低 target 下 BigInt 字面量的限制；消费端只用 `int('...')`，不需要写字面量。
+- `legacy/cocos-poc/temp/tsconfig.cocos.json` 当前 target/module 均为 ES2015，isolatedModules=true。本包提供已写好的 JS + d.ts，避免 TypeScript 对低 target 下 BigInt 字面量的限制；消费端只用 `int('...')`，不需要写字面量。
 - `.tools/cocos/3.8.8/resources/resources/3d/engine/native/external/win64/include/v8/v8-version.h` 为 V8 11.6.189.22；同目录 `v8-primitive.h` 含 `v8::BigInt`。已有 Windows 原生日志 `analysis/cocos-native/run-windows-proof.stdout.log` 同样记录 V8 11.6.189.22。
 - Android arm64 本机 V8 头文件版本也为 11.6.189.22。头文件与已有窗口运行日志不是本包的原生数值测试。
 

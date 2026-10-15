@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const dest=path.join(root,'clients/cocos-poc/build/web-desktop/city');
+const dest=path.join(root,'legacy/cocos-poc/build/web-desktop/city');
 const vendor='tools/runtime/scene-preview/node_modules/three';
 if(JSON.parse(await readFile(path.join(root,vendor,'package.json'),'utf8')).version!=='0.180.0')throw Error('Three version mismatch');
 const files=[['tools/templates/city-preview.html','index.html'],['tools/templates/city-materials.js','city-materials.js']];

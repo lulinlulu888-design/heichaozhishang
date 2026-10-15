@@ -5,7 +5,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 EDITOR = ROOT / ".tools/cocos/3.8.8"
-PROJECT = ROOT / "clients/cocos-poc"
+PROJECT = ROOT / "legacy/cocos-poc"
 SCENE_UUID = "1cce6d16-610f-45bd-8b9f-63628732ec0f"
 SCRIPT_UUID = "98d6ba2e-cfc1-44e9-8f01-3237a0dfc5ba"
 
@@ -60,6 +60,10 @@ def main():
     shutil.copyfile(ROOT / "tools/templates/cocos-victory-title-view.ts", assets / "VictoryTitleView.ts")
     shutil.copyfile(ROOT / "tools/templates/cocos-prologue-scene-view.ts", assets / "PrologueSceneView.ts")
     shutil.copyfile(ROOT / "tools/templates/cocos-city-scene-view.ts", assets / "CitySceneView.ts")
+    for source, target in [('cocos-hall-scene-view.ts','HallSceneView.ts'),
+                           ('cocos-hall-lighting.ts','HallLighting.ts'),
+                           ('cocos-shiranui-flames.ts','ShiranuiFlames.ts')]:
+        shutil.copyfile(ROOT/'tools/templates'/source, assets/target)
     shutil.copyfile(ROOT / "tools/templates/cocos-battle-audio.ts", assets / "BattleAudio.ts")
     shutil.copyfile(ROOT / "tools/templates/cocos-prologue-lighting.ts", assets / "PrologueLighting.ts")
     engine_path = PROJECT / "settings/v2/packages/engine.json"

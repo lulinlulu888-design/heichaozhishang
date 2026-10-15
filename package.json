@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.17.0",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "test": "pnpm -r test",
     "test:protocol": "pnpm --filter @hczs/game-protocol test",
@@ -12,8 +14,12 @@
     "test:presentation": "pnpm --filter @hczs/battle-presentation test",
     "test:session": "pnpm --filter @hczs/battle-session test",
     "test:server": "pnpm --filter @hczs/server test",
-    "test:client": "node tools/test_tutorial_client.mjs",
-    "test:creator": "node tools/test_battle_audio.mjs --compiled && node tools/test_tutorial_client.mjs --compiled",
+    "test:legacy-client": "node tools/test_tutorial_client.mjs",
+    "test:legacy-creator": "node tools/test_battle_audio.mjs --compiled && node tools/test_tutorial_client.mjs --compiled",
+    "test:admin": "node --test admin/test/*.test.mjs",
+    "admin:dev": "pnpm --filter @hczs/admin dev",
+    "admin:build": "pnpm --filter @hczs/admin build",
+    "admin": "node admin/serve.mjs",
     "server": "node server/src/index.js",
     "tutorial": "node tools/play_tutorial_cli.mjs"
   }

@@ -13,12 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / 'analysis/battle-visual/city-scenes'
 
 
-def run(name, base=None):
+def run(name, base=None, surface_materials=False):
     global BASE
     if base is not None:
         BASE = Path(base)
     records = {r['path']:r for r in json.loads((BASE/'dependencies.json').read_text('utf8'))['records']}
-    out = BASE / name
+    out = BASE / (name + ('_surface' if surface_materials else ''))
     out.mkdir(parents=True, exist_ok=True)
     sources, skipped = set(), []
     def read(path):
@@ -88,6 +88,28 @@ def run(name, base=None):
                     sourceTechnique=technique, sourceParams=params, extraTextures=extra_textures,
                     sourceModel=path,
                     limitation='Tex0 colour reference; mode 2 conventional alpha blending, native blending/shader not reproduced')))
+            technique_attributes = material.find('Technique').attrib
+            if surface_materials and technique_attributes.get('Type') == 'Surface':
+                target = doc['materials'][-1]
+                target['extensions'].pop('KHR_materials_unlit')
+                intensity = [float(v) for v in params.get('Intensity', '1,1,1,0').split(',')]
+                if len(intensity) != 4 or not all(math.isfinite(v) for v in intensity):
+                    raise ValueError('Unsupported source surface intensity')
+                pbr = target['pbrMetallicRoughness']
+                pbr.update(roughnessFactor=intensity[1], metallicFactor=intensity[2])
+                if 'Tex1' in params:
+                    target['normalTexture'] = dict(index=texture(params['Tex1']), scale=intensity[0])
+                if 'Tex2' in params:
+                    mix = texture(params['Tex2'])
+                    pbr['metallicRoughnessTexture'] = dict(index=mix)
+                    target['occlusionTexture'] = dict(index=mix, strength=1)
+                target['extras'].update(sourceTechniqueAttributes=technique_attributes,
+                    limitation='Source basic.surf R=AO/G=roughness/B=metalness into glTF PBR; NeoX BRDF, probes and runtime SIMPLE_SHADING branch not reproduced')
+        if surface_materials:
+            # glTF normals are unit directions. Preserve raw NeoX lengths in
+            # the source parser/report, normalize only this derived PBR mesh.
+            model['normals'] = [tuple(v / math.sqrt(sum(c*c for c in normal)) for v in normal)
+                                for normal in model['normals']]
         local, payload = split_glb(encode_glb(model, path)[0])
         offset, view_base, accessor_base = append(payload), len(doc['bufferViews']), len(doc['accessors'])
         for view in local['bufferViews']:
@@ -102,7 +124,8 @@ def run(name, base=None):
         for primitive, sub in zip(primitives,subs):
             primitive['indices'] += accessor_base
             # Unlit export uses no normals; retain original non-unit vectors in source audit.
-            primitive['attributes'] = {k:v+accessor_base for k,v in primitive['attributes'].items() if k!='NORMAL'}
+            primitive['attributes'] = {k:v+accessor_base for k,v in primitive['attributes'].items()
+                                       if surface_materials or k!='NORMAL'}
             primitive['material'] = materials[int(sub.attrib['MtlIdx'])]
         meshes[entry.tag.removeprefix('File_')] = len(doc['meshes'])
         doc['meshes'].append(local['meshes'][0])

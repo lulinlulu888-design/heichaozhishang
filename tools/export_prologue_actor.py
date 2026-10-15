@@ -9,9 +9,7 @@ from inspect_neox_model import parse_model
 from extract_texture_samples import APK_SHA256
 
 
-def run(with_attacks=False, with_reactions=False, with_battle_idle=False):
-    with_reactions = with_reactions or with_battle_idle
-    with_attacks = with_attacks or with_reactions
+def build_source_base():
     source = ROOT/'analysis/battle-visual/scene-export/source'
     hashes = {
         'gim': 'cec24d79e67c9bc86993d0ab4115f484d6e222f0954252d02d8505899d0eccf7',
@@ -38,6 +36,14 @@ def run(with_attacks=False, with_reactions=False, with_battle_idle=False):
         if 'mesh' in n:
             n['name'] = 'PrologueElsa'
     base = pack_glb(doc, binary)
+    return base, hashes, bind
+
+
+def run(with_attacks=False, with_reactions=False, with_battle_idle=False):
+    with_reactions = with_reactions or with_battle_idle
+    with_attacks = with_attacks or with_reactions
+    base, hashes, bind = build_source_base()
+    doc, _ = split_glb(base)
     recovered = ROOT/'analysis/animation/recovered'
     library = parse_library((recovered/'ailisha.gisacl').read_bytes())
     if library['sha256'] != '2eda877730287d1c0843150eb4050d5b46ab8e910e7d9f3828609b61a98c5b41':

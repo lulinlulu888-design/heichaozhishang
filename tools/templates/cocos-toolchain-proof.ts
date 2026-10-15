@@ -5,6 +5,7 @@ import { BattleRequestError, TutorialBattleController } from './TutorialBattleCo
 import { TutorialBattleView } from './TutorialBattleView';
 import { PrologueSceneView } from './PrologueSceneView';
 import { CitySceneView } from './CitySceneView';
+import { HallSceneView } from './HallSceneView';
 
 const { ccclass } = _decorator;
 // Browser query selects the initial service. The menu also works in native builds.
@@ -57,6 +58,7 @@ export class ToolchainProof extends Component {
     private tutorialOpen = false;
     private prologueView!: PrologueSceneView;
     private cityViews: CitySceneView[] = [];
+    private hallView!: HallSceneView;
 
     start(): void {
         view.setDesignResolutionSize(1280, 720, ResolutionPolicy.SHOW_ALL);
@@ -177,6 +179,47 @@ export class ToolchainProof extends Component {
         this.button(this.node, '城市景观', -130, 264, 160, 36, () => {
             cityRoot.setSiblingIndex(this.node.children.length - 1); cityRoot.active = true; showCity(0);
         });
+        const hallRoot = this.createNode(this.node, 'HallOverlay', 0, 0, 1280, 720);
+        hallRoot.addComponent(BlockInputEvents);
+        this.panel(hallRoot, 0, 0, 1280, 720, C.background, C.background, 0);
+        const hallSurface = this.createNode(hallRoot, 'HallSurface', 0, 0, 1280, 720).addComponent(Sprite);
+        hallSurface.sizeMode = Sprite.SizeMode.CUSTOM;
+        this.hallView = new HallSceneView(this.node.scene, hallSurface);
+        const hallTitle = this.text(hallRoot, '主角家 · 不知火', -400, 320, 430, 36, 22, C.ink);
+        let hallRequest = 0, hallLighting = true, hallFlames = true;
+        this.button(hallRoot, '不知火', -520, -320, 130, 38, () => this.hallView.setView('close'));
+        this.button(hallRoot, '大厅视角', -375, -320, 130, 38, () => this.hallView.setView('camera_1'));
+        const lightButton = this.button(hallRoot, '场景光照：开', -185, -320, 180, 38, () => {
+            hallLighting = !hallLighting; this.hallView.setLighting(hallLighting);
+            lightButton.label.string = '场景光照：'+(hallLighting?'开':'关');
+        });
+        const flameButton = this.button(hallRoot, '扇子火焰：开', 15, -320, 180, 38, () => {
+            hallFlames = !hallFlames; this.hallView.setFlames(hallFlames);
+            flameButton.label.string = '扇子火焰：'+(hallFlames?'开':'关');
+        });
+        const pauseHall = this.button(hallRoot, '暂停动作', 200, -320, 150, 38, () => {
+            pauseHall.label.string = this.hallView.togglePause()?'继续动作':'暂停动作';
+        });
+        this.button(hallRoot, '返回', 540, 320, 120, 40, () => {
+            ++hallRequest; hallRoot.active = false; this.hallView.hide();
+        });
+        hallRoot.active = false;
+        const openHall = (): void => {
+            if (this.busy || this.tutorialOpen) return;
+            const token = ++hallRequest;
+            hallRoot.setSiblingIndex(this.node.children.length-1); hallRoot.active = true;
+            hallTitle.string = '正在进入主角家…';
+            void this.hallView.show().then(() => {
+                if (!this.isValid || token !== hallRequest) return;
+                this.hallView.setView('close'); hallTitle.string = '主角家 · 不知火';
+            }).catch(error => {
+                if (!this.isValid || token !== hallRequest) return;
+                hallTitle.string = '大厅载入失败，请返回重试';
+                console.error('[HCZS_HALL]', String(error));
+            });
+        };
+        this.button(this.node, '进入大厅', -310, 305, 160, 36, openHall);
+        if (typeof location !== 'undefined' && /(?:^\?|&)view=hall(?:&|$)/.test(location.search)) openHall();
         console.info('[HCZS_POC] scene-ready; Creator=3.8.8');
         void this.reload();
     }
@@ -347,6 +390,8 @@ export class ToolchainProof extends Component {
         }
     }
 
+    update(dt: number): void { this.hallView?.update(dt); }
+
     onDestroy(): void {
         this.appearanceRequest += 1;
         this.tutorialController?.dispose();
@@ -354,6 +399,7 @@ export class ToolchainProof extends Component {
         for (const model of this.modelViews.values()) model.destroy();
         this.prologueView?.destroy();
         this.cityViews.forEach(v => v.destroy());
+        this.hallView?.destroy();
     }
 
     private async openTutorial(): Promise<void> {

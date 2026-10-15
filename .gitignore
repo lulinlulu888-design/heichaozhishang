@@ -11,3 +11,10 @@ tools/runtime/
 .tools/
 runtime/
 *.log
+/admin/dist/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore

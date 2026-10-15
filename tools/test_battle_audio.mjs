@@ -10,7 +10,7 @@ const build = compiled ? await readCocosTestBuild() : null;
 const buildInputs = build?.buildInputs ?? [];
 
 const source = await readFile(new URL('./templates/cocos-battle-audio.ts',import.meta.url),'utf8');
-assert.equal(source,await readFile(new URL('../clients/cocos-poc/assets/BattleAudio.ts',import.meta.url),'utf8'));
+assert.equal(source,await readFile(new URL('../legacy/cocos-poc/assets/BattleAudio.ts',import.meta.url),'utf8'));
 const cue = {clip:'crit_1',ratio:.25,event:'original',resource:'audio/test',volume:.5};
 class Clip { refs=0; addRef(){this.refs++;} decRef(){this.refs--;} }
 class AudioSource {

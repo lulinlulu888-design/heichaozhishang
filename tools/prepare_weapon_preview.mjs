@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 // Uses the pinned vendor directory staged by prepare_prologue_preview.mjs.
-const dest=path.join(root,'clients/cocos-poc/build/web-desktop/prologue');
+const dest=path.join(root,'legacy/cocos-poc/build/web-desktop/prologue');
 await mkdir(dest,{recursive:true});
 for(const [folder,file,reportName,target] of [
  ['weapon','elsa-weapon-static.glb','static-export-report.json','elsa-weapon-static.glb'],

@@ -1,0 +1,21 @@
+name: hczs-local
+services:
+  mongo:
+    image: mongo:8.0.12
+    command: ["mongod", "--replSet", "hczs-local", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.5"]
+    ports:
+      - "127.0.0.1:27027:27017"
+    volumes:
+      - hczs-mongo-data:/data/db
+    networks: [hczs-database]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand({ping:1}).ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+networks:
+  hczs-database: {}
+volumes:
+  hczs-mongo-data:

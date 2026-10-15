@@ -15,11 +15,12 @@ CLASSES = {'Node', 'SingleNode', 'Button', 'Panel', 'Sprite', 'Particle', 'Image
 
 
 class Reader:
-    def __init__(self, data):
+    def __init__(self, data, *, preserve_unknown=False):
         if not 4 <= len(data) <= 16*1024*1024:
             raise ValueError('CSB size out of bounds')
         self.data = data
         self.seen = set()
+        self.preserve_unknown = preserve_unknown
 
     def unpack(self, fmt, offset):
         size = struct.calcsize('<'+fmt)
@@ -81,7 +82,16 @@ class Reader:
         self.seen.add(table)
         classname = self.string(self.field(table, 0))
         if classname not in CLASSES:
-            raise ValueError(f'Unimplemented class {classname}')
+            if not self.preserve_unknown:
+                raise ValueError(f'Unimplemented class {classname}')
+            # NodeTree's child vector is common; unknown Options must stay opaque.
+            children = self.pointer(self.field(table, 1))
+            count = self.scalar('I', children) if children else 0
+            if count > 10000:
+                raise ValueError('Too many children')
+            return dict(offset=table, classname=classname, name=None,
+                options_status='opaque-unimplemented',
+                children=[self.node(self.pointer(children+4+i*4), depth+1) for i in range(count)])
         options = self.pointer(self.field(table, 2))
         data = self.pointer(self.field(options, 0))
         widget = data if classname == 'Node' else self.pointer(self.field(data, 0))
@@ -145,10 +155,16 @@ class Reader:
                     raise ValueError('Nonfinite layout constraint')
                 result['layout'][name] = bool(v) if fmt == 'B' else v
         if classname == 'Text':
+            result['font_resource'] = self.resource(self.pointer(self.field(data, 1)))
             result['text'] = self.string(self.field(data, 4))
             result['font_name'] = self.string(self.field(data, 2))
             field = self.field(data, 3)
             result['font_size'] = self.scalar('i', field) if field else 0
+            for key, index in (('area_width',6), ('area_height',7), ('h_alignment',8), ('v_alignment',9)):
+                field = self.field(data, index)
+                result[key] = self.scalar('i', field) if field else 0
+            if result['h_alignment'] not in (0,1,2) or result['v_alignment'] not in (0,1,2):
+                raise ValueError('Unsupported text alignment')
         if classname == 'TextBMFont':
             result['font_resource'] = self.resource(self.pointer(self.field(data, 1)))
             result['text'] = self.string(self.field(data, 2))

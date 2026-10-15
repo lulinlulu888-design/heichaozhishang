@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def verify_end_turn(check,bundle,paths,png_hashes):
     source=ROOT/'analysis/battle-ui/end-turn'
-    staged=ROOT/'clients/cocos-poc/assets/resources/recovered/end-turn'
+    staged=ROOT/'legacy/cocos-poc/assets/resources/recovered/end-turn'
     report=json.loads((source/'provenance.json').read_text('utf8'))
     manifest=json.loads((staged/'end-turn.json').read_text('utf8'))
     sha=lambda b:hashlib.sha256(b).hexdigest()

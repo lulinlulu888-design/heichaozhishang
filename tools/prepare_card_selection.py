@@ -12,7 +12,7 @@ import inspect_battle_rules as static
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT/'analysis/battle-ui'
 SOURCE = OUT/'card-selection'
-DEST = ROOT/'clients/cocos-poc/assets/resources/recovered/card-selection'
+DEST = ROOT/'legacy/cocos-poc/assets/resources/recovered/card-selection'
 
 
 def digest(path):

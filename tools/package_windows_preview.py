@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     verify()
-    base=ROOT/'clients/cocos-poc/build/windows-model/proj/Debug'
+    base=ROOT/'legacy/cocos-poc/build/windows-model/proj/Debug'
     out=ROOT/'runtime/dist'
     out.mkdir(parents=True,exist_ok=True)
     audit=json.loads((ROOT/'analysis/cocos-native-model/content-verification.json').read_text('utf8'))

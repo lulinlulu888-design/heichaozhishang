@@ -18,7 +18,7 @@ const reportPath = resolve(root, values.report);
 const evidenceRoot = resolve(root, 'analysis/test');
 const reportRelative = relative(evidenceRoot, reportPath);
 assert.ok(reportRelative && !reportRelative.startsWith(`..${sep}`) && reportRelative !== '..' && !/^[A-Za-z]:/.test(reportRelative), 'report must stay inside analysis/test');
-const controllerPath = resolve(root, 'clients/cocos-poc/assets/TutorialBattleController.ts');
+const controllerPath = resolve(root, 'legacy/cocos-poc/assets/TutorialBattleController.ts');
 const compilerPath = resolve(root, '.tools/cocos/3.8.8/resources/app.asar.unpacked/node_modules/typescript/lib/typescript.js');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -96,7 +96,7 @@ async function withRig(operation) {
   const directory = await temporary('hczs-controller-test-');
   const controllers = [], calls = [], serviceErrors = [];
   const savePath = join(directory, 'profiles.sqlite'), battleSavePath = join(directory, 'battles.sqlite');
-  const options = { port: 0, savePath, battleSavePath, dataDirectory: resolve(root, 'analysis/game-data'),
+  const options = { storage: 'sqlite', port: 0, savePath, battleSavePath, dataDirectory: resolve(root, 'analysis/game-data'),
     tutorialDirectory: resolve(root, 'analysis/first-encounter'), log: event => serviceErrors.push(event) };
   let app;
   try {

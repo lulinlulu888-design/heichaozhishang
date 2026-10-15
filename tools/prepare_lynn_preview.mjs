@@ -1,6 +1,6 @@
 import {readFile,copyFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-const root=new URL('../',import.meta.url), dest=new URL('clients/cocos-poc/build/web-desktop/prologue/',root);
+const root=new URL('../',import.meta.url), dest=new URL('legacy/cocos-poc/build/web-desktop/prologue/',root);
 const source=new URL('analysis/characters/lynn/export/lynn-idle.colour-reference.glb',root);
 const report=JSON.parse(await readFile(new URL('analysis/characters/lynn/export/export-report.json',root),'utf8'));
 if(createHash('sha256').update(await readFile(source)).digest('hex')!==report.sha256)throw Error('Lynn export changed');

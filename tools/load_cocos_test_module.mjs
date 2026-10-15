@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 export async function readCocosTestBuild() {
     const registrations=new Map(),buildInputs=[];
     for(const name of ['src/chunks/bundle.js','assets/main/index.js']) {
-        const code=await readFile(new URL('../clients/cocos-poc/build/web-desktop/'+name,import.meta.url),'utf8');
+        const code=await readFile(new URL('../legacy/cocos-poc/build/web-desktop/'+name,import.meta.url),'utf8');
         buildInputs.push({name,sha256:createHash('sha256').update(code).digest('hex')});
         new Function('System',code)({register(id,deps,factory){
             if(Array.isArray(id)) {

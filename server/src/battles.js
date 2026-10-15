@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createBattle, playCard, endTurn, validateState } from '../../packages/battle-session/src/index.js';
 import { ServiceError, requireObject } from './errors.js';
 import { materializeEnemySelection } from './weighted-intents.js';
+import { creationRequest, requireSelectedScenario } from './battle-creation-request.js';
 
 const APPLICATION_ID = 0x48434254;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -72,15 +73,7 @@ export class BattleStore {
 
   create(profileId, scenario, input) {
     if (!UUID.test(profileId)) throw new ServiceError('INVALID_INPUT', 'A valid profile ID is required');
-    requireObject(input, ['requestId', 'seed'], ['requestId']);
-    if (typeof input.requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(input.requestId) ||
-        ('seed' in input && (!Number.isSafeInteger(input.seed) || input.seed < 0 || input.seed > 0xffffffff))) {
-      throw new ServiceError('INVALID_INPUT', 'A request ID and optional unsigned 32-bit seed are required');
-    }
-    const requestJson = JSON.stringify({ requestId: input.requestId, ...('seed' in input ? { seed: input.seed } : {}) });
-    let scenarioJson = JSON.stringify(scenario);
-    if (!scenarioJson || Buffer.byteLength(scenarioJson) > 4 * 1024 * 1024) throw new Error('Battle scenario exceeds size budget');
-    let ownedScenario = JSON.parse(scenarioJson);
+    const requestJson = creationRequest(input);
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const prior = this.db.prepare('SELECT request_json, result_json FROM battle_creations WHERE profile_id = ? AND request_id = ?')
@@ -91,8 +84,11 @@ export class BattleStore {
         this.db.exec('COMMIT');
         return { ...result, replayed: true };
       }
+      requireSelectedScenario(scenario, input);
+      let scenarioJson = JSON.stringify(scenario);
+      if (!scenarioJson || Buffer.byteLength(scenarioJson) > 4 * 1024 * 1024) throw new Error('Battle scenario exceeds size budget');
       const seed = input.seed ?? randomInt(0, 0x100000000);
-      ownedScenario = materializeEnemySelection(ownedScenario, seed);
+      const ownedScenario = materializeEnemySelection(JSON.parse(scenarioJson), seed);
       scenarioJson = JSON.stringify(ownedScenario);
       if (Buffer.byteLength(scenarioJson) > 4 * 1024 * 1024) throw new Error('Battle scenario exceeds size budget');
       const next = createBattle(ownedScenario.definition, seed);

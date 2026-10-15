@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const ts = require('../.tools/cocos/3.8.8/resources/app.asar.unpacked/node_modules/typescript/lib/typescript.js');
-const source = readFileSync(new URL('../clients/cocos-poc/assets/ToolchainProof.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../legacy/cocos-poc/assets/ToolchainProof.ts', import.meta.url), 'utf8');
 assert.equal(source, readFileSync(new URL('./templates/cocos-toolchain-proof.ts', import.meta.url), 'utf8'));
 class Controller {
     constructor(transport) { this.transport = transport; this.snapshot = { phase: 'idle', pending: false, canRetry: false }; }

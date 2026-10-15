@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def verify_audio(check, bundle, paths, packaged_hashes):
-    assets = ROOT/'clients/cocos-poc/assets'
+    assets = ROOT/'legacy/cocos-poc/assets'
     check('BattleAudio template matches client', (assets/'BattleAudio.ts').read_bytes()==
           (ROOT/'tools/templates/cocos-battle-audio.ts').read_bytes())
     check('Audio playback and cancellation compiled', all(s in bundle for s in

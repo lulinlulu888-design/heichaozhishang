@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def verify_result(check, bundle, paths, png_hashes, resource_root):
-    staged = ROOT/'clients/cocos-poc/assets/resources/recovered/result-ui'
+    staged = ROOT/'legacy/cocos-poc/assets/resources/recovered/result-ui'
     source = ROOT/'analysis/battle-ui/result'
     digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
     provenance = json.loads((staged/'provenance.json').read_text('utf8'))
@@ -51,7 +51,7 @@ def verify_result(check, bundle, paths, png_hashes, resource_root):
         'OriginalVictoryTitleTimeline', 'recovered/result-ui/', 'victoryTitle', 'victorySummary', 'HCZS_VICTORY')))
     check('Victory title template matches source',
           (ROOT/'tools/templates/cocos-victory-title-view.ts').read_bytes() ==
-          (ROOT/'clients/cocos-poc/assets/VictoryTitleView.ts').read_bytes())
+          (ROOT/'legacy/cocos-poc/assets/VictoryTitleView.ts').read_bytes())
     # Creator serializes JsonAsset inside an import-array envelope. Compare the actual
     # embedded object, not merely its resource path or its source-side hash.
     exported = []

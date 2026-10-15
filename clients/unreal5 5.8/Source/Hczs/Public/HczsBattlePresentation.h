@@ -1,0 +1,176 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DataAsset.h"
+#include "GameFramework/Actor.h"
+#include "HczsSessionTypes.h"
+#include "TimerManager.h"
+#include "HczsBattlePresentation.generated.h"
+
+class UAnimSequence;
+class USkeletalMesh;
+class USkeletalMeshComponent;
+class UHczsGameInstance;
+class UHczsUltimateSequence;
+struct FHczsCardIntentVisual;
+
+/** Original source clip names; actual imported UObject references live in the maps below. */
+USTRUCT(BlueprintType)
+struct HCZS_API FHczsBattleAnimationSequence
+{
+    GENERATED_BODY()
+    UPROPERTY(EditAnywhere, Category="Recovered") TArray<FString> Clips;
+};
+
+/** Authored .ags attack event for one exact original animation clip. */
+USTRUCT(BlueprintType)
+struct HCZS_API FHczsBattleSourceHit
+{
+    GENERATED_BODY()
+    UPROPERTY(EditAnywhere, Category="Recovered") float NormalizedProgress = 0.0f;
+    UPROPERTY(EditAnywhere, Category="Recovered") float SourceDurationSeconds = 0.0f;
+    UPROPERTY(EditAnywhere, Category="Recovered") FString EventName;
+    UPROPERTY(EditAnywhere, Category="Recovered") FString RatioLiteral;
+    bool HasReached(float ActualPositionSeconds, float ActualLengthSeconds) const;
+};
+
+/** Separate from the UI sprite DataAsset. Populated by verified full Editor import. */
+UCLASS()
+class HCZS_API UHczsBattleSceneAssets : public UDataAsset
+{
+    GENERATED_BODY()
+public:
+    UPROPERTY(EditAnywhere, Category="Recovered") FString SourceManifestSHA256;
+    UPROPERTY(EditAnywhere, Category="Recovered") FString SourceMappingSHA256;
+    UPROPERTY(EditAnywhere, Category="Recovered") FString SourceHitTimingSHA256;
+    UPROPERTY(EditAnywhere, Category="Recovered") FString SceneNotice;
+    UPROPERTY(EditAnywhere, Category="Recovered") FString SupportedEncounterId = TEXT("tutorial-5000");
+    UPROPERTY(EditAnywhere, Category="Recovered") FString PlayerId = TEXT("1");
+    UPROPERTY(EditAnywhere, Category="Recovered") FString EnemyId = TEXT("991");
+    UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<USkeletalMesh> PlayerMesh;
+    UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<USkeletalMesh> EnemyMesh;
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, TObjectPtr<UAnimSequence>> PlayerAnimations;
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, TObjectPtr<UAnimSequence>> EnemyAnimations;
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FHczsBattleAnimationSequence> CardAnimationQueues;
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FHczsBattleSourceHit> PlayerHitEvents;
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> EnemySkillClips;
+    UPROPERTY(EditAnywhere, Category="Recovered") bool bOriginalTutorialStageRecovered = false;
+};
+
+DECLARE_MULTICAST_DELEGATE(FOnHczsBattlePresentationChanged);
+
+enum class EHczsVisualSnapshotDecision : uint8 { Ignore, Baseline, PresentReceipt, SynchronizeOnly };
+
+/** Pure gate: retries, reads and continuation never replay a previously observed action. */
+struct HCZS_API FHczsBattlePresentationCursor
+{
+    FString BattleId;
+    FString DefinitionId;
+    int64 ActionIndex = -1;
+    int64 Revision = 0;
+    EHczsVisualSnapshotDecision Observe(const FHczsBattleView& View, const FHczsBattleVisualReceipt& Receipt);
+    void Reset();
+};
+
+struct FHczsBattleAnimationStep
+{
+    bool bEnemy = false;
+    bool bDeath = false;
+    FString Clip;
+};
+
+/** Pure intent identity gate. Confirmation authorizes reactions, never predictions. */
+struct HCZS_API FHczsCardVisualGate
+{
+    FString BattleId, RequestId, CardId;
+    int64 StartRevision = 0;
+    bool bConfirmed = false;
+    bool bReactionReleased = false;
+    int32 ExpectedReactionCount = 0;
+    int32 ReleasedReactionCount = 0;
+    bool Begin(const FHczsBattleView& View, const FHczsCardIntentVisual& Intent, int32 ReactionCount = 1);
+    bool Matches(const FHczsBattleView& View, const FHczsBattleVisualReceipt& Receipt) const;
+    bool ReleaseReaction(bool bImpactReached);
+    bool ReleaseReaction(int32 Ordinal, bool bImpactReached);
+    void Reset();
+};
+
+/** Visuals only. Never submits a command, changes HP, or advances a battle state. */
+UCLASS()
+class HCZS_API AHczsBattlePresentation : public AActor
+{
+    GENERATED_BODY()
+public:
+    AHczsBattlePresentation();
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void Tick(float DeltaSeconds) override;
+
+    /** Caller supplies a successfully parsed authoritative GET and its matching confirmed receipt. */
+    void ApplySnapshot(const FHczsBattleView& View, const FHczsBattleVisualReceipt& Receipt);
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsPresentationBusy() const { return bPresentationBusy; }
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsSceneReady() const { return bSceneReady; }
+    bool CanPresentBattle(const FHczsBattleView& View) const;
+    UHczsUltimateSequence* GetUltimateSequence() const { return UltimateSequence; }
+    FOnHczsBattlePresentationChanged OnPresentationChangedNative;
+
+    UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<UHczsBattleSceneAssets> SceneAssets;
+
+private:
+    UPROPERTY() TObjectPtr<UHczsUltimateSequence> UltimateSequence;
+    bool bUltimatePlaying = false;
+    FHczsCardVisualGate UltimateIntent;
+    bool bUltimateIntentAborted = false;
+    void UltimateFinished(const FString& Id, bool bSuccess, const FString& Error);
+    UPROPERTY() TObjectPtr<USkeletalMeshComponent> PlayerComponent;
+    UPROPERTY() TObjectPtr<USkeletalMeshComponent> EnemyComponent;
+    UPROPERTY() TObjectPtr<AActor> WeaponActor;
+    FHczsBattlePresentationCursor Cursor;
+    TArray<FHczsBattleAnimationStep> Queue;
+    FTimerHandle StepTimer;
+    FHczsBattleView DesiredSnapshot;
+    int32 QueueIndex = 0;
+    bool bSceneReady = false;
+    bool bPresentationBusy = false;
+    bool bRunningEnemy = false;
+    bool bRunningDeath = false;
+    bool bPlayerDeathPresented = false;
+    bool bEnemyDeathPresented = false;
+    bool bUnsupportedLogged = false;
+    UPROPERTY() TObjectPtr<UHczsGameInstance> Session;
+    FDelegateHandle IntentDispatchedHandle, IntentSettledHandle;
+    FHczsCardVisualGate LocalCard;
+    TArray<FString> LocalPlayerClips;
+    int32 LocalPlayerClipIndex = 0;
+    double LocalClipDeadline = 0.0;
+    FTimerHandle LocalPlayerTimer;
+    bool bLocalPlayerPlaying = false;
+    bool bWaitingForImpact = false;
+    bool bLocalVisualAborted = false;
+    bool bLocalClipHeldAtImpact = false;
+    bool bLocalEnemyReacting = false;
+    TArray<bool> LocalImpactsReached;
+    TArray<FHczsBattleVisualEvent> LocalDamageEvents;
+    FTimerHandle LocalEnemyTimer;
+    double LocalEnemyDeadline = 0.0;
+
+    bool EnsureSceneReady();
+    UAnimSequence* FindAnimation(bool bEnemy, const FString& Clip) const;
+    void BuildQueue(const FHczsBattleView& View, const TArray<FHczsBattleVisualEvent>& Events);
+    void QueueClip(bool bEnemy, const FString& Clip, bool bDeath = false);
+    void PlayNextStep();
+    void FinishStep();
+    void CancelPresentation(bool bKeepUnconfirmedIntent = false);
+    void ApplyStablePose(const FHczsBattleView& View);
+    void SetSideVisible(bool bEnemy, bool bVisible);
+    void SetBusy(bool bBusy);
+    void IntentDispatched(const FHczsCardIntentVisual& Intent);
+    void IntentSettled(const FString& RequestId, bool bConfirmed);
+    void PlayLocalPlayerClip();
+    void FinishLocalPlayerClip();
+    void FinishVisualsIfIdle();
+    void ObserveLocalImpact();
+    bool ReleaseLocalReaction();
+    bool PrepareLocalReactions(const TArray<FHczsBattleVisualEvent>& Events);
+    void FinishLocalEnemyReaction();
+};

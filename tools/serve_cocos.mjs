@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../clients/cocos-poc/build/web-desktop');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../legacy/cocos-poc/build/web-desktop');
 const port = Number(process.argv[2] ?? 7456);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',

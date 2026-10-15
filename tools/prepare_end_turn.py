@@ -3,7 +3,7 @@ import hashlib,json,shutil,plistlib,base64,zlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'analysis/battle-ui/end-turn'
-DEST=ROOT/'clients/cocos-poc/assets/resources/recovered/end-turn'
+DEST=ROOT/'legacy/cocos-poc/assets/resources/recovered/end-turn'
 def main():
     report=json.loads((SOURCE/'provenance.json').read_text('utf8'))
     digest=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()

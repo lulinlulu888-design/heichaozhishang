@@ -47,7 +47,7 @@ def main():
         raise ValueError('Unexpected atlas size')
     plist = plistlib.loads(plist_path.read_bytes())
     rows = []
-    dest = ROOT/'clients/cocos-poc/assets/resources/recovered/battle-ui'
+    dest = ROOT/'legacy/cocos-poc/assets/resources/recovered/battle-ui'
     dest.mkdir(parents=True, exist_ok=True)
     for name, suffix in FRAMES.items():
         key = 'FightPanel/FightNewPanel/res/'+suffix

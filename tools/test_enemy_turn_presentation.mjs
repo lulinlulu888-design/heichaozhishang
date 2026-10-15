@@ -4,7 +4,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { createBattle, endTurn, playCard } from '../packages/battle-session/src/index.js';
 
 const source = await readFile(new URL('./templates/cocos-enemy-turn-presentation.ts',import.meta.url),'utf8');
-assert.equal(source,await readFile(new URL('../clients/cocos-poc/assets/EnemyTurnPresentation.ts',import.meta.url),'utf8'));
+assert.equal(source,await readFile(new URL('../legacy/cocos-poc/assets/EnemyTurnPresentation.ts',import.meta.url),'utf8'));
 const { beforeEnemyAction, actionSegments } = await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source)).toString('base64'));
 const hp = decimal => ({numeric_type:'integer',decimal});
 // Synthetic fixture; exercise the actual session event producer, not a copied event list.

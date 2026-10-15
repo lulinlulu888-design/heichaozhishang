@@ -13,7 +13,7 @@ def main():
     expected = {110001, 110009, 210003, 410101, 410102}
     if {r['card_id'] for r in manifest['cards']} != expected or len(manifest['cards']) != 5:
         raise ValueError('Unexpected card art mapping')
-    destination = ROOT/'clients/cocos-poc/assets/resources/recovered/cards'
+    destination = ROOT/'legacy/cocos-poc/assets/resources/recovered/cards'
     destination.mkdir(parents=True, exist_ok=True)
     for row in manifest['cards']:
         image = ROOT/row['sprite']

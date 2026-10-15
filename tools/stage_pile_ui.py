@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 report_path = ROOT / 'analysis/battle-ui/piles/sprites/report.json'
 report = json.loads(report_path.read_text('utf8'))
-destination = ROOT / 'clients/cocos-poc/assets/resources/recovered/pile-ui'
+destination = ROOT / 'legacy/cocos-poc/assets/resources/recovered/pile-ui'
 destination.mkdir(parents=True, exist_ok=True)
 for frame in report['frames']:
     data = (ROOT / frame['png']).read_bytes()

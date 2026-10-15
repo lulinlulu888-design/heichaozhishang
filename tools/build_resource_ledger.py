@@ -15,6 +15,21 @@ def main():
         cdata=sum('\\cdata\\' in p for p in paths),
         storyline=sum('storyline' in p for p in paths),card_action_server=sum('card_action\\server' in p for p in paths))
     hall=read('analysis/hall/midgard_home_3d/export.json');deps=read('analysis/hall/dependencies.json')
+    ui=read('analysis/hall/ui-dependencies/report.json');sprites=read('analysis/hall/ui-sprites/report.json')
+    lighting=read('analysis/hall/lighting/lighting.json')
+    flames=read('analysis/characters/shiranui/effects/render-inputs/attachment.json')
+    if hashlib.sha256((ROOT/'analysis/hall/ui-dependencies/report.json').read_bytes()).hexdigest()!=sprites['dependency_report_sha256']:
+        raise ValueError('UI sprite report references a different layout audit')
+    def active_models(node):
+        if node.get('attributes',{}).get('FxIgnore','FALSE').upper()=='TRUE':return 0
+        return (node['tag']=='Model')+sum(active_models(c) for c in node.get('children',[]))
+    flame_instances=sum(active_models(flames['effects'][s['effect']]) for s in flames['sockets'])
+    progress=dict(ui=dict(layouts=ui['summary']['layouts'],parsed=ui['summary']['layout_status']['parsed'],
+        partial=ui['summary']['layout_status']['partial'],nodes=ui['summary']['nodes'],opaque_nodes=ui['summary']['opaque_nodes'],
+        sprites=len(sprites['frames']),fonts=len(sprites['fonts'])),
+        lighting=dict(textures=len(lighting['textures']),instances=len(lighting['bindings']),deferred=len(lighting['unresolved'])),
+        flames=dict(sockets=len(flames['sockets']),instances=flame_instances,unique_layers=flames['counts']['models'],
+            ignored_subtrees=flames['counts']['ignored_subtrees']))
     records={r['path']:r for r in deps['records']};sizes=collections.Counter()
     for source in hall['sources']:
         row=records[source['path']]
@@ -27,7 +42,8 @@ def main():
         npk_index_entries=sum(r['count'] for r in packs),npk_packs=[dict(member=r['member'],entries=r['count']) for r in packs],
         loose_extensions=inventory['extensions'],scripts=groups,
         hall=dict(meshes=hall['meshes'],instances=hall['instances'],textures=hall['textures'],
-            consumed_colour_texture_sizes=[dict(width=w,height=h,count=n) for (w,h),n in sorted(sizes.items())]),
+            consumed_colour_texture_sizes=[dict(width=w,height=h,count=n) for (w,h),n in sorted(sizes.items())],
+            recovery=progress),
         limits=['NPK category is archive purpose, not a format classification of every member.',
             'Script decode is not complete source decompilation or runtime execution.',
             'Converted and rendered counts below are scoped to named recovery outputs, not a global resource-completion percentage.'])
@@ -44,7 +60,7 @@ def main():
         f'| card_action/server | {groups["card_action_server"]:,}个模块 | 部分公式、卡牌状态/图已追踪 | 不等于原服务端全部恢复 |',
         '| 英雄 | 35个UseRole=1配置 | 35名单；艾尔莎、琳、不知火模型/颜色参考/待机已转换并显示 | 其余英雄逐角色核验；完整技能、大招、战斗队伍 |',
         '| 场景 | scene.npk中1,150项，识别99个XML场景；表内155条非空路径 | 原序章、城市一、城市二、大厅四份环境颜色参考导出 | 原材质/灯光/全部特效，剩余场景；教程city_battle_3精确路径未匹配 |',
-        '| UI与卡牌美术 | 见uires、packed_png归档；外层524张PNG含SDK/Android资源 | 三角色立绘与部分战斗UI/卡牌资源已显示 | 大厅原CSB布局、完整图集、全部交互 |',
+        '| UI与卡牌美术 | 见uires、packed_png归档；外层524张PNG含SDK/Android资源 | 三角色立绘、部分战斗UI/卡牌、大厅原CSB静态叠加已显示 | 完整图集、裁剪、时间线、原动态状态与交互 |',
         '| 音频 | 外层3,126个WEM、101个BNK；另有wwise.npk31项 | 部分结算音效链已恢复 | 全量事件映射与大厅/剧情/技能声音验收 |',
         '| 视频 | 外层48个MP4 | 已清点 | 播放链、剧情触发和字幕对应未完整验证 |',
         '| 原生代码/Android | 外层24个SO、3个DEX | ARM库身份、部分入口/协议/资源格式追踪 | 原APK执行对照、登录协议兼容与完整引擎渲染语义 |','',
@@ -78,10 +94,21 @@ def main():
         f'环境导出实际使用{hall["textures"]}张颜色纹理。以下只统计该导出消费的KTX，不混入全部法线/遮罩依赖：','',
         '| 源尺寸 | 数量 |','|---|---:|']
     for (w,h),n in sorted(sizes.items()):lines.append(f'| {w}×{h} | {n} |')
-    lines += ['', '当前大厅是Three.js独立预览，16:9画面、devicePixelRatio上限2、设备最高各向异性过滤。原颜色贴图尺寸没有主动缩小；未恢复完整原shader、法线、反射、光照和特效，画面清晰度和质感不能据此归因于Cocos性能。','',
+    p=progress
+    lines += ['', '当前大厅是Three.js独立预览，16:9画面、devicePixelRatio上限2、设备最高各向异性过滤。原颜色贴图尺寸没有主动缩小；已局部接入原烘焙光照和扇缘火焰，完整原shader、法线、反射、动态灯光、角色受光和特效仍未完成，画面清晰度和质感不能据此归因于Cocos性能。','',
+        '## 大厅局部恢复与实际显示','',
+        f'- 原UI：{p["ui"]["layouts"]}个布局，{p["ui"]["parsed"]}个完整解析、{p["ui"]["partial"]}个部分解析；{p["ui"]["nodes"]}节点，其中{p["ui"]["opaque_nodes"]}个未知裁剪节点。恢复{p["ui"]["sprites"]}张图片和{p["ui"]["fonts"]}种原字体，已静态叠加。',
+        f'- 原光照：{p["lighting"]["textures"]}张光照图、{p["lighting"]["instances"]}个单子网格实例实际接入；{p["lighting"]["deferred"]}个多子网格实例绑定延后。CPU检查与浏览器显示不等于完整原光照一致。',
+        f'- 不知火火焰：{p["flames"]["sockets"]}个原挂点、{p["flames"]["instances"]}个模型实例已在大厅显示；源两份SFX共有{p["flames"]["unique_layers"]}个独立活动层、{p["flames"]["ignored_subtrees"]}个忽略子树保持关闭。混合/生命周期等适配仍有待原运行时核对。',
+        '- 本地档案：明确选档后显示真实姓名，未知等级/经验/头像不填样稿值；商城活动隐藏为本地未恢复政策。原UI其他区域仍有NULL和占位，不能当作功能大厅。',
+        '- 三路集成已做浏览器加载、开关、暂停恢复及镜头切换检查，截图与范围见下方并行接入文档。共享Cocos集成及四平台重新打包/安装/游玩验收仍未完成，完整英雄恢复数保持0。','',
         '## 相关文档','',
         '- [35位英雄恢复进度与燃尽基线](recovery-progress.md)',
         '- [大厅与不知火恢复](hall-recovery.md)',
+        '- [大厅并行接入与验收](parallel-hall-integration.md)',
+        '- [原光照来源与适配边界](hall-lighting.md)',
+        '- [不知火火焰挂载与假设](shiranui-flame-attachment.md)',
+        '- [本地档案与原控件绑定](hall-local-state.md)',
         '- [目标对照审计](goal-alignment-audit.md)',
         '- [逆向总记录与REA证据边界](investigation.md)',
         '- [复现分析](reproduce-analysis.md)','',

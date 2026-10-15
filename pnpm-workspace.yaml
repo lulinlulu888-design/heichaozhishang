@@ -1,3 +1,7 @@
 packages:
   - 'packages/*'
   - 'server'
+  - 'admin'
+allowBuilds:
+  esbuild: true
+  vue-demi: true

@@ -8,6 +8,9 @@ const { values } = parseArgs({ options: {
   port: { type: 'string', default: '7457' },
   'data-directory': { type: 'string', default: resolve(root, 'analysis/game-data') },
   'save-path': { type: 'string' },
+  storage: { type: 'string', default: 'mongodb' },
+  'mongo-uri': { type: 'string' },
+  'mongo-database': { type: 'string' },
   'tutorial-directory': { type: 'string', default: resolve(root, 'analysis/first-encounter') },
   'no-tutorial': { type: 'boolean', default: false },
   'custom-scenario': { type: 'string' },
@@ -16,7 +19,10 @@ const { values } = parseArgs({ options: {
 const port = Number(values.port);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Port must be 0–65535');
 const app = await createApp({ port, dataDirectory: resolve(values['data-directory']),
-  savePath: resolve(values['save-path'] ?? resolve(root, values['city-preview'] ? 'runtime/server/city-preview.sqlite' : values['custom-scenario'] ? 'runtime/server/custom.sqlite' : 'runtime/server/hczs.sqlite')),
+  storage: values.storage,
+  mongoUri: values['mongo-uri'],
+  mongoDatabase: values['mongo-database'] ?? process.env.MONGODB_DB_NAME ?? (values['city-preview'] ? 'hczs_city_preview' : values['custom-scenario'] ? 'hczs_custom' : 'hczs_local'),
+  savePath: values['save-path'] ? resolve(values['save-path']) : undefined,
   tutorialDirectory: values['no-tutorial'] ? undefined : resolve(values['tutorial-directory']),
   customScenarioPath: values['custom-scenario'] ? resolve(values['custom-scenario']) : undefined,
   cityPreview: values['city-preview'] });

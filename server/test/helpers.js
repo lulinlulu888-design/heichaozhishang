@@ -23,7 +23,7 @@ export async function fixture(t) {
     { id: 410101, fields: { NAME: 'Fixture Card', COST: 1, LEVEL: 1, STORY_DESC: 'Fixture story.',
       CHARACTER_IMAGE: 'fixture-card.png', SKILL_ID: 410101 } },
   ])));
-  return { directory, dataDirectory, savePath: join(directory, 'save.sqlite'),
+  return { storage: 'sqlite', directory, dataDirectory, savePath: join(directory, 'save.sqlite'),
     cleanupWith: close => cleanups.push(close) };
 }
 

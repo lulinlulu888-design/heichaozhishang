@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def verify_piles(check, bundle, paths, packaged_hashes):
-    assets = ROOT / 'clients/cocos-poc/assets/resources/recovered/pile-ui'
+    assets = ROOT / 'legacy/cocos-poc/assets/resources/recovered/pile-ui'
     report_path = ROOT / 'analysis/battle-ui/piles/sprites/report.json'
     report = json.loads(report_path.read_text('utf8'))
     staged = json.loads((assets / 'provenance.json').read_text('utf8'))
@@ -28,7 +28,7 @@ def verify_piles(check, bundle, paths, packaged_hashes):
     check('Gallery, character mode and read-only detail are compiled', all(marker in bundle for marker in (
         'PileCardDetail', 'EnlargedCard', 'renderPileDetail', 'pileByCharacter', 'pilePage',
         'change-view-button', 'tab-background', 'pile-ui', 'big-atk')))
-    card_frames = ROOT / 'clients/cocos-poc/assets/resources/recovered/card-frames'
+    card_frames = ROOT / 'legacy/cocos-poc/assets/resources/recovered/card-frames'
     frame_report = json.loads((card_frames / 'provenance.json').read_text('utf8'))
     big = next(frame for frame in frame_report['frames'] if frame['key'] == 'card/bg_atk.png')
     check('Original large attack frame is current and packaged',

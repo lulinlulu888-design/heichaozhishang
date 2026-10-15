@@ -10,7 +10,7 @@ def main():
     cues = json.loads((source/'animation-cues.json').read_text('utf8'))['elsa']['cues']
     mixes = json.loads((source/'mix-ancestry.json').read_text('utf8'))['chains']
     decoded = {r['id']:r for r in json.loads((source/'decode-report.json').read_text('utf8'))['media']}
-    out = ROOT/'clients/cocos-poc/assets/resources/recovered/audio'
+    out = ROOT/'legacy/cocos-poc/assets/resources/recovered/audio'
     out.mkdir(parents=True,exist_ok=True)
     rows = []
     for cue in cues:

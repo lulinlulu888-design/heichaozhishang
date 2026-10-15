@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { int, float, toTagged, fromTagged, monsterProperty, multiply, classicDivide, calcDamage, calcBlock } from '../../packages/battle-core/src/index.js';
 import { validateDefinition } from '../../packages/battle-session/src/index.js';
 import { weightedIntents } from './weighted-intents.js';
+import { addCityUltimate } from './city-ultimate.js';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const scalarTree = value => typeof value === 'number' ? int(value) :
@@ -67,14 +68,15 @@ export async function loadCityScenario(base) {
   definition.enemyFallback = ['66054']; definition.maxRounds = policy.maxRounds;
   definition.statusRules = { policy:'breakdown-reconstruction-v1', attack:{
     player:toTagged(fromTagged(base.provenance.baseline.baseStatsTagged.PropAtk)), enemy:toTagged(attack) } };
+  const ultimate = await addCityUltimate(definition, base, policy.encounter);
   const loaderSha256 = sha(await readFile(new URL('./city-scenario.js', import.meta.url)));
   const selectionSha256 = sha(await readFile(new URL('./weighted-intents.js', import.meta.url)));
-  const contentHash = sha(JSON.stringify({policy,definition,loaderSha256,selectionSha256,base:base.definition.id}));
+  const contentHash = sha(JSON.stringify({policy,definition,ultimate,loaderSha256,selectionSha256,base:base.definition.id}));
   definition.id = 'city-preview-10405-' + contentHash;
   validateDefinition(definition);
   return freeze({definition,title:'城市试战 · 比克卢',notice:'本地40级重建试玩，非原服关卡数值。',
     policies:{mode:'city-reconstruction-preview', ...policy, enemySelection},
     provenance:{mode:'city-reconstruction-preview',originalScenarioRecovered:false,sourceEncounter:10405,
       sourcePins:policy.sourcePins,policySha256:sha(rawPolicy),loaderSha256,selectionSha256,contentHash,
-      baselineDefinitionId:base.definition.id,level:policy.level,monsterHp:toTagged(hp),monsterAttack:toTagged(attack),calculations}});
+      baselineDefinitionId:base.definition.id,level:policy.level,monsterHp:toTagged(hp),monsterAttack:toTagged(attack),calculations,ultimate}});
 }

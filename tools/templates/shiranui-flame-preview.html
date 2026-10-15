@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>不知火原火焰 · 材质核对</title>
+<style>body{margin:0;background:#111320;color:#eee;font:16px system-ui}canvas{display:block}header{position:absolute;top:20px;left:24px}button,select,a{padding:9px;color:white;background:#303747;border:1px solid #697080;margin-right:10px}small{display:block;margin-top:12px}</style>
+<header><select id="layer" aria-label="原特效层"></select><button id="pause">暂停</button><a href="./?sourceUI=1">返回大厅</a><small id="status">载入原火焰数据…</small></header>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+import * as T from 'three';import {GLTFLoader} from './vendor/loaders/GLTFLoader.js';
+const renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.append(renderer.domElement);
+const scene=new T.Scene();scene.background=new T.Color('#111320');const camera=new T.OrthographicCamera(-30,30,20,-20,.1,200);camera.position.set(-3,0,80);camera.lookAt(-3,0,0);
+let uniforms,paused=false,time=0;const clock=new T.Clock();
+try{
+ const data=await (await fetch('./flame/manifest.json')).json();
+ const loader=new T.TextureLoader();const maps=await Promise.all([0,1,2,3].map(async i=>{const t=await loader.loadAsync('./flame/texture-'+i+'.png');t.flipY=false;t.wrapS=t.wrapT=T.RepeatWrapping;t.minFilter=t.magFilter=T.LinearFilter;t.generateMipmaps=false;return t;}));
+ const params=Object.fromEntries(Object.entries(data.defaults).map(([key,row])=>[key,row.value]));
+ for(const [key,value] of Object.entries(data.material.params)){if(key in params){const v=value.split(',').map(Number);params[key]=v.length===1?v[0]:v;}}
+ const layers=[];function walk(node,file){if(node.tag==='Model'&&node.attributes.FxIgnore==='FALSE'&&node.attributes.ModelName.endsWith('ui_idle_huoyan_01_uv.gim'))layers.push({node,file});for(const child of node.children)walk(child,file);}
+ for(const file of data.source_effects)walk(file.tree,file.source.logical_path.split('/').pop());
+ function layerParams(layer){const p=structuredClone(params);const shader=layer.node.children.find(c=>c.tag==='ShaderComponent');const values=shader.children.find(c=>c.tag==='Uniforms');
+ for(const curve of values.children){if(curve.tag==='Variables')continue;const frames=curve.children.filter(c=>c.tag==='Frame');if(frames.length!==1)throw Error('需实现多关键帧插值');const key=curve.tag.replace(/_Keyframe$/,'');const v=frames[0].attributes.Value.split(',').map(Number);p[key]=v.length===1?v[0]:v;}
+ if(p.alphaMtl===null)throw Error('缺少原透明度覆盖');return p;}
+ const vertex=`varying vec2 sourceUV;void main(){sourceUV=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+ const fragment=`varying vec2 sourceUV;uniform sampler2D baseTex,distortTex,maskTex,dissolveTex;uniform float time,distortion,strength,alphaMtl,maskIntensity,dissolveStrength,hardness;uniform vec2 distortTiling,distortSpeed,floatTiling,floatSpeed,dissolveTiling,dissolveSpeed;uniform vec3 tint;
+ vec3 linearize(vec3 c){return mix(c/12.92,pow((c+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),c));}
+ void main(){float d=texture2D(distortTex,sourceUV*distortTiling+time*distortSpeed).r;vec2 uv=sourceUV*floatTiling+vec2(d*distortion)+time*floatSpeed;vec4 base=texture2D(baseTex,uv);float mask=pow(texture2D(maskTex,sourceUV).r+0.01,maskIntensity);float dissolve=pow(clamp((texture2D(dissolveTex,sourceUV*dissolveTiling+time*dissolveSpeed).r-dissolveStrength+0.1)*5.0,0.0,1.0),hardness);gl_FragColor=vec4(linearize(base.rgb)*tint*strength,base.a*mask*dissolve*alphaMtl);
+ #include <colorspace_fragment>
+ }`;
+ function apply(index){const p=layerParams(layers[index]);
+ for(const key of ['mirror_u','mirror_v','rotation_floatTex01','offset_u','offset_v','alpha_mirror_u','alpha_mirror_v','alpha_rotation'])if(p[key]!==0)throw Error('未支持非零UV旋转/镜像');
+ const c=p.g_colFloatingColor1;const tint=new T.Color(c[1]/255,c[2]/255,c[3]/255).convertSRGBToLinear();
+ uniforms={time:{value:time},baseTex:{value:maps[0]},distortTex:{value:maps[1]},maskTex:{value:maps[2]},dissolveTex:{value:maps[3]},tint:{value:tint}};
+ for(const [name,key] of Object.entries({distortion:'g_fDistortionStrength1',strength:'g_fFloatingStrength1',alphaMtl:'alphaMtl',maskIntensity:'alpha_mask_intensity',dissolveStrength:'g_DissolveStrength',hardness:'g_dissolve_hardness'}))uniforms[name]={value:p[key]};
+ for(const [name,value] of Object.entries({distortTiling:p.g_vDistortionTiling,distortSpeed:p.g_vDistortionSpeed,floatTiling:[p.g_vFloatingTilingU1,p.g_vFloatingTilingV1],floatSpeed:p.g_vFloatingSpeed1,dissolveTiling:p.g_vDissolveTiling,dissolveSpeed:[p.g_vDissolveSpeedU,p.g_vDissolveSpeedV]}))uniforms[name]={value:new T.Vector2(...value)};
+ const material=new T.ShaderMaterial({vertexShader:vertex,fragmentShader:fragment,uniforms,transparent:true,depthWrite:false,side:T.DoubleSide});
+ asset.scene.traverse(n=>{if(n.isMesh){n.material.dispose();n.material=material;}});
+ document.querySelector('#status').textContent='原模型/贴图/公式单层预览 · 混合与色彩适配待原引擎核对';}
+ const asset=await new GLTFLoader().loadAsync('./flame/flame-01.glb');scene.add(asset.scene);
+ const select=document.querySelector('#layer');layers.forEach((l,i)=>{const option=document.createElement('option');option.value=i;option.textContent=l.file+' / '+l.node.attributes.Name;select.append(option);});select.onchange=()=>apply(Number(select.value));apply(0);
+ document.querySelector('#pause').onclick=()=>{paused=!paused;document.querySelector('#pause').textContent=paused?'继续':'暂停';};
+}catch(error){document.querySelector('#status').textContent='载入失败：'+error.message;console.error(error);}
+renderer.setAnimationLoop(()=>{const dt=clock.getDelta();if(!paused)time+=dt;if(uniforms)uniforms.time.value=time;renderer.render(scene,camera);});
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.left=-20*innerWidth/innerHeight;camera.right=20*innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
+</script></html>

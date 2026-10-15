@@ -11,7 +11,7 @@ report = json.loads(report_path.read_text('utf8'))
 layout = ROOT/'analysis/battle-ui/result/layouts.json'
 if hashlib.sha256(layout.read_bytes()).hexdigest() != report['layout_report_sha256']:
     raise ValueError('Result layout evidence changed; recover sprites again')
-dest = ROOT/'clients/cocos-poc/assets/resources/recovered/result-ui'
+dest = ROOT/'legacy/cocos-poc/assets/resources/recovered/result-ui'
 dest.mkdir(parents=True, exist_ok=True)
 for frame in report['frames']:
     data = (ROOT/frame['png']).read_bytes()

@@ -11,7 +11,7 @@ def main():
     matrix=np.array([float(v) for v in camera['Transform'].split(',')]).reshape(4,4).T
     matrix[:3,:3]/=np.linalg.norm(matrix[:3,:3],axis=0)
     current=matrix@np.diag([-1.,1.,-1.,1.])
-    client=ROOT/'clients/cocos-poc/assets/CitySceneView.ts'
+    client=ROOT/'legacy/cocos-poc/assets/CitySceneView.ts'
     if 'this.frame.flipUVX = true;' not in client.read_text('utf8'):
         raise ValueError('Current projection-output correction is absent')
     players=json.loads((OUT/'player-placement/report.json').read_text('utf8'))['derived_slots']
