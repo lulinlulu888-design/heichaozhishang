@@ -10,6 +10,7 @@ module.exports = {
       '--port', '7460', '--city-preview', '--storage', 'mongodb', '--mongo-database', 'hczs_city_preview',
       '--data-directory', path.join(__dirname, 'analysis/game-data'),
       '--tutorial-directory', path.join(__dirname, 'analysis/first-encounter'),
+      '--mainline-directory', path.join(__dirname, 'analysis/mainline-progression'),
     ],
     exec_mode: 'fork',
     instances: 1,

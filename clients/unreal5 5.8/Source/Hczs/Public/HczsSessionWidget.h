@@ -63,12 +63,12 @@ public:
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void SetSceneProblem(const FString& Reason);
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void SetPresentationBusy(bool bBusy);
     /** Development-only software pointer route. Requires explicit isolated UI-test flags. */
-    bool DevelopmentClickControl(const FString& Action, const FString& Value = FString(), bool bTouch = false);
+    UFUNCTION(BlueprintCallable, Category="HCZS|Test") bool DevelopmentClickControl(const FString& Action, const FString& Value = FString(), bool bTouch = false);
     /** Real down/move/up only; enemy/player/tap choose native scene bounds or the actual source hit. */
     bool DevelopmentDragCard(const FString& InstanceId, const FString& ReleaseTarget, bool bTouch = false,
         const FString& Phase = TEXT("begin"));
     /** Captures actual last paint controls/text/source texture references for acceptance. */
-    FString DevelopmentDescribeUI() const;
+    UFUNCTION(BlueprintCallable, Category="HCZS|Test") FString DevelopmentDescribeUI() const;
     /** Explicit inspection-only original page paint observation for native screenshots. */
     FString DevelopmentDescribeWorldlineUI() const;
 protected:

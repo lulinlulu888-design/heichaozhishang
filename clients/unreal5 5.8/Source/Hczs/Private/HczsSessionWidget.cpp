@@ -38,6 +38,15 @@ const FLinearColor Warm(0.97f, 0.78f, 0.48f, 1);
 const FLinearColor Muted(0.62f, 0.70f, 0.81f, 1);
 const FLinearColor Light(0.95f, 0.97f, 1, 1);
 
+#if !UE_BUILD_SHIPPING
+bool IsIsolatedNativeUiTest()
+{
+    int32 Port = 0;
+    return (FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")) || FParse::Param(FCommandLine::Get(), TEXT("HczsMainlineUITest"))) &&
+        FParse::Value(FCommandLine::Get(), TEXT("HczsServerPort="), Port) && Port > 0 && Port <= 65535 && Port != 7460;
+}
+#endif
+
 bool HasRecoveredScene(const FHczsEncounterSummary& Encounter)
 {
     return Encounter.Id == TEXT("tutorial-5000") && Encounter.DefinitionId.StartsWith(TEXT("tutorial-5000-"))
@@ -452,7 +461,7 @@ FString UHczsSessionWidget::DevelopmentDescribeWorldlineUI() const
     return TEXT("{}");
 #else
     if ((!FParse::Param(FCommandLine::Get(), TEXT("HczsWorldlineInspect"))
-            && !FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")))
+            && !IsIsolatedNativeUiTest())
         || !WorldlineWidget || !WorldlineWidget->IsInViewport()) return TEXT("{}");
     return WorldlineWidget->DevelopmentDescribeUI();
 #endif
@@ -738,7 +747,9 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         }
         else
         {
-            P.Box(270, 205, 740, 300, FLinearColor(0.015f, 0.024f, 0.05f, 0.89f));
+            const bool bMainlineResult = Session->bHasMainlineProgression && Battle.Status == TEXT("won") &&
+                Battle.EncounterId == TEXT("tutorial-5000") && Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991");
+            P.Box(270, 205, 740, bMainlineResult ? 395 : 300, FLinearColor(0.015f, 0.024f, 0.05f, 0.89f));
             if (Battle.Status == TEXT("won"))
             {
                 P.Image(TEXT("victory-glow"), 392, 222, 496, 173);
@@ -746,20 +757,36 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 P.Text(TEXT("战斗胜利"), 440, 378, 400, 39, 27, Warm, true);
             }
             else P.Text(TEXT("战斗失败"), 440, 292, 400, 65, 42, Muted, true);
-            P.Text(TEXT("战斗记录已保存"), 420, 422, 440, 25, 17, Muted, true);
+            const FString ResultMessage = !bMainlineResult ? TEXT("战斗记录已保存") :
+                !Session->bMainlineStateCurrent ? TEXT("战斗已保存 · 主线进度尚未同步") :
+                Session->MainlineProgress.bFirstChallengePassed ? TEXT("序章首战已通关 · 下一挑战战斗待恢复") : TEXT("战斗已保存 · 请确认序章首战通关");
+            P.Text(ResultMessage, 340, 422, 600, 25, 17, Muted, true);
             const bool bEncounterAvailable = Session->Encounters.ContainsByPredicate([&Battle](const FHczsEncounterSummary& E)
                 { return E.Id == Battle.EncounterId && HasRecoveredScene(E); });
             Button(TEXT("challenge-again"), TEXT(""), TEXT("再战一次"), 407, 458, 210, 46,
                 Session->bAllowNewBattles && bEncounterAvailable, true);
             Button(TEXT("hall"), TEXT(""), TEXT("返回大厅"), 661, 458, 210, 46);
+            if (bMainlineResult)
+            {
+                const bool bPassed = Session->bMainlineStateCurrent && Session->MainlineProgress.bFirstChallengePassed;
+                Button(TEXT("settle-mainline"), TEXT(""), bPassed ? TEXT("已记录通关") : TEXT("确认序章首战通关"),
+                    407, 516, 250, 43, Session->CanConfirmMainlineVictory(), true);
+                Button(TEXT("refresh-mainline"), TEXT(""), TEXT("读取最新进度"), 681, 516, 190, 43);
+                P.Text(TEXT("本地主线进度适配 · 本次不发放奖励"), 340, 568, 600, 22, 14, Muted, true);
+            }
         }
     }
     else if (bEncounterPanel && !Session->SelectedProfileId.IsEmpty())
     {
         P.Box(0, 0, 1280, 720, FLinearColor(0.015f, 0.02f, 0.04f, 0.60f));
         P.Box(180, 86, 920, 540, Ink);
-        P.Text(TEXT("本地战斗预览"), 220, 114, 460, 45, 32, Light);
-        P.Text(TEXT("选择恢复样例或继续本地战斗"), 223, 163, 640, 24, 17, Muted);
+        P.Text(Session->bHasMainlineProgression ? TEXT("本地选关与主线进度") : TEXT("本地战斗预览"), 220, 114, 620, 45, 32, Light);
+        const FString ProgressMessage = !Session->bHasMainlineProgression ? TEXT("选择恢复样例或继续本地战斗") :
+            !Session->bMainlineStateCurrent ? TEXT("主线进度未同步 · 请读取最新进度") :
+            Session->MainlineProgress.bFirstChallengePassed ? TEXT("序章首战已通过 · 下一挑战 3998 的战斗待恢复") : TEXT("序章首战尚未通关 · 胜利后确认可保存主线进度");
+        P.Text(ProgressMessage, 223, 163, 800, 24, 17, Muted);
+        if (Session->bHasMainlineProgression)
+            Button(TEXT("refresh-mainline"), TEXT(""), TEXT("读取最新进度"), 878, 120, 177, 35);
         P.Box(680, 208, 1, 320, FLinearColor(0.2f, 0.3f, 0.4f, 0.75f));
         for (int32 Index = 0; Index < Session->Encounters.Num() && Index < 4; ++Index)
         {
@@ -1028,7 +1055,7 @@ FReply UHczsSessionWidget::PressAt(const FGeometry& Geometry, const FPointerEven
     if (bCardGestureActive) return FReply::Handled();
     const FVector2f Point = DesignPoint(Geometry, Event.GetScreenSpacePosition());
 #if !UE_BUILD_SHIPPING
-    if (FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")))
+    if (IsIsolatedNativeUiTest())
         UE_LOG(LogTemp, Display, TEXT("HCZS native down: design=(%.1f,%.1f) absolute=(%.1f,%.1f) geometry=(%.1f,%.1f) controls=%d touch=%d key=%s"),
             Point.X, Point.Y, Event.GetScreenSpacePosition().X, Event.GetScreenSpacePosition().Y,
             Geometry.GetLocalSize().X, Geometry.GetLocalSize().Y, Controls.Num(), Event.IsTouchEvent(), *Event.GetEffectingButton().ToString());
@@ -1167,11 +1194,8 @@ bool UHczsSessionWidget::DevelopmentClickControl(const FString& Action, const FS
 #if UE_BUILD_SHIPPING
     return false;
 #else
-    int32 Port = 0;
     if (Action == TEXT("play-card")) return false; // cards require genuine move/up, never a click submit
-    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest"))
-        || !FParse::Value(FCommandLine::Get(), TEXT("HczsServerPort="), Port)
-        || Port <= 0 || Port > 65535 || Port == 7460 || !FSlateApplication::IsInitialized()
+    if (!IsIsolatedNativeUiTest() || !FSlateApplication::IsInitialized()
         || LastPaintSerial == 0 || !IsInViewport() || GetVisibility() != ESlateVisibility::Visible) return false;
     const FHczsSessionControl* Match = Controls.FindByPredicate([&Action, &Value](const FHczsSessionControl& C)
         { return C.Action == Action && C.Value == Value && C.bEnabled; });
@@ -1232,9 +1256,7 @@ bool UHczsSessionWidget::DevelopmentDragCard(const FString& InstanceId, const FS
 #if UE_BUILD_SHIPPING
     return false;
 #else
-    int32 Port = 0;
-    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")) || !FParse::Value(FCommandLine::Get(), TEXT("HczsServerPort="), Port)
-        || Port <= 0 || Port > 65535 || Port == 7460 || !FSlateApplication::IsInitialized() || !IsInViewport()
+    if (!IsIsolatedNativeUiTest() || !FSlateApplication::IsInitialized() || !IsInViewport()
         || GetVisibility() != ESlateVisibility::Visible || LastPaintSerial == 0) return false;
     const auto Widget = GetCachedWidget();
     if (!Widget) return false;
@@ -1316,7 +1338,7 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
 #if UE_BUILD_SHIPPING
     return TEXT("{}");
 #else
-    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest"))) return TEXT("{}");
+    if (!IsIsolatedNativeUiTest()) return TEXT("{}");
     auto Root = MakeShared<FJsonObject>();
     Root->SetStringField(TEXT("mode"), TEXT("actual-nativepaint-and-slate-pointer-observation"));
     Root->SetStringField(TEXT("map"), LastPaintedMap);
@@ -1418,6 +1440,23 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
         Root->SetBoolField(TEXT("pending"), Session->bRequestInFlight || Session->bHasPendingIntent);
         Root->SetBoolField(TEXT("profileStateCurrent"), Session->bProfileStateCurrent);
         Root->SetBoolField(TEXT("battleStateCurrent"), Session->bBattleStateCurrent);
+        auto Mainline = MakeShared<FJsonObject>();
+        Mainline->SetBoolField(TEXT("enabled"), Session->bHasMainlineProgression);
+        Mainline->SetBoolField(TEXT("current"), Session->bMainlineStateCurrent);
+        Mainline->SetBoolField(TEXT("canConfirm"), Session->CanConfirmMainlineVictory() && !bPresentationBusy);
+        Mainline->SetStringField(TEXT("profileId"), Session->MainlineProgress.ProfileId);
+        Mainline->SetStringField(TEXT("contentId"), Session->MainlineProgress.ContentId);
+        Mainline->SetNumberField(TEXT("revision"), static_cast<double>(Session->MainlineProgress.Revision));
+        Mainline->SetBoolField(TEXT("firstChallengePassed"), Session->MainlineProgress.bFirstChallengePassed);
+        Mainline->SetStringField(TEXT("completedBattleId"), Session->MainlineProgress.CompletedBattleId);
+        TArray<TSharedPtr<FJsonValue>> Challenges;
+        for (const auto& Challenge : Session->MainlineProgress.Challenges)
+        {
+            auto Row = MakeShared<FJsonObject>(); Row->SetNumberField(TEXT("id"), Challenge.Id);
+            Row->SetStringField(TEXT("status"), Challenge.Status); Row->SetBoolField(TEXT("executable"), Challenge.bExecutable);
+            Challenges.Add(MakeShared<FJsonValueObject>(Row));
+        }
+        Mainline->SetArrayField(TEXT("challenges"), Challenges); Root->SetObjectField(TEXT("mainline"), Mainline);
     }
     FString Result;
     FJsonSerializer::Serialize(Root, TJsonWriterFactory<>::Create(&Result));
@@ -1469,6 +1508,8 @@ void UHczsSessionWidget::DispatchControl(const FHczsSessionControl& Control)
     else if (Action == TEXT("end-turn")) Session->EndTurn();
     else if (Action == TEXT("refresh-bootstrap")) Session->RefreshBootstrap();
     else if (Action == TEXT("refresh-battle") && Session->CurrentBattle.bIsValid) Session->RefreshCurrentBattle();
+    else if (Action == TEXT("settle-mainline")) Session->ConfirmMainlineVictory();
+    else if (Action == TEXT("refresh-mainline")) Session->RefreshMainline();
     else if (Action == TEXT("close-selection")) CloseSelection();
     else if (Action == TEXT("hall")) Session->ReturnToHall();
     else if (Action == TEXT("challenge-again"))

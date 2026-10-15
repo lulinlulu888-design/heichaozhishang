@@ -49,6 +49,12 @@ namespace
         for (TCHAR C : S) if (C < '0' || C > '9') return false;
         return true;
     }
+    bool ContentHash(const FString& S)
+    {
+        if (S.Len() != 64) return false;
+        for (TCHAR C : S) if (!((C >= '0' && C <= '9') || (C >= 'a' && C <= 'f'))) return false;
+        return true;
+    }
     bool HexBinary64(const FString& Hex, double& Out)
     {
         // Decode the Python-style exact hexadecimal scalar without platform-dependent strtod hex support.
@@ -242,6 +248,99 @@ bool ParseBootstrap(const TSharedPtr<FJsonObject>& O, TArray<FHczsLocalProfile>&
     return Text(Endpoints, TEXT("profiles"), ProfilesEndpoint, 100) && ProfilesEndpoint == TEXT("/api/rebuild/v1/profiles") &&
         Text(Endpoints, TEXT("encounters"), EncountersEndpoint, 100) && EncountersEndpoint == TEXT("/api/rebuild/v1/encounters") &&
         Text(Endpoints, TEXT("battles"), BattlesEndpoint, 100) && BattlesEndpoint == TEXT("/api/rebuild/v1/profiles/{profileId}/battles");
+}
+bool ParseMainlineCapability(const TSharedPtr<FJsonObject>& O, bool& bEnabled, FString& ContentId)
+{
+    TArray<FString> Names;
+    if (!StringIds(Array(O, TEXT("capabilities"), 64), Names)) return false;
+    bEnabled = false; ContentId.Reset();
+    if (!Names.Contains(TEXT("mainline-progression"))) return true;
+    FString Hash, ReadRoute, SettleRoute;
+    if (!Text(Child(O, TEXT("content")), TEXT("mainlineId"), Hash, 64) || !ContentHash(Hash) ||
+        !Text(Child(O, TEXT("endpoints")), TEXT("mainline"), ReadRoute, 100) || ReadRoute != TEXT("/api/rebuild/v1/profiles/{profileId}/mainline") ||
+        !Text(Child(O, TEXT("endpoints")), TEXT("settlements"), SettleRoute, 100) || SettleRoute != TEXT("/api/rebuild/v1/profiles/{profileId}/mainline/settlements")) return false;
+    bEnabled = true; ContentId = Hash; return true;
+}
+bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, const FString& ContentId, FHczsMainlineProgress& Out)
+{
+    FHczsMainlineProgress P; int64 Activity = 0; FString Policy, Authority;
+    if (!Exact(O, {TEXT("profileId"), TEXT("activityId"), TEXT("contentId"), TEXT("policy"), TEXT("revision"), TEXT("updatedAt"),
+            TEXT("initialStateAuthority"), TEXT("challenges"), TEXT("completed")}) ||
+        !Text(O, TEXT("profileId"), P.ProfileId, 36) || P.ProfileId != ProfileId || !IsUuid(P.ProfileId) ||
+        !Text(O, TEXT("contentId"), P.ContentId, 64) || P.ContentId != ContentId || !ContentHash(P.ContentId) ||
+        !Integer(O, TEXT("activityId"), Activity, 2, 2) || !Integer(O, TEXT("revision"), P.Revision, 0, 1) ||
+        !Text(O, TEXT("policy"), Policy, 80) || Policy != TEXT("local-prologue-progress-v1") ||
+        !Text(O, TEXT("initialStateAuthority"), Authority, 128) || Authority != TEXT("local-fresh-profile-policy; not recovered original account state")) return false;
+    const auto* Completed = Array(O, TEXT("completed"), 1);
+    const auto* Challenges = Array(O, TEXT("challenges"), 2);
+    if (!Completed || Completed->Num() != P.Revision || !Challenges || Challenges->Num() != 2) return false;
+    if (P.Revision == 0)
+    {
+        const auto Updated = O->TryGetField(TEXT("updatedAt")); if (!Updated.IsValid() || !Updated->IsNull()) return false;
+    }
+    else
+    {
+        const auto Done = ObjectValue((*Completed)[0]); int64 Challenge = 0;
+        if (!Integer(O, TEXT("updatedAt"), P.UpdatedAt) || !Exact(Done, {TEXT("challengeId"), TEXT("battleId"), TEXT("battleRevision"), TEXT("completedAt")}) ||
+            !Integer(Done, TEXT("challengeId"), Challenge, 3997, 3997) || !Text(Done, TEXT("battleId"), P.CompletedBattleId, 36) || !IsUuid(P.CompletedBattleId) ||
+            !Integer(Done, TEXT("battleRevision"), P.CompletedBattleRevision, 1, 1000001) || !Integer(Done, TEXT("completedAt"), P.CompletedAt, 0, P.UpdatedAt)) return false;
+        P.bFirstChallengePassed = true;
+    }
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        const auto C = ObjectValue((*Challenges)[Index]); FHczsMainlineChallenge Challenge;
+        int64 Battle = 0, Count = 0; bool bLoot = true;
+        const bool bFirst = Index == 0;
+        const bool bFields = bFirst ? Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"), TEXT("predecessors"), TEXT("hasLoot"),
+            TEXT("status"), TEXT("successCount"), TEXT("encounterId"), TEXT("executable")}) : Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"),
+            TEXT("predecessors"), TEXT("hasLoot"), TEXT("status"), TEXT("successCount"), TEXT("encounterId"), TEXT("executable"), TEXT("unavailableReason")});
+        if (!bFields || !Counter(C, TEXT("id"), Challenge.Id, bFirst ? 3997 : 3998, bFirst ? 3997 : 3998) ||
+            !Text(C, TEXT("name"), Challenge.Name, 128) || !Text(C, TEXT("subtitle"), Challenge.Subtitle, 128) ||
+            !Integer(C, TEXT("battleId"), Battle, bFirst ? 5000 : 1703, bFirst ? 5000 : 1703) ||
+            !C->TryGetBoolField(TEXT("hasLoot"), bLoot) || bLoot || !C->TryGetBoolField(TEXT("executable"), Challenge.bExecutable) || Challenge.bExecutable != bFirst ||
+            !Text(C, TEXT("status"), Challenge.Status, 16) || !Integer(C, TEXT("successCount"), Count, 0, 1)) return false;
+        const FString ExpectedStatus = bFirst ? (P.bFirstChallengePassed ? TEXT("passed") : TEXT("available")) :
+            (P.bFirstChallengePassed ? TEXT("available") : TEXT("locked"));
+        if (Challenge.Status != ExpectedStatus || Count != (bFirst && P.bFirstChallengePassed ? 1 : 0)) return false;
+        const auto* Predecessors = Array(C, TEXT("predecessors"), 1);
+        if (!Predecessors || Predecessors->Num() != (bFirst ? 0 : 1)) return false;
+        if (bFirst)
+        {
+            if (!Text(C, TEXT("encounterId"), Challenge.EncounterId, 80) || Challenge.EncounterId != TEXT("tutorial-5000")) return false;
+        }
+        else
+        {
+            double Previous = 0; FString Reason; const auto Encounter = C->TryGetField(TEXT("encounterId"));
+            if (!(*Predecessors)[0]->TryGetNumber(Previous) || Previous != 3997 || !Encounter.IsValid() || !Encounter->IsNull() ||
+                !Text(C, TEXT("unavailableReason"), Reason, 100) || Reason != TEXT("original-boss-mechanics-and-client-not-restored")) return false;
+        }
+        P.Challenges.Add(MoveTemp(Challenge));
+    }
+    P.bIsValid = true; Out = MoveTemp(P); return true;
+}
+bool ParseMainlineReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, const FString& ContentId,
+    const FString& BattleId, int64 BattleRevision, int64 ExpectedRevision, FHczsMainlineProgress& Out)
+{
+    bool bReplayed = false; FHczsMainlineProgress P;
+    if (!Exact(O, {TEXT("campaign"), TEXT("settlement"), TEXT("rewards"), TEXT("replayed")}) || !O->TryGetBoolField(TEXT("replayed"), bReplayed) ||
+        !Array(O, TEXT("rewards"), 0) || !ParseMainline(Child(O, TEXT("campaign")), ProfileId, ContentId, P) ||
+        P.Revision != ExpectedRevision + 1 || !P.bFirstChallengePassed || P.CompletedBattleId != BattleId || P.CompletedBattleRevision != BattleRevision) return false;
+    const auto* Completed = Array(Child(O, TEXT("campaign")), TEXT("completed"), 1);
+    if (!Completed || Completed->Num() != 1 || !SameJson((*Completed)[0], O->TryGetField(TEXT("settlement")))) return false;
+    Out = MoveTemp(P); return true;
+}
+bool CanSettleMainlineBattle(const FHczsMainlineProgress& Progress, const FHczsBattleView& Battle)
+{
+    return Progress.bIsValid && !Progress.bFirstChallengePassed && Progress.Revision == 0 && Battle.bIsValid &&
+        Battle.ProfileId == Progress.ProfileId && Battle.Status == TEXT("won") && Battle.OutcomeReason == TEXT("enemy-defeated") &&
+        Battle.EncounterId == TEXT("tutorial-5000") && Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991");
+}
+bool CanApplyMainlineProgress(const FHczsMainlineProgress& Existing, const FHczsMainlineProgress& Incoming, int64 MinimumRevision)
+{
+    return Incoming.bIsValid && Incoming.Revision >= MinimumRevision && (!Existing.bIsValid ||
+        (Incoming.ProfileId == Existing.ProfileId && Incoming.ContentId == Existing.ContentId && Incoming.Revision >= Existing.Revision && Incoming.UpdatedAt >= Existing.UpdatedAt &&
+            (!Existing.bFirstChallengePassed || (Incoming.CompletedBattleId == Existing.CompletedBattleId && Incoming.CompletedBattleRevision == Existing.CompletedBattleRevision &&
+                Incoming.CompletedAt == Existing.CompletedAt))));
 }
 bool ParseHall(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, FHczsHallPreference& Out)
 {

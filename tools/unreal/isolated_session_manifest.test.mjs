@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolve} from 'node:path';
 import {digest,validateResumeManifest,validateDatabaseIdentity,validateResumeCollections,REQUIRED_COLLECTIONS,validateMongoUri,
-  validateLiveTestIdentity,validateOwnedDatabaseForDrop} from './isolated_session_manifest.mjs';
+  validateLiveTestIdentity,validateOwnedDatabaseForDrop,validateUIRunningManifest,resolveMainlineOption,mainlineEnabled,mainlineFaultMode,resolveMainlineFaultOption} from './isolated_session_manifest.mjs';
 const uri='mongodb://127.0.0.1:27027/?replicaSet=hczs-local&directConnection=true';
 function fixture() {
   const allowedRoot=resolve('analysis/unreal/session-test'),directory=resolve(allowedRoot,'fixture-run');
@@ -67,4 +67,55 @@ test('cleanup can only drop the current owned generated test database',()=>{
   for(const edit of [v=>v.mode='production',v=>v.schemaVersion=0,v=>v.mongoDatabase='hczs']){
     const changed={...f.identity};edit(changed);assert.throws(()=>validateOwnedDatabaseForDrop(changed,ownership));
   }
+});
+
+test('mainline is explicit for fresh runs and immutable across resume, including legacy manifests',()=>{
+  assert.equal(resolveMainlineOption(undefined),false);
+  assert.equal(resolveMainlineOption(true),true);
+  assert.equal(resolveMainlineOption(undefined,{}),false);
+  assert.equal(resolveMainlineOption(undefined,{mainlineEnabled:true}),true);
+  assert.equal(resolveMainlineOption(undefined,{mainlineEnabled:false}),false);
+  for(const mode of [true,false])for(const requested of [true,false])
+    assert.throws(()=>resolveMainlineOption(requested,{mainlineEnabled:mode}),/inherits/);
+  for(const bad of [null,0,'true',undefined]){
+    assert.throws(()=>mainlineEnabled({mainlineEnabled:bad}));
+    const f=fixture();f.manifest.mainlineEnabled=bad;
+    assert.throws(()=>validateUIRunningManifest(f.manifest));
+    assert.throws(()=>validateResumeManifest(f));
+  }
+});
+
+test('mainline mode must agree with live and persisted database identity',()=>{
+  const f=fixture(); f.manifest.mainlineEnabled=true; f.identity.mainlineEnabled=true;
+  assert.doesNotThrow(()=>validateDatabaseIdentity(f.identity,f.manifest,f.hash));
+  assert.throws(()=>validateDatabaseIdentity({...f.identity,mainlineEnabled:false},f.manifest,f.hash));
+  const text=JSON.stringify(f.manifest), identity={schemaVersion:1,mode:'isolated-native-session-test-identity',readOnly:true,databaseLifecycle:'running',
+    ...Object.fromEntries(['pid','port','mongoDatabase','mongoEndpoint','runId','databaseIdentity','processIdentity','processIndex','mainlineEnabled'].map(k=>[k,f.manifest[k]])),manifestSha256:digest(text)};
+  assert.equal(validateLiveTestIdentity(identity,f.manifest,text),identity);
+  assert.throws(()=>validateLiveTestIdentity({...identity,mainlineEnabled:false},f.manifest,text));
+});
+
+test('a mainline resume additionally requires both progress and immutable receipt collections',()=>{
+  const f=fixture(),p=f.manifest.runId,b=f.manifest.databaseIdentity;
+  const input={names:[...REQUIRED_COLLECTIONS,'mainline_states','mainline_requests'],mainlineEnabled:true,
+    profile:{_id:p,schemaVersion:1,revision:1},battle:{id:b,profile_id:p,schemaVersion:1,revision:3},
+    config:{_id:'config',schemaVersion:1,revision:1},release:{_id:0,schemaVersion:1},profileCount:1,battleCount:1,creationCount:1};
+  assert.doesNotThrow(()=>validateResumeCollections(input));
+  for(const missing of ['mainline_states','mainline_requests'])
+    assert.throws(()=>validateResumeCollections({...input,names:input.names.filter(name=>name!==missing)}));
+});
+
+test('mainline response faults require an explicit exclusive fresh mode',()=>{
+  assert.equal(resolveMainlineFaultOption(),false);
+  assert.equal(resolveMainlineFaultOption(true,{mainlineEnabled:true}),true);
+  for(const options of [{},{mainlineEnabled:true,faults:true},{mainlineEnabled:true,resume:true}])
+    assert.throws(()=>resolveMainlineFaultOption(true,options));
+  assert.equal(mainlineFaultMode({}),false);
+  for(const value of ['true',1,null,undefined])assert.throws(()=>mainlineFaultMode({mainlineFaults:value}));
+  const f=fixture();f.manifest.mainlineEnabled=true;f.manifest.mainlineFaults=true;
+  assert.doesNotThrow(()=>validateUIRunningManifest(f.manifest));
+  assert.throws(()=>validateResumeManifest(f),/cannot be resumed/);
+  f.identity.mainlineEnabled=true;f.identity.mainlineFaults=true;
+  assert.doesNotThrow(()=>validateDatabaseIdentity(f.identity,f.manifest,f.hash));
+  assert.throws(()=>validateDatabaseIdentity({...f.identity,mainlineFaults:false},f.manifest,f.hash));
 });

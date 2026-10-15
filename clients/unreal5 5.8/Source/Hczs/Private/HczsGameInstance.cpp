@@ -67,6 +67,12 @@ FString UHczsGameInstance::FriendlyError(int32 HttpCode, const FString& Code) co
     if (Code == TEXT("BATTLE_NOT_FOUND")) return TEXT("此档案中找不到这场战斗，请刷新战斗列表。");
     if (Code == TEXT("ENCOUNTER_UNAVAILABLE")) return TEXT("此关卡当前未开放，请刷新关卡目录。");
     if (Code == TEXT("INVALID_BATTLE_ACTION")) return TEXT("服务端拒绝本次行动，请刷新战斗状态后再操作。");
+    if (Code == TEXT("CHALLENGE_ALREADY_COMPLETED")) return TEXT("序章首战已经记录通关，正在读取最新进度。");
+    if (Code == TEXT("BATTLE_NOT_MAINLINE")) return TEXT("这场战斗不属于已接入的主线挑战。");
+    if (Code == TEXT("BATTLE_NOT_WON")) return TEXT("这场战斗尚未取得服务端确认的胜利。");
+    if (Code == TEXT("CHALLENGE_LOCKED")) return TEXT("前置挑战尚未通关，请读取最新进度。");
+    if (Code == TEXT("CONTENT_CHANGED")) return TEXT("主线目录已经更新，请刷新连接后重新读取进度。");
+    if (Code == TEXT("MAINLINE_CONTENT_CHANGED")) return TEXT("主线存档与当前内容版本不兼容，原进度已保留。请检查服务端内容版本。");
     if (Code == TEXT("UNEXPECTED_RESPONSE") || Code == TEXT("INVALID_JSON") || Code == TEXT("RESPONSE_TOO_LARGE")) return TEXT("本地服务响应不符合游戏契约，未采用这份数据。");
     if (HttpCode >= 500) return TEXT("本地服务暂时出错，操作结果尚未确认；请使用重试读取或重试原操作。");
     return TEXT("本次操作未完成，请刷新数据后再试。");
@@ -141,15 +147,17 @@ void UHczsGameInstance::RefreshBootstrap()
     if (SelectedProfileId.IsEmpty()) Phase = EHczsSessionPhase::Connecting;
     Fetch(TEXT("bootstrap"), TEXT("GET"), TEXT("/bootstrap"), TEXT(""), [this](TSharedPtr<FJsonObject> O, int32 Code, const FString& Error)
     {
-        TArray<FHczsLocalProfile> Next; bool AllowProfiles = false, AllowBattles = false;
-        if (!Error.IsEmpty() || Code != 200 || !ParseBootstrap(O, Next, AllowProfiles, AllowBattles))
+        TArray<FHczsLocalProfile> Next; bool AllowProfiles = false, AllowBattles = false, HasMainline = false; FString ContentId;
+        if (!Error.IsEmpty() || Code != 200 || !ParseBootstrap(O, Next, AllowProfiles, AllowBattles) || !ParseMainlineCapability(O, HasMainline, ContentId))
         {
-            bLocalServiceAvailable = false; bAllowNewProfiles = false; bAllowNewBattles = false;
+            bLocalServiceAvailable = false; bAllowNewProfiles = false; bAllowNewBattles = false; bMainlineStateCurrent = false;
             if (SelectedProfileId.IsEmpty()) Phase = EHczsSessionPhase::Unavailable;
             const FString Reason = Error.IsEmpty() ? TEXT("UNEXPECTED_RESPONSE") : Error;
             Fail(Reason, FriendlyError(Code, Reason)); return;
         }
         bLocalServiceAvailable = true; bOriginalGameplayReady = false;
+        if (HasMainline != bHasMainlineProgression || ContentId != MainlineContentId) bMainlineStateCurrent = false;
+        bHasMainlineProgression = HasMainline; MainlineContentId = ContentId;
         bAllowNewProfiles = AllowProfiles; bAllowNewBattles = AllowBattles; Profiles = MoveTemp(Next); ErrorCode.Reset();
         UE_LOG(LogTemp, Display, TEXT("HCZS bootstrap verified; profiles=%d; selected=%s; no original login"), Profiles.Num(), SelectedProfileId.IsEmpty() ? TEXT("none") : TEXT("explicit"));
         if (!SelectedProfileId.IsEmpty())
@@ -159,6 +167,7 @@ void UHczsGameInstance::RefreshBootstrap()
                 ++SessionEpoch; SelectedProfileId.Reset(); SelectedEncounterId.Reset(); CurrentBattle = FHczsBattleView();
                 HallPreference = FHczsHallPreference(); bBattleStateCurrent = false; bEncounterScenarioReady = false;
                 bProfileStateCurrent = false; LastVisualReceipt = FHczsBattleVisualReceipt(); LastEvents.Reset(); Battles.Reset();
+                ResetMainlineProgress();
             }
         }
         if (SelectedProfileId.IsEmpty())
@@ -177,6 +186,7 @@ void UHczsGameInstance::SelectProfile(const FString& ProfileId)
     { Fail(TEXT("INVALID_PROFILE"), TEXT("请选择列表中存在的本地档案。")); return; }
     ++SessionEpoch; SelectedProfileId = ProfileId; SelectedEncounterId.Reset(); SelectedDefinitionId.Reset();
     CurrentBattle = FHczsBattleView(); HallPreference = FHczsHallPreference(); LastEvents.Reset(); Battles.Reset();
+    ResetMainlineProgress();
     LastVisualReceipt = FHczsBattleVisualReceipt(); bProfileStateCurrent = false;
     bBattleStateCurrent = false; bEncounterScenarioReady = false; MinimumBattleRevision = 0;
     Phase = EHczsSessionPhase::ProfileSelection;
@@ -226,6 +236,7 @@ void UHczsGameInstance::CreateLocalProfile(const FString& DisplayName)
         }
         Profiles.Add(Profile); ++SessionEpoch; SelectedProfileId = Profile.Id;
         SelectedEncounterId.Reset(); CurrentBattle = FHczsBattleView(); HallPreference = FHczsHallPreference();
+        ResetMainlineProgress();
         LastEvents.Reset(); Battles.Reset(); bBattleStateCurrent = false; bEncounterScenarioReady = false; MinimumBattleRevision = 0;
         LastVisualReceipt = FHczsBattleVisualReceipt(); bProfileStateCurrent = true;
         UserMessage = TEXT("本地档案已创建并保存。"); ErrorCode.Reset(); ReadHall(true);
@@ -264,8 +275,10 @@ void UHczsGameInstance::ReadEncounters()
             const auto* Selected = Encounters.FindByPredicate([this](const FHczsEncounterSummary& E) { return E.Id == SelectedEncounterId; });
             if (!Selected || Selected->DefinitionId != SelectedDefinitionId) bEncounterScenarioReady = false;
         }
-        ErrorCode.Reset(); Notify();
+        ErrorCode.Reset();
         if (!SelectedProfileId.IsEmpty() && Phase == EHczsSessionPhase::Hall) RefreshBattles();
+        else if (bHasMainlineProgression && bProfileStateCurrent && !SelectedProfileId.IsEmpty()) ReadMainline();
+        else Notify();
     });
 }
 void UHczsGameInstance::SelectEncounter(const FString& EncounterId)
@@ -294,7 +307,8 @@ void UHczsGameInstance::RefreshBattles()
         TArray<FHczsBattleSummary> Next;
         if (!Error.IsEmpty() || Code != 200 || !ParseBattleList(O, Next))
         { const FString Reason = Error.IsEmpty() ? TEXT("UNEXPECTED_RESPONSE") : Error; Fail(Reason, FriendlyError(Code, Reason)); return; }
-        Battles = MoveTemp(Next); ErrorCode.Reset(); Notify();
+        Battles = MoveTemp(Next); ErrorCode.Reset();
+        if (bHasMainlineProgression) ReadMainline(); else Notify();
     });
 }
 void UHczsGameInstance::ContinueBattle(const FString& BattleId)
@@ -307,13 +321,13 @@ void UHczsGameInstance::ContinueBattle(const FString& BattleId)
     MinimumBattleRevision = FMath::Max(MinimumBattleRevision, Summary->Revision);
     ReadBattle(BattleId);
 }
-void UHczsGameInstance::ReadBattle(const FString& BattleId, bool bAfterReceipt)
+void UHczsGameInstance::ReadBattle(const FString& BattleId, bool bAfterReceipt, bool bPrepareSettlement)
 {
     if (SelectedProfileId.IsEmpty()) return;
     const FString ProfileId = SelectedProfileId; bBattleStateCurrent = false;
     if (!bAfterReceipt) LastVisualReceipt = FHczsBattleVisualReceipt();
     UserMessage = bAfterReceipt ? TEXT("操作已保存，正在同步最新战斗…") : TEXT("正在读取已保存战斗…");
-    Fetch(TEXT("battle-state"), TEXT("GET"), BattlesRoute() + TEXT("/") + BattleId, TEXT(""), [this, ProfileId, BattleId, bAfterReceipt](TSharedPtr<FJsonObject> O, int32 Code, const FString& Error)
+    Fetch(TEXT("battle-state"), TEXT("GET"), BattlesRoute() + TEXT("/") + BattleId, TEXT(""), [this, ProfileId, BattleId, bAfterReceipt, bPrepareSettlement](TSharedPtr<FJsonObject> O, int32 Code, const FString& Error)
     {
         FHczsBattleView Next;
         if (!Error.IsEmpty() || Code != 200 || !ParseBattle(Child(O, TEXT("battle")), ProfileId, BattleId, Next) || !CanApplyBattleRevision(CurrentBattle, Next, MinimumBattleRevision))
@@ -329,7 +343,14 @@ void UHczsGameInstance::ReadBattle(const FString& BattleId, bool bAfterReceipt)
         if (bAfterReceipt) ClearPendingIntent(LastVisualReceipt.bValid);
         UserMessage = CurrentBattle.Status == TEXT("player-turn") ? TEXT("轮到本方行动，操作会自动保存。") : CurrentBattle.Status == TEXT("won") ? TEXT("战斗胜利，结果已保存。") : TEXT("战斗结束，结果已保存。");
         UE_LOG(LogTemp, Display, TEXT("HCZS battle synchronized: revision=%lld round=%d status=%s hand=%d"), CurrentBattle.Revision, CurrentBattle.Round, *CurrentBattle.Status, CurrentBattle.Hand.Num());
-        Notify();
+        if (bHasMainlineProgression && CurrentBattle.Status == TEXT("won") && CurrentBattle.EncounterId == TEXT("tutorial-5000"))
+        {
+            // Deliver the final hit to the existing presentation before starting
+            // an unrelated progress GET (scene readiness requires an idle request).
+            if (bAfterReceipt && LastVisualReceipt.bValid) Notify();
+            if (!bHasPendingIntent && !bRequestInFlight) ReadMainline(bPrepareSettlement);
+        }
+        else Notify();
     });
 }
 void UHczsGameInstance::RefreshCurrentBattle()
@@ -338,10 +359,112 @@ void UHczsGameInstance::RefreshCurrentBattle()
     MinimumBattleRevision = FMath::Max(MinimumBattleRevision, CurrentBattle.Revision);
     ReadBattle(CurrentBattle.Id);
 }
+void UHczsGameInstance::ResetMainlineProgress()
+{
+    MainlineProgress = FHczsMainlineProgress(); bMainlineStateCurrent = false;
+}
+void UHczsGameInstance::RefreshMainline()
+{
+    if (!CanStartRead() || !bLocalServiceAvailable || !bHasMainlineProgression || !bProfileStateCurrent || SelectedProfileId.IsEmpty()) return;
+    ReadMainline();
+}
+bool UHczsGameInstance::CanConfirmMainlineVictory() const
+{
+    return !bShuttingDown && bLocalServiceAvailable && bHasMainlineProgression && bProfileStateCurrent &&
+        Phase == EHczsSessionPhase::Battle && bBattleStateCurrent && bMainlineStateCurrent &&
+        !bRequestInFlight && !bHasPendingIntent && MainlineProgress.ProfileId == SelectedProfileId &&
+        MainlineProgress.ContentId == MainlineContentId && CanSettleMainlineBattle(MainlineProgress, CurrentBattle);
+}
+void UHczsGameInstance::ConfirmMainlineVictory()
+{
+    if (!CanConfirmMainlineVictory()) return;
+    // Explicit result-panel confirmation, after presentation has finished. Re-read
+    // both authorities before constructing the command; a victory alone never advances progress.
+    MinimumBattleRevision = FMath::Max(MinimumBattleRevision, CurrentBattle.Revision);
+    ReadBattle(CurrentBattle.Id, false, true);
+}
+void UHczsGameInstance::RefreshMainlineIdentity(bool bPrepareSettlement)
+{
+    // Internal identity refresh is allowed only after a confirmed settlement or
+    // a plain GET. It never replaces an unresolved command's original payload.
+    if (bRequestInFlight || (bHasPendingIntent && (!bPendingReceiptConfirmed || PendingIntentKind != TEXT("settlement")))) return;
+    Fetch(TEXT("mainline-content"), TEXT("GET"), TEXT("/bootstrap"), TEXT(""),
+        [this, bPrepareSettlement](TSharedPtr<FJsonObject> O, int32 Code, const FString& Error)
+    {
+        TArray<FHczsLocalProfile> Next; bool ProfilesAllowed = false, BattlesAllowed = false, Enabled = false; FString Content;
+        if (!Error.IsEmpty() || Code != 200 || !ParseBootstrap(O, Next, ProfilesAllowed, BattlesAllowed) ||
+            !ParseMainlineCapability(O, Enabled, Content) || !Enabled ||
+            !Next.ContainsByPredicate([this](const FHczsLocalProfile& P) { return P.Id == SelectedProfileId; }))
+        {
+            if (bPendingReceiptConfirmed) bPendingIntentRetryable = true;
+            const FString Reason = Error.IsEmpty() ? TEXT("UNEXPECTED_RESPONSE") : Error;
+            Fail(Reason, TEXT("主线内容身份读取失败，原进度和已确认操作均已保留。请重试同步。")); return;
+        }
+        MainlineContentId = Content; bMainlineStateCurrent = false;
+        ReadMainline(bPrepareSettlement, false);
+    });
+}
+void UHczsGameInstance::ReadMainline(bool bPrepareSettlement, bool bCanRefreshContent)
+{
+    if (!bHasMainlineProgression || SelectedProfileId.IsEmpty() || !bProfileStateCurrent || bRequestInFlight) return;
+    if (bHasPendingIntent && (PendingIntentKind != TEXT("settlement") || !bPendingReceiptConfirmed)) return;
+    const FString Profile = SelectedProfileId, Content = MainlineContentId, Battle = CurrentBattle.Id;
+    bMainlineStateCurrent = false;
+    const bool bAfterSettlement = bHasPendingIntent && PendingIntentKind == TEXT("settlement") && bPendingReceiptConfirmed;
+    UserMessage = bAfterSettlement ? TEXT("通关已保存，正在读取最新主线进度…") : TEXT("正在读取本地主线进度…");
+    Fetch(TEXT("mainline"), TEXT("GET"), ProfilesRoute() + TEXT("/mainline"), TEXT(""),
+        [this, Profile, Content, Battle, bPrepareSettlement, bAfterSettlement, bCanRefreshContent](TSharedPtr<FJsonObject> O, int32 Code, const FString& Error)
+    {
+        FHczsMainlineProgress Next;
+        const int64 MinimumRevision = bAfterSettlement ? PendingIntentRevision + 1 : 0;
+        FString ResponseContent; const auto Campaign = Child(O, TEXT("campaign"));
+        if (bCanRefreshContent && Error.IsEmpty() && Code == 200 && Campaign.IsValid() &&
+            Campaign->TryGetStringField(TEXT("contentId"), ResponseContent) && ResponseContent != Content)
+        { RefreshMainlineIdentity(bPrepareSettlement); return; }
+        FHczsMainlineProgress Prior = MainlineProgress;
+        // Bootstrap has supplied the new content identity. ParseMainline still
+        // requires the same supported source nodes/policy; completion may not regress.
+        if (Prior.bIsValid && Prior.ContentId != Content) Prior.ContentId = Content;
+        if (!Error.IsEmpty() || Code != 200 || !O.IsValid() || O->Values.Num() != 1 ||
+            Profile != SelectedProfileId || Content != MainlineContentId ||
+            !ParseMainline(Campaign, Profile, Content, Next) ||
+            !CanApplyMainlineProgress(Prior, Next, MinimumRevision) ||
+            (bAfterSettlement && (Next.CompletedBattleId != PendingIntentBattle ||
+                Next.CompletedBattleRevision != PendingSettlementBattleRevision)))
+        {
+            if (bAfterSettlement) bPendingIntentRetryable = true;
+            const FString Reason = Error.IsEmpty() ? TEXT("UNEXPECTED_RESPONSE") : Error;
+            Fail(Reason, bAfterSettlement ? TEXT("通关已保存，但最新进度读取失败。请重试同步，原通关操作不会再次提交。") : FriendlyError(Code, Reason));
+            return;
+        }
+        MainlineProgress = MoveTemp(Next); bMainlineStateCurrent = true; ErrorCode.Reset();
+        UE_LOG(LogTemp, Display, TEXT("HCZS mainline synchronized: revision=%lld passed=%d confirmed=%d"),
+            MainlineProgress.Revision, MainlineProgress.bFirstChallengePassed, bAfterSettlement);
+        if (bAfterSettlement) ClearPendingIntent();
+        if (bPrepareSettlement && Battle == CurrentBattle.Id && CanConfirmMainlineVictory())
+        {
+            auto Input = MakeShared<FJsonObject>();
+            // Reopening the same won battle reuses the same identity. The server's
+            // one-time challenge + immutable receipt also cover process interruption.
+            Input->SetStringField(TEXT("requestId"), TEXT("ue-mainline-") + CurrentBattle.Id);
+            Input->SetNumberField(TEXT("expectedRevision"), static_cast<double>(MainlineProgress.Revision));
+            Input->SetStringField(TEXT("contentId"), MainlineContentId); Input->SetStringField(TEXT("battleId"), CurrentBattle.Id);
+            UserMessage = TEXT("正在确认序章首战通关…");
+            BeginIntent(TEXT("settlement"), TEXT("POST"), ProfilesRoute() + TEXT("/mainline/settlements"), Json(Input), MainlineProgress.Revision);
+            return;
+        }
+        UserMessage = MainlineProgress.bFirstChallengePassed
+            ? TEXT("序章首战已通关；下一挑战的战斗仍待恢复。本次不发放奖励。")
+            : TEXT("序章首战尚未确认通关。胜利后可在结果面板确认。");
+        Notify();
+    });
+}
 void UHczsGameInstance::BeginIntent(const FString& Kind, const FString& Verb, const FString& Route, const FString& Body, int64 ExpectedRevision)
 {
     PendingIntentKind = Kind; PendingIntentVerb = Verb; PendingIntentRoute = Route; PendingIntentBody = Body;
-    PendingIntentProfile = SelectedProfileId; PendingIntentBattle = Kind == TEXT("action") ? CurrentBattle.Id : FString();
+    PendingIntentProfile = SelectedProfileId; PendingIntentBattle = (Kind == TEXT("action") || Kind == TEXT("settlement")) ? CurrentBattle.Id : FString();
+    PendingSettlementContentId = Kind == TEXT("settlement") ? MainlineContentId : FString();
+    PendingSettlementBattleRevision = Kind == TEXT("settlement") ? CurrentBattle.Revision : 0;
     PendingIntentEncounter = Kind == TEXT("create-battle") ? SelectedEncounterId : FString(); PendingIntentRevision = ExpectedRevision;
     bHasPendingIntent = true; bPendingIntentRetryable = false; bPendingReceiptConfirmed = false; ConfirmedBattleId.Reset(); ConfirmedBattleRevision = 0;
     LastVisualReceipt = FHczsBattleVisualReceipt(); PendingVisualReceipt = FHczsBattleVisualReceipt();
@@ -368,6 +491,7 @@ void UHczsGameInstance::ClearPendingIntent(bool bConfirmedCard)
     bHasPendingIntent = false; bPendingIntentRetryable = false; bPendingReceiptConfirmed = false;
     PendingIntentKind.Reset(); PendingIntentVerb.Reset(); PendingIntentRoute.Reset(); PendingIntentBody.Reset();
     PendingIntentProfile.Reset(); PendingIntentBattle.Reset(); PendingIntentEncounter.Reset(); PendingIntentRevision = 0;
+    PendingSettlementContentId.Reset(); PendingSettlementBattleRevision = 0;
     ConfirmedBattleId.Reset(); ConfirmedBattleRevision = 0;
     PendingVisualReceipt = FHczsBattleVisualReceipt();
     if (bWasDispatched) OnCardIntentSettledNative.Broadcast(VisualRequest, bConfirmedCard);
@@ -434,6 +558,24 @@ void UHczsGameInstance::SendPendingIntent()
     {
         if (!Error.IsEmpty())
         {
+            if (PendingIntentKind == TEXT("settlement"))
+            {
+                bMainlineStateCurrent = false;
+                if (Code == 0 || Code >= 500 || Error == TEXT("INVALID_JSON") || Error == TEXT("RESPONSE_TOO_LARGE"))
+                {
+                    bPendingIntentRetryable = true;
+                    Fail(Error, TEXT("通关确认结果未知。请重试原操作，同一通关只会保存一次。"));
+                }
+                else
+                {
+                    // A definite rejection is reconciled by GET, never by changing
+                    // the request id or silently resubmitting a new command.
+                    ClearPendingIntent(); Fail(Error, FriendlyError(Code, Error));
+                    if (Error == TEXT("CONTENT_CHANGED") || Code == 404) RefreshBootstrap();
+                    else ReadMainline();
+                }
+                return;
+            }
             if (Code == 409)
             {
                 const FString Kind = PendingIntentKind, Battle = PendingIntentBattle; ClearPendingIntent(); bBattleStateCurrent = false;
@@ -448,6 +590,18 @@ void UHczsGameInstance::SendPendingIntent()
                 if (Kind == TEXT("action") && !Battle.IsEmpty()) ReadBattle(Battle);
             }
             return;
+        }
+        if (PendingIntentKind == TEXT("settlement"))
+        {
+            FHczsMainlineProgress Receipt;
+            if (Code != 200 || !ParseMainlineReceipt(O, PendingIntentProfile, PendingSettlementContentId,
+                PendingIntentBattle, PendingSettlementBattleRevision, PendingIntentRevision, Receipt))
+            {
+                bPendingIntentRetryable = true; bMainlineStateCurrent = false;
+                Fail(TEXT("UNEXPECTED_RESPONSE"), TEXT("通关回执不符合契约，请重试原操作确认。未更新主线进度。")); return;
+            }
+            // Historical idempotent receipts are confirmations, not current state.
+            bPendingReceiptConfirmed = true; ReadMainline(); return;
         }
         if (PendingIntentKind == TEXT("hall"))
         {
@@ -498,7 +652,9 @@ void UHczsGameInstance::RetryPendingIntent()
     if (bPendingReceiptConfirmed)
     {
         bPendingIntentRetryable = false;
-        if (PendingIntentKind == TEXT("hall")) ReadHall(); else ReadBattle(ConfirmedBattleId, true);
+        if (PendingIntentKind == TEXT("hall")) ReadHall();
+        else if (PendingIntentKind == TEXT("settlement")) ReadMainline();
+        else ReadBattle(ConfirmedBattleId, true);
     }
     else SendPendingIntent();
 }

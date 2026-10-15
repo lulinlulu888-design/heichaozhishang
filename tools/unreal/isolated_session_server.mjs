@@ -10,7 +10,8 @@ import { setTimeout as waitForResponseDelay } from 'node:timers/promises';
 import { createApp } from '../../server/src/app.js';
 import mongoose from '../../server/node_modules/mongoose/index.js';
 import { IDENTITY_COLLECTION, digest, isTestPort, isGeneratedDatabase, within, validateMongoUri,
-  validateResumeManifest, validateDatabaseIdentity, validateResumeCollections, validateOwnedDatabaseForDrop } from './isolated_session_manifest.mjs';
+  validateResumeManifest, validateDatabaseIdentity, validateResumeCollections, validateOwnedDatabaseForDrop, resolveMainlineOption, resolveMainlineFaultOption } from './isolated_session_manifest.mjs';
+import { MainlineFaultSequence } from './isolated_mainline_faults.mjs';
 import { MongoProfileStore } from '../../server/src/database/mongo-profiles.js';
 import { MongoBattleStore } from '../../server/src/database/mongo-battles.js';
 import { initializeFreshTestDatabase, assertProductionMetadata } from './isolated_session_lifecycle.mjs';
@@ -20,6 +21,8 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const { values } = parseArgs({ options: { port: { type: 'string' },
   'record-directory': { type: 'string' }, faults: { type: 'boolean', default: false },
   'card-response-delay-ms': { type: 'string' },
+  mainline: { type: 'boolean' },
+  'mainline-faults': { type: 'boolean', default: false },
   'preserve-database': { type: 'boolean', default: false }, 'resume-manifest': { type: 'string' } } });
 function parseCardResponseDelayMs(value) {
   if (!/^\d+$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value) > 5000)
@@ -28,7 +31,8 @@ function parseCardResponseDelayMs(value) {
 }
 const requestedCardResponseDelayMs = parseCardResponseDelayMs(values['card-response-delay-ms'] ?? '0');
 const resumeMode = Boolean(values['resume-manifest']);
-if(resumeMode && (values.port || values['record-directory'] || values.faults || values['card-response-delay-ms'] !== undefined))throw Error('Resume inherits its test port, directory and response delay; overrides and faults are forbidden');
+const mainlineFaults = resolveMainlineFaultOption(values['mainline-faults'], {mainlineEnabled:values.mainline===true,faults:values.faults,resume:resumeMode});
+if(resumeMode && (values.port || values['record-directory'] || values.faults || values['card-response-delay-ms'] !== undefined || values.mainline !== undefined))throw Error('Resume inherits its test port, directory, response delay and mainline mode; overrides and faults are forbidden');
 const allowedRoot = resolve(root, 'analysis/unreal/session-test');
 const previousManifestPath = resumeMode ? resolve(values['resume-manifest']) : null;
 const recordDirectory = resumeMode ? dirname(previousManifestPath) : resolve(values['record-directory'] ?? resolve(allowedRoot, randomUUID()));
@@ -47,6 +51,7 @@ if(resumeMode) {
 const port = resumeMode ? previousManifest.port : Number(values.port ?? '7464');
 if(!isTestPort(port))throw Error('Choose a dedicated test port');
 const cardResponseDelayMs = resumeMode ? parseCardResponseDelayMs(previousManifest.cardResponseDelayMs ?? 0) : requestedCardResponseDelayMs;
+const mainlineEnabled = resolveMainlineOption(values.mainline, previousManifest);
 const mongoDatabase = resumeMode ? previousManifest.mongoDatabase : `hczs_test_ue_${randomUUID().replaceAll('-', '')}`;
 const runId=resumeMode ? previousManifest.runId : randomUUID();
 const databaseIdentity=resumeMode ? previousManifest.databaseIdentity : randomUUID();
@@ -59,7 +64,7 @@ const startupPath=resolve(recordDirectory,resumeMode?`startup-process-${processI
 let startupPhase='allocated';
 const startupJournal={schemaVersion:1,mode:'isolated-session-startup-ownership',pid:process.pid,port,runId,databaseIdentity,
   processIdentity,processIndex,mongoDatabase,mongoEndpoint:'127.0.0.1:27027',mongoUriSha256,recordDirectory,
-  preserveDatabase:values['preserve-database'],resumed:resumeMode,allocatedAt:Date.now(),phase:startupPhase,databaseClaimed:false,
+  preserveDatabase:values['preserve-database'],mainlineEnabled,mainlineFaults,resumed:resumeMode,allocatedAt:Date.now(),phase:startupPhase,databaseClaimed:false,
   phases:[{phase:startupPhase,time:Date.now(),databaseClaimed:false}]};
 // The persistent exclusive first journal also prevents two initial runners
 // from publishing conflicting manifests into the same report directory.
@@ -71,6 +76,7 @@ async function journal(phase,extra={}) {
 }
 const checks = { droppedCreation: false, creationRetrySamePayload: false, historicalReceiptReadFresh: false,
   droppedConfirmedRead: false, retryConfirmedReadWithoutNewMutation: false, injectedRevisionConflict: false };
+const mainlineFaultSequence=new MainlineFaultSequence(mainlineFaults);
 let firstCreation, historicalBattleId, postCreationDelivered = false, delayedReadBattle = null;
 let creationMutationCount = 0;
 const note = value => appendFile(tracePath, JSON.stringify({ time: Date.now(), processIdentity, processIndex, ...value }) + '\n');
@@ -108,7 +114,7 @@ async function identityConnection() {
 async function claimDatabase() {
   if(!resumeMode) {
     await initializeFreshTestDatabase({mongoUri,identity:{_id:'identity',schemaVersion:1,mode:'isolated-native-session-test',runId,databaseIdentity,mongoDatabase,
-      recordDirectory,mongoUriSha256,processIdentity,processIndex,lifecycle:'starting',createdAt:Date.now()},onPhase:async phase=>{
+      recordDirectory,mongoUriSha256,processIdentity,processIndex,mainlineEnabled,mainlineFaults,lifecycle:'starting',createdAt:Date.now()},onPhase:async phase=>{
         if(phase==='identity-claimed')identityClaimed=true;
         await journal(phase);
       }});
@@ -124,7 +130,7 @@ async function claimDatabase() {
       const [profile,battle,config,release,profileCount,battleCount,creationCount]=await Promise.all([
         c.db.collection('profiles').findOne({}),c.db.collection('hczs_battles').findOne({}),c.db.collection('hczs_admin_config').findOne({_id:'config'}),
         c.db.collection('hczs_admin_releases').findOne({_id:0}),c.db.collection('profiles').countDocuments(),c.db.collection('hczs_battles').countDocuments(),c.db.collection('hczs_battle_creations').countDocuments()]);
-      const checkpoint=validateResumeCollections({names,profile,battle,config,release,profileCount,battleCount,creationCount});
+      const checkpoint=validateResumeCollections({names,profile,battle,config,release,profileCount,battleCount,creationCount,mainlineEnabled});
       // Use the production store decoders for hashes, tagged numbers, state and identity.
       new MongoProfileStore(c).map(profile);
       const decoded=new MongoBattleStore(c).decode(battle);
@@ -157,6 +163,7 @@ async function close() {
   if (proxy) await new Promise(resolveClose => { proxy.close(resolveClose); setTimeout(() => proxy.closeAllConnections(), 1000).unref(); });
   if (app) await app.close();
   await writeFile(resolve(recordDirectory, 'fault-checks.json'), JSON.stringify({ faultMode: values.faults, checks, passed: !values.faults || Object.values(checks).every(Boolean) }, null, 2));
+  if(mainlineFaults)await writeFile(resolve(recordDirectory,'mainline-fault-checks.json'),JSON.stringify(mainlineFaultSequence.snapshot(),null,2));
   const connection=await identityConnection();
   try {
     const stopped=await connection.db.collection(IDENTITY_COLLECTION).updateOne({_id:'identity',runId,databaseIdentity,processIdentity,activeManifestSha256:manifestHash},{$set:{lifecycle:'stopped',stoppedAt:Date.now()}});
@@ -175,6 +182,7 @@ try {
   await journal('app-initializing');
   app = await createApp({ port: 0, storage: 'mongodb', mongoUri, mongoDatabase,
     dataDirectory: resolve(root, 'analysis/game-data'), tutorialDirectory: resolve(root, 'analysis/first-encounter'), cityPreview: true,
+    ...(mainlineEnabled ? { mainlineDirectory: resolve(root, 'analysis/mainline-progression') } : {}),
     allowedOrigins: [], log: message => note({ phase: 'backend-error', message: String(message).slice(0, 500) }) });
   async function upstream(path, method, body) {
     const result = await fetch(app.address + path, { method, headers: { accept: 'application/json', ...(body ? {'content-type':'application/json'} : {}) },
@@ -194,10 +202,11 @@ try {
         try {
           const identity=await connection.db.collection(IDENTITY_COLLECTION).findOne({_id:'identity'});
           validateOwnedDatabaseForDrop(identity,{databaseName:connection.name,runId,databaseIdentity,processIdentity});
-          if(identity.lifecycle!=='running'||identity.activeManifestSha256!==manifestHash)throw Error('Live database claim differs from the published manifest');
+          if(identity.lifecycle!=='running'||identity.activeManifestSha256!==manifestHash||(identity.mainlineEnabled??false)!==mainlineEnabled||
+            (identity.mainlineFaults??false)!==mainlineFaults)throw Error('Live database claim differs from the published manifest');
           response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({schemaVersion:1,mode:'isolated-native-session-test-identity',readOnly:true,
             pid:process.pid,port,mongoDatabase,mongoEndpoint:'127.0.0.1:27027',runId,databaseIdentity,processIdentity,processIndex,
-            manifestSha256:manifestHash,databaseLifecycle:identity.lifecycle}));
+            manifestSha256:manifestHash,databaseLifecycle:identity.lifecycle,mainlineEnabled,mainlineFaults}));
         } finally {await connection.close();}
         return;
       }
@@ -228,9 +237,18 @@ try {
         ...(input?.requestId ? { requestId: input.requestId, expectedRevision: input.expectedRevision, type: input.type } : {}),
         ...(typeof input?.instanceId==='string'?{instanceId:input.instanceId}:{}),
         ...(typeof input?.encounterId==='string'?{encounterId:input.encounterId}:{}),
-        status: result.status, replayed: result.json?.replayed, revision: result.json?.battle?.revision ?? result.json?.hall?.revision,
-        battleId: result.json?.battle?.id,profileId:result.json?.profile?.id ?? result.json?.battle?.profileId,
+        ...(typeof input?.contentId==='string'?{contentId:input.contentId}:{}),
+        status: result.status, replayed: result.json?.replayed, revision: result.json?.battle?.revision ?? result.json?.hall?.revision ?? result.json?.campaign?.revision,
+        battleId: result.json?.battle?.id ?? result.json?.settlement?.battleId,profileId:result.json?.profile?.id ?? result.json?.battle?.profileId ?? result.json?.campaign?.profileId,
         ...(isAction && result.status===200 ? projectVisualTimingReceipt(result.json) : {}) };
+      const mainlineFault=mainlineFaultSequence.inspect(event);
+      if(mainlineFault) {
+        const completeBytes=Buffer.from(result.text,'utf8'),partialBytes=completeBytes.subarray(0,Math.min(32,completeBytes.length-1));
+        await note({...event,mainlineFault,wireFailure:'truncated-http-body',declaredBytes:completeBytes.length,deliveredBytes:partialBytes.length,
+          ...(mainlineFault==='truncate-commit'?{droppedAfterCommit:true}:{droppedAfterRead:true})});
+        response.writeHead(200,{'content-type':'application/json; charset=utf-8','content-length':completeBytes.length,connection:'close'});
+        response.write(partialBytes);setTimeout(()=>response.destroy(),25);return;
+      }
       if (isCreate) creationMutationCount++;
       if (values.faults && isCreate && !checks.droppedCreation && result.status === 201) {
         firstCreation = { requestId: input.requestId, hash: digest(body) }; historicalBattleId = result.json.battle.id;
@@ -269,7 +287,7 @@ try {
   await new Promise((resolveListen, reject) => { proxy.once('error', reject); proxy.listen(port, '127.0.0.1', resolveListen); });
   const manifest = { schemaVersion: 2, mode: 'isolated-native-session-test', pid: process.pid, address: `http://127.0.0.1:${port}`, port,
     mongoDatabase, mongoEndpoint: '127.0.0.1:27027', mongoUriSha256, runId, databaseIdentity, processIdentity, processIndex,
-    preserveDatabase:values['preserve-database'], faults: values.faults, cardResponseDelayMs, controlToken, recordDirectory, tracePath,
+    preserveDatabase:values['preserve-database'], faults: values.faults, cardResponseDelayMs, mainlineEnabled, mainlineFaults, controlToken, recordDirectory, tracePath,
     ...(resumeMode?{previousManifestSha256:previousManifestHash,firstManifestSha256:previousManifest.firstManifestSha256??previousManifestHash,
       previousProcessIdentity:previousManifest.processIdentity,previousPid:previousManifest.pid,resumeCheckpoint:previousCheckpoint}: {}) };
   const manifestText=JSON.stringify(manifest,null,2);manifestHash=digest(manifestText);
@@ -284,7 +302,7 @@ try {
   await note({phase:'test-server-ready',pid:process.pid,manifestSha256:manifestHash,resumed:resumeMode,mongoDatabase,databaseIdentity,
     ...(resumeMode?{previousManifestSha256:previousManifestHash,previousProcessIdentity:previousManifest.processIdentity,resumeCheckpoint:previousCheckpoint}: {})});
   await journal('running',{manifestSha256:manifestHash});
-  console.log(JSON.stringify({ ready: true, pid: process.pid, port, mongoDatabase, manifestPath, faults: values.faults,cardResponseDelayMs,resumed:resumeMode,processIndex }));
+  console.log(JSON.stringify({ ready: true, pid: process.pid, port, mongoDatabase, manifestPath, faults: values.faults,cardResponseDelayMs,mainlineEnabled,mainlineFaults,resumed:resumeMode,processIndex }));
   process.on('SIGINT', () => close().catch(error => { console.error(error.message); process.exitCode = 1; }));
   process.on('SIGTERM', () => close().catch(error => { console.error(error.message); process.exitCode = 1; }));
 } catch (error) {

@@ -12,6 +12,7 @@ namespace
 {
     const FString ProfileId = TEXT("11111111-1111-1111-1111-111111111111");
     const FString BattleId = TEXT("22222222-2222-2222-2222-222222222222");
+    const FString MainlineId = TEXT("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
     TSharedPtr<FJsonObject> Read(const FString& Text)
     {
         TSharedPtr<FJsonObject> Object; FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Object); return Object;
@@ -68,6 +69,124 @@ namespace
         }
         return nullptr;
     }
+    TSharedPtr<FJsonObject> MainlineFixture(bool bPassed = false)
+    {
+        auto C = Read(TEXT(R"JSON({
+          "profileId":"11111111-1111-1111-1111-111111111111","activityId":2,
+          "contentId":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "policy":"local-prologue-progress-v1","revision":0,"updatedAt":null,
+          "initialStateAuthority":"local-fresh-profile-policy; not recovered original account state",
+          "challenges":[
+            {"id":3997,"name":"终局","subtitle":"序章","battleId":5000,"predecessors":[],"hasLoot":false,
+             "status":"available","successCount":0,"encounterId":"tutorial-5000","executable":true},
+            {"id":3998,"name":"终局","subtitle":"序章","battleId":1703,"predecessors":[3997],"hasLoot":false,
+             "status":"locked","successCount":0,"encounterId":null,"executable":false,
+             "unavailableReason":"original-boss-mechanics-and-client-not-restored"}],"completed":[]
+        })JSON"));
+        if (bPassed)
+        {
+            C->SetNumberField(TEXT("revision"), 1); C->SetNumberField(TEXT("updatedAt"), 200);
+            auto First = C->GetArrayField(TEXT("challenges"))[0]->AsObject();
+            First->SetStringField(TEXT("status"), TEXT("passed")); First->SetNumberField(TEXT("successCount"), 1);
+            C->GetArrayField(TEXT("challenges"))[1]->AsObject()->SetStringField(TEXT("status"), TEXT("available"));
+            auto Done = Read(TEXT(R"JSON({"challengeId":3997,"battleId":"22222222-2222-2222-2222-222222222222","battleRevision":9,"completedAt":200})JSON"));
+            C->SetArrayField(TEXT("completed"), {MakeShared<FJsonValueObject>(Done)});
+        }
+        return C;
+    }
+    TSharedPtr<FJsonObject> MainlineReceiptFixture()
+    {
+        auto R = MakeShared<FJsonObject>(); auto C = MainlineFixture(true);
+        R->SetObjectField(TEXT("campaign"), C);
+        R->SetObjectField(TEXT("settlement"), Read(Serialize(C->GetArrayField(TEXT("completed"))[0]->AsObject())));
+        R->SetArrayField(TEXT("rewards"), {}); R->SetBoolField(TEXT("replayed"), false); return R;
+    }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHczsSessionMainlineContractTest, "Hczs.LocalSession.Contract.MainlineProgress", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FHczsSessionMainlineContractTest::RunTest(const FString& Parameters)
+{
+    FHczsMainlineProgress Fresh, Passed, Rejected;
+    TestTrue(TEXT("Fresh progress has revision zero and null timestamp"), ParseMainline(MainlineFixture(), ProfileId, MainlineId, Fresh));
+    TestTrue(TEXT("One confirmed tutorial win projects passed and next available"), ParseMainline(MainlineFixture(true), ProfileId, MainlineId, Passed));
+    TestTrue(TEXT("First challenge is recorded"), Passed.bFirstChallengePassed);
+    TestFalse(TEXT("Next challenge never gains an executable boss"), Passed.Challenges[1].bExecutable);
+    TestEqual(TEXT("Next source challenge may be available without a restored battle"), Passed.Challenges[1].Status, FString(TEXT("available")));
+    TestFalse(TEXT("Cross-profile campaign rejected"), ParseMainline(MainlineFixture(), BattleId, MainlineId, Rejected));
+    TestFalse(TEXT("Unverified content identity rejected"), ParseMainline(MainlineFixture(), ProfileId, FString::ChrN(64, 'f'), Rejected));
+    auto Bad = MainlineFixture(); Bad->SetNumberField(TEXT("revision"), 1);
+    TestFalse(TEXT("Completion is required for revision one"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(); Bad->SetNumberField(TEXT("updatedAt"), 0);
+    TestFalse(TEXT("Fresh virtual state does not invent a save timestamp"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(true); Bad->GetArrayField(TEXT("challenges"))[1]->AsObject()->SetBoolField(TEXT("executable"), true);
+    TestFalse(TEXT("Unrestored boss cannot become executable"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(); Bad->GetArrayField(TEXT("challenges"))[0]->AsObject()->SetStringField(TEXT("encounterId"), TEXT("city-preview-10405"));
+    TestFalse(TEXT("City preview cannot replace the tutorial"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(); Bad->GetArrayField(TEXT("challenges"))[0]->AsObject()->SetBoolField(TEXT("hasLoot"), true);
+    TestFalse(TEXT("Unimplemented rewards rejected"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(true); Bad->GetArrayField(TEXT("completed"))[0]->AsObject()->SetNumberField(TEXT("challengeId"), 3998);
+    TestFalse(TEXT("Unrestored challenge completion rejected"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(true); Bad->SetNumberField(TEXT("updatedAt"), 199);
+    TestFalse(TEXT("Completion cannot postdate the authoritative state"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(); Bad->SetStringField(TEXT("policy"), TEXT("original-account-restored"));
+    TestFalse(TEXT("Local progress does not claim recovered original account state"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    TestTrue(TEXT("Latest progress advances monotonically"), CanApplyMainlineProgress(Fresh, Passed, 1));
+    TestFalse(TEXT("Stale GET cannot undo confirmation"), CanApplyMainlineProgress(Passed, Fresh, 1));
+    auto Changed = Passed; Changed.ContentId = FString::ChrN(64, 'f');
+    TestFalse(TEXT("Unverified content switch rejected"), CanApplyMainlineProgress(Passed, Changed));
+    Changed = Passed; Changed.ProfileId = BattleId;
+    TestFalse(TEXT("Another profile cannot borrow a completed campaign"), CanApplyMainlineProgress(Passed, Changed));
+    Changed = Passed; Changed.CompletedBattleId = ProfileId;
+    TestFalse(TEXT("Same revision cannot replace the completed battle"), CanApplyMainlineProgress(Passed, Changed));
+    Changed = Passed; Changed.CompletedAt = 199;
+    TestFalse(TEXT("Completion timestamp is immutable"), CanApplyMainlineProgress(Passed, Changed));
+    FHczsBattleView Won; Won.bIsValid = true; Won.Id = BattleId; Won.ProfileId = ProfileId; Won.Revision = 9;
+    Won.EncounterId = TEXT("tutorial-5000"); Won.PlayerId = TEXT("1"); Won.EnemyId = TEXT("991");
+    Won.Status = TEXT("won"); Won.OutcomeReason = TEXT("enemy-defeated");
+    TestTrue(TEXT("Only verified tutorial victory enables confirmation"), CanSettleMainlineBattle(Fresh, Won));
+    TestFalse(TEXT("Passed challenge cannot be settled twice"), CanSettleMainlineBattle(Passed, Won));
+    Won.EncounterId = TEXT("city-preview-10405");
+    TestFalse(TEXT("City victory is not mainline victory"), CanSettleMainlineBattle(Fresh, Won));
+    Won.EncounterId = TEXT("tutorial-5000"); Won.EnemyId = TEXT("6605");
+    TestFalse(TEXT("Wrong enemy cannot impersonate the restored scene"), CanSettleMainlineBattle(Fresh, Won));
+    Won.EnemyId = TEXT("991"); Won.ProfileId = BattleId;
+    TestFalse(TEXT("Cross-profile victory cannot advance progress"), CanSettleMainlineBattle(Fresh, Won));
+    Won.ProfileId = ProfileId; Won.Status = TEXT("player-turn");
+    TestFalse(TEXT("Unfinished battle has no confirmation"), CanSettleMainlineBattle(Fresh, Won));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHczsSessionMainlineReceiptTest, "Hczs.LocalSession.Contract.MainlineReceiptAndCapability", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FHczsSessionMainlineReceiptTest::RunTest(const FString& Parameters)
+{
+    auto Bootstrap = Read(TEXT(R"JSON({"capabilities":["local-profiles","encounter-selection"]})JSON"));
+    bool Enabled = true; FString Content;
+    TestTrue(TEXT("Older service remains supported without mainline"), ParseMainlineCapability(Bootstrap, Enabled, Content));
+    TestFalse(TEXT("Absent capability does not invent progress"), Enabled);
+    Bootstrap = Read(TEXT(R"JSON({"capabilities":["mainline-progression"],
+      "content":{"mainlineId":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+      "endpoints":{"mainline":"/api/rebuild/v1/profiles/{profileId}/mainline","settlements":"/api/rebuild/v1/profiles/{profileId}/mainline/settlements"}})JSON"));
+    TestTrue(TEXT("Versioned capability requires reviewed local routes and content hash"), ParseMainlineCapability(Bootstrap, Enabled, Content));
+    TestTrue(TEXT("Mainline is explicitly enabled"), Enabled);
+    Child(Bootstrap, TEXT("endpoints"))->SetStringField(TEXT("settlements"), TEXT("https://elsewhere/settle"));
+    TestFalse(TEXT("External settlement route rejected"), ParseMainlineCapability(Bootstrap, Enabled, Content));
+    Child(Bootstrap, TEXT("content"))->SetStringField(TEXT("mainlineId"), TEXT("unknown"));
+    TestFalse(TEXT("Malformed content identity rejected"), ParseMainlineCapability(Bootstrap, Enabled, Content));
+    FHczsMainlineProgress Progress;
+    auto R = MainlineReceiptFixture();
+    TestTrue(TEXT("Actual one-time receipt accepted"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 9, 0, Progress));
+    R->SetBoolField(TEXT("replayed"), true);
+    TestTrue(TEXT("Identical idempotent historical receipt accepted"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 9, 0, Progress));
+    TestFalse(TEXT("Expected revision comes from campaign, not battle"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 9, 9, Progress));
+    TestFalse(TEXT("Receipt must confirm the exact won battle revision"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 8, 0, Progress));
+    TestFalse(TEXT("Another battle cannot satisfy this command"), ParseMainlineReceipt(R, ProfileId, MainlineId, ProfileId, 9, 0, Progress));
+    Child(R, TEXT("settlement"))->SetNumberField(TEXT("completedAt"), 199);
+    TestFalse(TEXT("Settlement must equal the campaign completion row"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 9, 0, Progress));
+    R = MainlineReceiptFixture(); R->SetArrayField(TEXT("rewards"), {MakeShared<FJsonValueString>(TEXT("invented-reward"))});
+    TestFalse(TEXT("Reward list must remain empty"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 9, 0, Progress));
+    R = MainlineReceiptFixture(); R->SetStringField(TEXT("replayed"), TEXT("true"));
+    TestFalse(TEXT("Replay flag must be a boolean"), ParseMainlineReceipt(R, ProfileId, MainlineId, BattleId, 9, 0, Progress));
+    return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHczsSessionBattleContractTest, "Hczs.LocalSession.Contract.BattleProjection", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

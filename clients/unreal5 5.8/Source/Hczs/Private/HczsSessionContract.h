@@ -27,6 +27,12 @@ namespace HczsSessionContract
     bool ParseProfile(const TSharedPtr<FJsonObject>& Object, FHczsLocalProfile& Out);
     bool ParseProfiles(const TSharedPtr<FJsonObject>& Object, TArray<FHczsLocalProfile>& Out);
     bool ParseBootstrap(const TSharedPtr<FJsonObject>& Object, TArray<FHczsLocalProfile>& Out, bool& bAllowProfiles, bool& bAllowBattles);
+    bool ParseMainlineCapability(const TSharedPtr<FJsonObject>& Object, bool& bEnabled, FString& ContentId);
+    bool ParseMainline(const TSharedPtr<FJsonObject>& Object, const FString& ProfileId, const FString& ContentId, FHczsMainlineProgress& Out);
+    bool ParseMainlineReceipt(const TSharedPtr<FJsonObject>& Object, const FString& ProfileId, const FString& ContentId,
+        const FString& BattleId, int64 BattleRevision, int64 ExpectedRevision, FHczsMainlineProgress& Out);
+    bool CanSettleMainlineBattle(const FHczsMainlineProgress& Progress, const FHczsBattleView& Battle);
+    bool CanApplyMainlineProgress(const FHczsMainlineProgress& Existing, const FHczsMainlineProgress& Incoming, int64 MinimumRevision = 0);
     bool ParseHall(const TSharedPtr<FJsonObject>& Object, const FString& ProfileId, FHczsHallPreference& Out);
     bool ParseEncounters(const TSharedPtr<FJsonObject>& Object, TArray<FHczsEncounterSummary>& Out);
     bool ParseScenario(const TSharedPtr<FJsonObject>& Object, FScenario& Out);

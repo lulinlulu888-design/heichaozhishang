@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import mongoose from 'mongoose';
 import { fixture, request } from './helpers.js';
+import { loadMainline, mainlineContentId } from '../src/mainline.js';
+import { MongoProfileStore } from '../src/database/mongo-profiles.js';
+import { MongoBattleStore } from '../src/database/mongo-battles.js';
+import { MongoMainlineStore } from '../src/database/mongo-mainline.js';
 
 const uri=process.env.HCZS_TEST_MONGODB_URI;
 const enabled={skip:!uri && 'Set HCZS_TEST_MONGODB_URI to an independent test replica set'};
@@ -80,4 +84,77 @@ test('Authoritative win settlement is atomic, concurrent/retry safe, profile sco
   const retry=await request(server.address,path+'/settlements','POST',input);
   assert.equal(retry.body.replayed,true);assert.deepEqual(retry.body.campaign,receipt.campaign);
   assert.equal((await request(server.address,'/profiles/'+id+'/battles/'+b.id)).body.battle.state.status,'won');
+  await server.close();
+
+  // Keep using this test's generated, owned database and real victorious battle.
+  // Availability changes are simulated definitions, never production enablement.
+  const definition=await loadMainline(options.mainlineDirectory,{resolve:()=>({})});
+  const profiles=new MongoProfileStore(connection),battles=new MongoBattleStore(connection);
+  const original=new MongoMainlineStore(connection,definition,profiles,battles);
+  const states=connection.db.collection('mainline_states'),requests=connection.db.collection('mainline_requests');
+  const stateKey=JSON.stringify([id,2]),requestKey=JSON.stringify([id,input.requestId]);
+  const stateRow=await states.findOne({_id:stateKey}),requestRow=await requests.findOne({_id:requestKey});
+  assert.equal(stateRow.schemaVersion,2);assert.equal(requestRow.schemaVersion,2);
+  const restore=async()=>{await states.replaceOne({_id:stateKey},stateRow,{upsert:true});
+    await requests.replaceOne({_id:requestKey},requestRow,{upsert:true});};
+
+  const upgraded=structuredClone(definition);
+  upgraded.nodes[1].encounterId='prologue-boss-1703';upgraded.contentId=mainlineContentId(upgraded);
+  const next=new MongoMainlineStore(connection,upgraded,profiles,battles);
+  const view=await next.get(id);
+  assert.equal(view.revision,1);assert.equal(view.challenges[1].executable,true);
+  assert.deepEqual((await next.settle(id,input)).campaign,receipt.campaign,'Historical retry keeps its original definition');
+
+  // The first deployed format had no frozen definition. It must remain readable
+  // after adding a new binding, without fabricating a new chapter or receipt.
+  await states.updateOne({_id:stateKey},{$set:{schemaVersion:1},$unset:{definitionJson:''}});
+  await requests.updateOne({_id:requestKey},{$set:{schemaVersion:1},$unset:{definitionJson:''}});
+  assert.equal((await next.get(id)).revision,1);
+  assert.deepEqual((await next.settle(id,input)).campaign,receipt.campaign);
+  const changedPolicy=structuredClone(upgraded);changedPolicy.policy='future-incompatible-policy';
+  changedPolicy.contentId=mainlineContentId(changedPolicy);
+  const incompatible=new MongoMainlineStore(connection,changedPolicy,profiles,battles);
+  await assert.rejects(()=>incompatible.get(id),{code:'MAINLINE_CONTENT_CHANGED',status:409});
+  await restore();
+  await assert.rejects(()=>incompatible.get(id),{code:'MAINLINE_CONTENT_CHANGED',status:409});
+  assert.deepEqual(await states.findOne({_id:stateKey}),stateRow,'Incompatible definitions cannot reset persisted progress');
+
+  // A receipt without its atomically committed state is data loss, not rev0.
+  await states.deleteOne({_id:stateKey});
+  await assert.rejects(()=>original.get(id),{code:'SAVE_CORRUPT'});
+  await assert.rejects(()=>original.settle(id,input),{code:'SAVE_CORRUPT'});
+  await assert.rejects(()=>original.settle(id,{...input,requestId:'missing-state'}),{code:'SAVE_CORRUPT'});
+  await restore();
+
+  // Deterministic GET/first-commit interleaving: its first state read observed
+  // null, then the transaction became visible before the receipt read.
+  const findById=original.states.findById;
+  let first=true;
+  original.states.findById=function(...args){if(first){first=false;return {lean:async()=>null};}
+    return findById.apply(this,args);};
+  try { assert.equal((await original.get(id)).revision,1); }
+  finally { original.states.findById=findById; }
+
+  // Even a correctly hashed forged receipt may not mark an unimplemented boss
+  // completed, nor may GET quietly accept that impossible saved state.
+  const forgedDone={challengeId:3998,battleId:randomUUID(),battleRevision:1,completedAt:stateRow.updatedAt};
+  await states.updateOne({_id:stateKey},{$set:{revision:2,completed:[...stateRow.completed,forgedDone]}});
+  await assert.rejects(()=>original.get(id),{code:'SAVE_CORRUPT'});
+  const forgedResult=structuredClone(receipt);
+  forgedResult.campaign.completed.push(forgedDone);forgedResult.campaign.revision=2;
+  forgedResult.campaign.challenges[1].status='passed';forgedResult.campaign.challenges[1].successCount=1;
+  forgedResult.settlement=forgedDone;
+  const forgedText=JSON.stringify(forgedResult),forgedInput={...input,requestId:'forged',expectedRevision:1,battleId:forgedDone.battleId};
+  await requests.insertOne({...requestRow,_id:JSON.stringify([id,'forged']),requestId:'forged',
+    payload:JSON.stringify({expectedRevision:1,contentId:input.contentId,battleId:forgedDone.battleId}),
+    result:forgedText,resultHash:createHash('sha256').update(forgedText).digest('hex')});
+  await assert.rejects(()=>original.settle(id,forgedInput),{code:'SAVE_CORRUPT'});
+  await requests.deleteOne({_id:JSON.stringify([id,'forged'])});await restore();
+
+  const disabled=structuredClone(upgraded);disabled.nodes[0].encounterId=null;disabled.contentId=mainlineContentId(disabled);
+  const invalidMigration=new MongoMainlineStore(connection,disabled,profiles,battles);
+  await assert.rejects(()=>invalidMigration.settle(id,{...input,requestId:'disabled-previous',expectedRevision:1,contentId:disabled.contentId}),
+    {code:'MAINLINE_CONTENT_CHANGED',status:409});
+  assert.deepEqual(await states.findOne({_id:stateKey}),stateRow);
+  assert.equal(await requests.countDocuments(),1);
 });

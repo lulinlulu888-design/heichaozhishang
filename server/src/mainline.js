@@ -5,6 +5,15 @@ import { ServiceError } from './errors.js';
 
 const SOURCE_SHA = 'd7fdba3c26a4030a6abb26ddd960424bf44db2f8fc6259333a5c2aab9e188b19';
 export const MAINLINE_POLICY = 'local-prologue-progress-v1';
+export const mainlineContentId = definition => createHash('sha256').update(JSON.stringify({
+  sourceSha256: definition.sourceSha256, policy: definition.policy, nodes: definition.nodes })).digest('hex');
+/** The first persisted format had no snapshot; retain its exact known binding. */
+export function legacyMainlineDefinition(definition) {
+  const legacy = { ...definition, nodes: definition.nodes.map(node => ({ ...node,
+    encounterId: node.battleId === 5000 ? 'tutorial-5000' : null })) };
+  legacy.contentId = mainlineContentId(legacy);
+  return legacy;
+}
 function freeze(value) {
   if (value && typeof value === 'object') { for (const child of Object.values(value)) freeze(child); Object.freeze(value); }
   return value;
@@ -15,7 +24,7 @@ export async function loadMainline(directory, encounters) {
   const source = JSON.parse(raw);
   if (source.activityId !== 2 || source.nodes.length !== 2 || !encounters?.resolve('tutorial-5000')) throw Error('Prologue requires recovered tutorial evidence');
   const nodes = source.nodes.map(node => ({ ...node, encounterId: node.battleId === 5000 ? 'tutorial-5000' : null }));
-  const contentId = createHash('sha256').update(JSON.stringify({ sourceSha256: SOURCE_SHA, policy: MAINLINE_POLICY, nodes })).digest('hex');
+  const contentId = mainlineContentId({ sourceSha256: SOURCE_SHA, policy: MAINLINE_POLICY, nodes });
   return freeze({ activityId: 2, name: source.name, contentId, sourceSha256: SOURCE_SHA, policy: MAINLINE_POLICY,
     nodes, evidenceKind: source.authority,
     initialStateAuthority: 'local-fresh-profile-policy; not recovered original account state' });

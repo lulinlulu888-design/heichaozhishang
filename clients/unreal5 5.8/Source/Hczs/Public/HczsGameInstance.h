@@ -46,6 +46,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void RetryPendingIntent();
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void ReturnToHall();
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void SaveHallHero(int32 HeroId);
+    UFUNCTION(BlueprintCallable, Category="HCZS|Session") void RefreshMainline();
+    UFUNCTION(BlueprintCallable, Category="HCZS|Session") void ConfirmMainlineVictory();
+    UFUNCTION(BlueprintPure, Category="HCZS|Session") bool CanConfirmMainlineVictory() const;
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool CanSubmitBattleIntent() const;
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool IsPendingReceiptConfirmed() const;
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool IsHallSceneReady() const;
@@ -67,6 +70,9 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") FString SelectedEncounterId;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") FHczsBattleView CurrentBattle;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") FHczsHallPreference HallPreference;
+    UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") FHczsMainlineProgress MainlineProgress;
+    UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") bool bHasMainlineProgression = false;
+    UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") bool bMainlineStateCurrent = false;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") TArray<FString> LastEvents;
     /** Published atomically only after the latest GET matches this validated receipt. */
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") FHczsBattleVisualReceipt LastVisualReceipt;
@@ -101,6 +107,9 @@ private:
     FString PendingIntentProfile;
     FString PendingIntentBattle;
     FString PendingIntentEncounter;
+    FString MainlineContentId;
+    FString PendingSettlementContentId;
+    int64 PendingSettlementBattleRevision = 0;
     int64 PendingIntentRevision = 0;
     bool bPendingReceiptConfirmed = false;
     FString ConfirmedBattleId;
@@ -116,7 +125,10 @@ private:
     void ReadSelectedProfile();
     void ReadHall(bool bThenLoadBattles = false);
     void ReadEncounters();
-    void ReadBattle(const FString& BattleId, bool bAfterReceipt = false);
+    void ReadBattle(const FString& BattleId, bool bAfterReceipt = false, bool bPrepareSettlement = false);
+    void ReadMainline(bool bPrepareSettlement = false, bool bCanRefreshContent = true);
+    void RefreshMainlineIdentity(bool bPrepareSettlement);
+    void ResetMainlineProgress();
     void BeginIntent(const FString& Kind, const FString& Verb, const FString& Route, const FString& Body, int64 ExpectedRevision);
     void SendPendingIntent();
     void ClearPendingIntent(bool bConfirmedCard = false);

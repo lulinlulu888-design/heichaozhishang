@@ -48,10 +48,10 @@ try {
   $env:PM2_NO_INTERACTION = 'true'
   $env:PM2_DISCRETE_MODE = 'true'
   $taskProcessName='hczs-'+$Service
-  $cliArgs = switch ($Action) {
+  [string[]]$cliArgs = switch ($Action) {
     'list' { @('list') }
     'start' { @('start', (Join-Path $projectRoot 'ecosystem.config.cjs'), '--only', $taskProcessName) }
-    'restart' { @('restart', $taskProcessName, '--update-env') }
+    'restart' { @('restart', (Join-Path $projectRoot 'ecosystem.config.cjs'), '--only', $taskProcessName, '--update-env') }
     'stop' { @('stop', $taskProcessName) }
     'logs' { @('logs', $taskProcessName, '--lines', '50', '--nostream') }
     'save' { @('save') }

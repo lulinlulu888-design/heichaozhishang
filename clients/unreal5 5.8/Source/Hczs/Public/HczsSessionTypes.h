@@ -129,3 +129,32 @@ struct HCZS_API FHczsHallPreference
     /** 0 is the UI representation of the API's null; it does not grant hero ownership. */
     UPROPERTY(BlueprintReadOnly) int32 SelectedHeroId = 0;
 };
+
+/** Optional local mainline adapter. These fields are server projections, never inferred rewards. */
+USTRUCT(BlueprintType)
+struct HCZS_API FHczsMainlineChallenge
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) int32 Id = 0;
+    UPROPERTY(BlueprintReadOnly) FString Name;
+    UPROPERTY(BlueprintReadOnly) FString Subtitle;
+    UPROPERTY(BlueprintReadOnly) FString Status;
+    UPROPERTY(BlueprintReadOnly) FString EncounterId;
+    UPROPERTY(BlueprintReadOnly) bool bExecutable = false;
+};
+
+USTRUCT(BlueprintType)
+struct HCZS_API FHczsMainlineProgress
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) bool bIsValid = false;
+    UPROPERTY(BlueprintReadOnly) FString ProfileId;
+    UPROPERTY(BlueprintReadOnly) FString ContentId;
+    UPROPERTY(BlueprintReadOnly) int64 Revision = 0;
+    UPROPERTY(BlueprintReadOnly) int64 UpdatedAt = -1;
+    UPROPERTY(BlueprintReadOnly) bool bFirstChallengePassed = false;
+    UPROPERTY(BlueprintReadOnly) FString CompletedBattleId;
+    UPROPERTY(BlueprintReadOnly) int64 CompletedBattleRevision = 0;
+    UPROPERTY(BlueprintReadOnly) int64 CompletedAt = -1;
+    UPROPERTY(BlueprintReadOnly) TArray<FHczsMainlineChallenge> Challenges;
+};
