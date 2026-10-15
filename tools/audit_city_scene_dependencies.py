@@ -1,6 +1,7 @@
 """Trace city scene XML/model/material/texture references without executing game code."""
 import hashlib
 import json
+import posixpath
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -12,12 +13,41 @@ from neox_resource_paths import read_catalogue, lookup_logical
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'analysis/battle-visual/city-scenes'
 PATH = re.compile(r'^(?:character|model|effects|scene|shader|texture)/[^\r\n]+\.[A-Za-z0-9]+$')
+INCLUDE = re.compile(r'^[ \t]*#[ \t]*include[ \t]+(["<])([^"<>\r\n]+)[">]', re.MULTILINE)
+
+
+def shader_includes(payload, logical):
+    """Keep include spelling/line and candidate paths, without evaluating macros.
+
+    Parent-relative and resource-root spellings are candidates only. The archive
+    lookup below must resolve exactly one of them before traversal continues.
+    """
+    text = payload.decode('utf-8-sig')
+    text = re.sub(r'/\*.*?\*/', lambda m: '\n' * m.group().count('\n'), text, flags=re.DOTALL)
+    text = re.sub(r'//[^\r\n]*', '', text)
+    result = []
+    for match in INCLUDE.finditer(text):
+        token = match[2].replace('\\', '/')
+        candidates = []
+        if not token.startswith('/') and ':' not in token:
+            # Shipped HLSL uses the virtual res/ prefix; NPK logical paths
+            # omit it. Keep this as an explicit lookup candidate, not a claim
+            # about the unobserved compiler search order.
+            for value in (posixpath.join(posixpath.dirname(logical), token), token, token.removeprefix('res/')):
+                path = posixpath.normpath(value)
+                if PATH.fullmatch(path) and not any(part in ('.', '..') for part in path.split('/')) and path not in candidates:
+                    candidates.append(path)
+        result.append(dict(original=match[2], line=text.count('\n', 0, match.start()) + 1,
+            candidates=candidates, conditionalSelection='unresolved; preprocessor branches are not executed'))
+    return result
 
 
 def main(scene_names=('city_battle_1', 'city_battle_2'), output=None):
     global OUT
     if output is not None:
-        OUT = Path(output)
+        OUT = Path(output).resolve()
+    if not OUT.resolve().is_relative_to((ROOT / 'analysis').resolve()):
+        raise ValueError('Dependency output must stay in analysis')
     apk = ROOT / 'heichaozhishang_v1.222180.224889_ervajk_anfensi.com.apk'
     with apk.open('rb') as stream:
         if hashlib.file_digest(stream, 'sha256').hexdigest() != APK_SHA256:
@@ -65,7 +95,27 @@ def main(scene_names=('city_battle_1', 'city_battle_2'), output=None):
                     'coverage_bytes','size','bounds','normal_length_range','normal_policy')}
             except (ValueError, KeyError) as error:
                 record['meshError'] = str(error)
-        if suffix not in ('.scn', '.gim', '.mtg', '.sfx'):
+        if suffix in ('.hlsl', '.glsl', '.h', '.fxh'):
+            try:
+                includes = shader_includes(payload, selected)
+            except UnicodeDecodeError:
+                record['coverage'] = 'non-UTF8 shader payload; includes unresolved'
+                continue
+            record['coverage'] = 'literal shader includes only; no preprocessor execution or runtime branch claim'
+            record['shaderIncludes'] = includes
+            for include in includes:
+                hits = [(p, lookup_logical(catalogue, p)) for p in include['candidates']]
+                include['lookupCandidates'] = [dict(path=p, matches=rows) for p, rows in hits]
+                present = [(p, rows) for p, rows in hits if rows]
+                if len(present) == 1 and len(present[0][1]) == 1:
+                    target = enqueue(present[0][0])
+                    include.update(status='resolved-candidate', target=target)
+                    record['references'].append(dict(target=target, original=include['original'],
+                        line=include['line'], evidence='literal include with unique archive candidate; include search order not observed'))
+                else:
+                    include['status'] = 'ambiguous' if present else 'missing'
+            continue
+        if suffix not in ('.scn', '.gim', '.mtg', '.sfx', '.surf', '.fx'):
             record['coverage'] = 'leaf; payload extracted, internal references not parsed'
             continue
         try:
@@ -90,7 +140,9 @@ def main(scene_names=('city_battle_1', 'city_battle_2'), output=None):
     report = dict(apkSha256=APK_SHA256, evidence='Static extraction and XML parsing, no original execution',
         scenes=scenes, records=list(records.values()),
         counts={status:sum(r['status']==status for r in records.values()) for status in ('present','missing','ambiguous')},
-        limitations=['Shader includes, non-XML effects, animations and implicit runtime dependencies are not fully traversed.',
+        shaderIncludeCounts={status:sum(include['status']==status for row in records.values()
+            for include in row.get('shaderIncludes', [])) for status in ('resolved-candidate','missing','ambiguous')},
+        limitations=['Only literal shader include candidates are traversed; include search order and active preprocessor branches remain unobserved. Non-XML effects, animations and implicit runtime dependencies are not fully traversed.',
                      'Texture .ktx fallback is a candidate mapping recorded explicitly; render equivalence not proven.',
                      'Missing editor/test actors may not be required at runtime; no automatic substitution made.'])
     (OUT / 'dependencies.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), 'utf8')
