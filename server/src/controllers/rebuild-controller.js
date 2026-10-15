@@ -8,10 +8,11 @@ export function createRebuildController({ services, status, catalog, heroes, tut
         send(200, await status());
       } else if (request.method === 'GET' && path === `${API_PREFIX}/bootstrap`) {
         send(200, { ...(await status()), profiles: await services.profiles.list(), content: { catalogId: catalog.contentId, heroesId: heroes?.contentId ?? null,
-          encountersId: encounters?.directory.contentId ?? null },
+          encountersId: encounters?.directory.contentId ?? null, ...(services.mainline ? { mainlineId: services.mainline.contentId } : {}) },
           endpoints: { status: `${API_PREFIX}/status`, catalog: `${API_PREFIX}/catalog`, profiles: `${API_PREFIX}/profiles`,
             ...(heroes ? { heroes: `${API_PREFIX}/heroes`, hall: `${API_PREFIX}/profiles/{profileId}/hall` } : {}),
-            ...(tutorial ? { tutorial: `${API_PREFIX}/tutorial`, encounters: `${API_PREFIX}/encounters`, battles: `${API_PREFIX}/profiles/{profileId}/battles` } : {}) } });
+            ...(tutorial ? { tutorial: `${API_PREFIX}/tutorial`, encounters: `${API_PREFIX}/encounters`, battles: `${API_PREFIX}/profiles/{profileId}/battles` } : {}),
+            ...(services.mainline ? { mainline: `${API_PREFIX}/profiles/{profileId}/mainline`, settlements: `${API_PREFIX}/profiles/{profileId}/mainline/settlements` } : {}) } });
       } else if (request.method === 'GET' && path === `${API_PREFIX}/encounters` && encounters) {
         send(200, encounters.directory);
       } else if (request.method === 'GET' && encounters && encounterId !== undefined) {
@@ -30,6 +31,12 @@ export function createRebuildController({ services, status, catalog, heroes, tut
         send(201, { profile: await services.profiles.create(await readBody()) });
       } else return false;
       return true;
+    },
+    async mainline({ request, readBody, send }, params) {
+      const [profileId, settlement] = params;
+      if (request.method === 'GET' && !settlement) send(200, { campaign: await services.mainline.get(profileId) });
+      else if (request.method === 'POST' && settlement) send(200, await services.mainline.settle(profileId, await readBody()));
+      else throw new ServiceError('NOT_FOUND', 'Unknown reconstruction API route', 404);
     },
     async hall({ request, readBody, send }, params) {
       const [profileId] = params;

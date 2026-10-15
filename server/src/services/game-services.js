@@ -6,6 +6,11 @@ export function createGameServices({ persistence, catalog, heroes, tutorial, enc
   const characterIds = new Set(catalog.characters.map(character => character.id));
   const hallHeroIds = new Set(heroes?.heroes.filter(hero => hero.availability.hallPreview === 'verified').map(hero => hero.id) ?? []);
   return {
+    mainline: persistence.mainline ? {
+      contentId: persistence.mainline.definition.contentId,
+      get: id => persistence.mainline.get(id),
+      settle: (id, input) => persistence.mainline.settle(id, input),
+    } : null,
     profiles: {
       list: () => store.list(),
       get: id => store.get(id),

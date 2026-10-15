@@ -10,10 +10,13 @@ export function createRebuildRoutes(dependencies) {
   const battlePattern = new RegExp(`^${API_PREFIX}/profiles/([0-9a-f-]{36})/battles(?:/([0-9a-f-]{36})(/actions)?)?$`);
   const hallPattern = new RegExp(`^${API_PREFIX}/profiles/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/hall$`);
   const encounterPattern = new RegExp(`^${API_PREFIX}/encounters/([a-z][a-z0-9-]{0,79})$`);
+  const mainlinePattern = new RegExp(`^${API_PREFIX}/profiles/([0-9a-f-]{36})/mainline(/settlements)?$`);
   return async function dispatch(context) {
     const { path } = context;
     const encounter = path.match(encounterPattern);
     if (await controller.content(context, encounter?.[1])) return;
+    const mainline = services.mainline && path.match(mainlinePattern);
+    if (mainline) return controller.mainline(context, mainline.slice(1));
     const hall = services.hall && path.match(hallPattern);
     if (hall) return controller.hall(context, hall.slice(1));
     const battle = services.battles && path.match(battlePattern);

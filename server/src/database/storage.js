@@ -1,26 +1,30 @@
 import { connectDatabase } from './connection.js';
 
-export async function openStorage({ storage = 'mongodb', mongoUri, mongoDatabase, savePath, battleSavePath, tutorial, heroes, operationalDefaults }) {
+export async function openStorage({ storage = 'mongodb', mongoUri, mongoDatabase, savePath, battleSavePath, tutorial, heroes, operationalDefaults, mainlineDefinition }) {
   if (storage === 'mongodb') {
     if (savePath !== undefined || battleSavePath !== undefined) throw new Error('SQLite paths require explicit storage=sqlite; use the migration command for MongoDB');
     const { MongoProfileStore } = await import('./mongo-profiles.js');
     const { MongoHallStore } = await import('./mongo-hall.js');
     const { MongoBattleStore } = await import('./mongo-battles.js');
     const { MongoOperationsStore } = await import('./mongo-operations.js');
+    const { MongoMainlineStore } = await import('./mongo-mainline.js');
     const connection = await connectDatabase({ uri: mongoUri, database: mongoDatabase });
     try {
       const store = new MongoProfileStore(connection);
       const hall = heroes ? new MongoHallStore(connection) : null;
       const battles = tutorial ? new MongoBattleStore(connection) : null;
       const admin = new MongoOperationsStore(connection);
+      const mainline = mainlineDefinition && battles ? new MongoMainlineStore(connection, mainlineDefinition, store, battles) : null;
       await store.init();
       if (hall) await hall.init();
       if (battles) await battles.init();
+      if (mainline) await mainline.init();
       await admin.init(operationalDefaults);
-      return { store, hall, battles, admin, backend: 'mongodb', close: () => connection.close() };
+      return { store, hall, battles, admin, mainline, backend: 'mongodb', close: () => connection.close() };
     } catch (error) { await connection.close(); throw error; }
   }
   if (storage !== 'sqlite') throw new Error('storage must be mongodb or explicit legacy sqlite');
+  if (mainlineDefinition) throw new Error('Mainline progression requires MongoDB transactions');
   if (!savePath) throw new Error('Legacy SQLite mode requires an explicit savePath');
   const { ProfileStore } = await import('../store.js');
   const { HallStore } = await import('../hall-store.js');

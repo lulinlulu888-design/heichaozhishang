@@ -13,13 +13,14 @@ import { createRequestHandler } from './http/request-handler.js';
 import { createEncounterDirectory } from './encounters.js';
 import { createOperationalServices } from './services/operational-services.js';
 import { defaultSettings } from './operational-settings.js';
+import { loadMainline } from './mainline.js';
 
 export { API_PREFIX } from './routes/rebuild.js';
 const SHUTDOWN_GRACE_MS = 1_000;
 
 /** New-client API, intentionally separate from the unverified legacy gateway. */
 export async function createApp({ dataDirectory, savePath, tutorialDirectory, customScenarioPath, cityPreview = false, battleSavePath, port = 7457,
-  storage = 'mongodb', mongoUri, mongoDatabase,
+  storage = 'mongodb', mongoUri, mongoDatabase, mainlineDirectory,
   allowedOrigins = ['http://127.0.0.1:7456', 'http://localhost:7456',
     'http://127.0.0.1:7470', 'http://localhost:7470', 'http://127.0.0.1:7471', 'http://localhost:7471'], log = console.error } = {}) {
   const catalog = await loadCatalog(dataDirectory);
@@ -29,14 +30,15 @@ export async function createApp({ dataDirectory, savePath, tutorialDirectory, cu
   const baseTutorial = tutorialDirectory ? await loadTutorialScenario(tutorialDirectory) : null;
   const tutorial = cityPreview ? await loadCityScenario(baseTutorial) : customScenarioPath ? await loadCustomScenario(baseTutorial, customScenarioPath) : baseTutorial;
   const encounters = createEncounterDirectory({ baseTutorial, current: tutorial, cityPreview, customScenarioPath });
+  const mainlineDefinition = mainlineDirectory ? await loadMainline(mainlineDirectory, encounters) : null;
   const persistence = await openStorage({ storage, mongoUri, mongoDatabase, savePath, battleSavePath, tutorial, heroes,
-    operationalDefaults: defaultSettings(encounters) });
+    operationalDefaults: defaultSettings(encounters), mainlineDefinition });
   const { hall, close: closeStores } = persistence;
   const operations = createOperationalServices({ persistence, encounters });
   const status = async () => ({ service: 'hczs-rebuild', apiVersion: 1, saveSchemaVersion: 1, storage: persistence.backend,
     hallSaveSchemaVersion: hall ? 1 : null,
     capabilities: ['recovered-catalog', 'local-profiles', ...(heroes ? ['recovered-heroes', 'hall-selection'] : []),
-      ...(tutorial ? ['tutorial-battles', 'encounter-selection'] : [])],
+      ...(tutorial ? ['tutorial-battles', 'encounter-selection'] : []), ...(persistence.mainline ? ['mainline-progression'] : [])],
     operational: { supported: operations.supported, ...(await operations.active()) },
     gameplayReady: false, battleMode: cityPreview ? 'city-reconstruction-preview' : customScenarioPath ? 'custom-content' : tutorial ? 'explicit-reconstruction' : null });
   const services = createGameServices({ persistence, catalog, heroes, tutorial, encounters, operations });

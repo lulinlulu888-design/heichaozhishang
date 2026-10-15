@@ -23,8 +23,8 @@ export class MongoProfileStore {
     return { id: row._id, displayName: row.displayName, selectedCharacterId: row.selectedCharacterId, revision: row.revision, createdAt: row.createdAt, updatedAt: row.updatedAt };
   }
   async list() { return (await this.model.find().sort({ createdAt: 1, _id: 1 }).lean()).map(row => this.map(row)); }
-  async get(id) {
-    requireProfileId(id); const result = this.map(await this.model.findById(id).lean());
+  async get(id, session = null) {
+    requireProfileId(id); const result = this.map(await this.model.findById(id).session(session).lean());
     if (!result) throw new ServiceError('PROFILE_NOT_FOUND', 'Local profile does not exist', 404);
     return result;
   }

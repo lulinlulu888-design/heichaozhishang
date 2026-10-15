@@ -70,7 +70,7 @@ SHA-256：`aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4`。
 | 画面修复 | UE5.8 已实际修复云层白框、魔方颜色贴图误识别为法线及角色过曝；原箭头、手牌文字与拖拽通过实机检查 | 当前是源资源的 UE 显示适配；原 NeoX 完整着色与更多技能特效尚未恢复 |
 | 命中时序 | 艾尔莎当前单击与二连击改用 APK 动作事件比例；两个 UE/Node 进程的 7 次出牌、9 个命中点核验通过 | 延迟时停在命中姿势等待权威回执是本地适配；原随机动作组及全部失败恢复仍待覆盖 |
 | 终结技 | 32 段原片已入 UE Movies；艾尔莎原片播放、比例/颜色检查通过；原 `crit_4` 7.2 秒/217 帧动作接入现有骨架，实机验证约 3.84 秒暂停插入原片并从同一位置继续；取消、组件销毁、角色 EndPlay 清理通过；连击生成终结牌与八段伤害已有服务端规则和 UE v3 契约测试 | 演出测试尚未接入正式战斗；原动作有 9 个攻击事件，需核对与 8 段伤害的映射；镜头、VFX、听感和完整关卡切换待验收；序章首战按原配置禁止终结技 |
-| Node/Mongo | 已有本地档案、战斗等接口与持久化基础 | 全系统领域模型、原规则覆盖、完整操作幂等和配置生命周期未完成 |
+| Node/Mongo | 本地档案与战斗持久化；新增序章 3997 权威胜利结算、3998 解锁、无普通奖励及事务幂等，真实出牌与 Node 进程重启验证通过 | 客户端主线结算入口、原 BOSS 1703、多角色玩法、养成/背包/任务等领域仍需补齐 |
 | Admin | 已有独立端和部分管理基础 | 需按下面的运营功能矩阵补齐，恢复进度只留在开发工具内 |
 | 平台 | 当前主要验证 Windows UE 开发运行 | 四平台正式构建、安装、输入和性能验收尚未完成 |
 
@@ -292,6 +292,10 @@ UE API 的语义应支持多角色、多目标、事件队列和配置版本，�
 ## 9. 当前执行清单
 
 优先做下面这批实际交付；本文件完成后不继续堆同类计划或一次性开发总结。
+
+当前按用户最新顺序优先推进可玩内容，暂停打包与平台验收。主线→队伍/卡组→战斗结算→养成、背包与任务逐段接通；四平台交付留在功能闭环之后。
+
+序章源关系由 `tools/prepare_prologue_progression.py` 从 Activity 2、挑战 3997/3998、迷宫及战斗配置生成：3997→5000，3998 依赖 3997 并加载 1703；两挑战 `HasLoot=false`、`MaxTimes=1`。`server/src/mainline.js` 与 `database/mongo-mainline.js` 提供本地新档案进度及基于本档案权威胜利的结算，完成项按章节有界保存，重试回执独立保存。用 `--mainline-directory analysis/mainline-progression` 显式启用 MongoDB 接口 `GET /profiles/:id/mainline`、`POST /profiles/:id/mainline/settlements`。真实战斗命令、并发同请求、跨档案拒绝、重复通关拒绝及 Node 进程重启测试通过；普通服务端套件 82 项通过、12 项跳过，新 Mongo 主线测试另外显式执行通过。当前未接 UE 通关按钮，3998 只恢复可进入状态，BOSS/剧情尚不可执行；不把战斗表里的 `DropPersistentItems` 直接当成发给玩家的奖励。
 
 大厅角色选择已接入正式大厅：`tools/prepare_hall_hero_picker.py --recover` 复用 NPK、CSB、图集与 VT 转换器，恢复原底部横向条、选择/退出按钮、头像模板和单选框。两位初始角色的原头像按 `SquareUnlockIcon → PowerSupportSystemIcon` 静态绑定提取；不把角色目录当成原账号解锁状态。`tools/unreal/import_hall_hero_picker.py` 导入独立 DataAsset；`AHczsHallHeroPresentation` 区分临时预览、退出还原、确认后的权威存档，不改战斗队伍。UE5.8 编译及真实 Slate 鼠标/触摸路径验证通过：预览和两次取消均不发保存请求，确认仅提交一次 PATCH；独立 HTTP 读回与 UE 进程重启确认未来/版本 1 保持不变。结果与实际含 UI 截图在 `analysis/unreal/hall-hero-picker/native-picker.json`、`native-picker-resume.json`，网络记录在 `analysis/unreal/session-test/hall-hero-picker-20261015/`。原裁切菜单入口仍未恢复，当前使用本地页眉入口；完整列表、稀有度/等级/职业角标、滚动动画与 Android 验证继续待做。本轮未重启 Node，不能称为 Node 重启验收。
 
