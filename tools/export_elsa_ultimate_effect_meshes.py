@@ -7,6 +7,7 @@ from export_elsa_model import bind_materials, parse_materials, split_glb, pack_g
 from export_neox_gltf import encode_glb
 from inspect_neox_model import parse_model, ModelError
 from extract_texture_samples import APK_SHA256
+from export_elsa_normal_slash import bind_daoguang_full_ring
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / 'analysis/battle-visual/elsa-ultimate/effects'
@@ -40,8 +41,14 @@ def main():
         try:
             bindings = bind_materials(model, gim, materials)
         except ModelError as error:
-            unresolved.append({'gim': logical, 'mesh': mesh_path, 'reason': str(error)})
-            continue
+            # Two explicit source-pinned variants use a conservative circular
+            # bound, not the sampled polygon's exact AABB. All other mismatches
+            # still fail the original gate; never resize geometry to fit bounds.
+            try:
+                bindings = bind_daoguang_full_ring(model, gim, materials)
+            except ModelError:
+                unresolved.append({'gim': logical, 'mesh': mesh_path, 'reason': str(error)})
+                continue
         name = Path(logical).stem
         blob, _, _ = encode_glb(model, name, skin=False)
         doc, binary = split_glb(blob)
