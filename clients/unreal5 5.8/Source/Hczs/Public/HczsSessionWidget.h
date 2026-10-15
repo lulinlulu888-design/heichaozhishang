@@ -66,7 +66,7 @@ public:
     /** Development-only software pointer route. Requires explicit isolated UI-test flags. */
     UFUNCTION(BlueprintCallable, Category="HCZS|Test") bool DevelopmentClickControl(const FString& Action, const FString& Value = FString(), bool bTouch = false);
     /** Real down/move/up only; enemy/player/tap choose native scene bounds or the actual source hit. */
-    bool DevelopmentDragCard(const FString& InstanceId, const FString& ReleaseTarget, bool bTouch = false,
+    UFUNCTION(BlueprintCallable, Category="HCZS|Test") bool DevelopmentDragCard(const FString& InstanceId, const FString& ReleaseTarget, bool bTouch = false,
         const FString& Phase = TEXT("begin"));
     /** Captures actual last paint controls/text/source texture references for acceptance. */
     UFUNCTION(BlueprintCallable, Category="HCZS|Test") FString DevelopmentDescribeUI() const;
@@ -112,6 +112,7 @@ private:
     TSharedPtr<class FJsonObject> EliteOpeningJson;
     mutable TArray<FString> LastOpeningNodes;
     mutable double LastOpeningSeconds = -1;
+    mutable TArray<TSharedPtr<class FJsonValue>> LastDealtCards;
     UPROPERTY() TObjectPtr<UHczsWorldlineWidget> WorldlineWidget;
     UPROPERTY() TArray<TObjectPtr<UObject>> TargetingResources;
     TSharedPtr<const FCompositeFont> CompositeFont;

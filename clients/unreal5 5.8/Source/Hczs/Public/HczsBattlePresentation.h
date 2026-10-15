@@ -131,6 +131,7 @@ private:
     FString EntranceBattleId;
     FString EntrancePhase = TEXT("none");
     FString EntranceDiagnostic;
+    int32 FirstDealCount = 0;
     float EntranceLastPosition = 0.0f;
     double EntranceDeadline = 0.0;
     double OpeningWorldStart = -1.0;

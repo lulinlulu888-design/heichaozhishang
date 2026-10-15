@@ -139,10 +139,10 @@ def run():
                                 'Entrance is not using the real source clip position')
                 if sample['entrancePhase']=='show-visible': guard.check(sample['visible'] and not sample['actorHidden'], 'Source SHOW did not reveal player')
         if level == BATTLE:
-            widgets = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), False)
+            widgets = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)
             guard.check(len(widgets) == 1, 'Battle session widget missing/duplicated')
             ui = json.loads(widgets[0].development_describe_ui())
-            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid')}
+            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid', 'dealtCards', 'sourceOwnCardOriginY')}
             opening = sample['opening']
             if opening['openingSeconds'] is not None and 1.85 < opening['openingSeconds'] < 2.4:
                 guard.check(opening['openingTimelineValid'] and opening['openingPaintedNodes'] > 0,
@@ -150,6 +150,18 @@ def run():
                 if 'openingShot' not in state:
                     target = path.parent/(prefix+'-elite-opening.png')
                     state['openingShot'] = target
+                    u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
+            cards = opening.get('dealtCards', [])
+            if cards:
+                guard.check(sample['locked'] and not sample['canSubmit'] and sample['busy'], 'Dispatch allowed a gameplay command')
+                guard.check(opening['sourceOwnCardOriginY'] == 720, 'Source OwnCardArea bottom-root offset changed')
+                if 'centre-hold' in {c['phase'] for c in cards} and 'dealShot' not in state:
+                    target = path.parent/(prefix+'-first-deal-centre.png')
+                    state['dealShot'] = target
+                    u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
+                if 'drop-to-hand' in {c['phase'] for c in cards} and 'dropShot' not in state:
+                    target = path.parent/(prefix+'-first-deal-drop.png')
+                    state['dropShot'] = target
                     u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
         report['samples'].append(sample)
         return sample
@@ -240,22 +252,44 @@ def run():
                     guard.check(state.get('openingShot') and state['openingShot'].exists(), 'Opening screenshot missing')
                     report['openingScreenshot'] = str(state['openingShot'])
                     passed('original-elite-banner-source-timeline-paints')
+                    deal_samples = [r['opening']['dealtCards'] for r in report['samples'] if r.get('opening',{}).get('dealtCards')]
+                    phases = {c['phase'] for cards in deal_samples for c in cards}
+                    guard.check({'waiting','fly-to-centre','centre-hold','drop-to-hand'} <= phases, 'Source first-deal phases missing')
+                    guard.check(any(abs(c['tilt']) > 1 for cards in deal_samples for c in cards), 'Source drop tilt did not advance')
+                    guard.check(state.get('dealShot') and state['dealShot'].exists() and state.get('dropShot') and state['dropShot'].exists(), 'Native card flight screenshots missing')
+                    report['dealScreenshots'] = [str(state['dealShot']), str(state['dropShot'])]
+                    passed('source-first-deal-stagger-centre-bezier-tilt-and-input-lock')
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
                     capture('complete-source2133'); stage('capture-first')
                 else: guard.check(sample.get('playing'), 'Fresh GI creation did not start the source entrance')
             elif current=='capture-first' and shot_done():
+                widget = u.WidgetLibrary.get_all_widgets_of_class(world,u.load_class(None,'/Script/Hczs.HczsSessionWidget'),True)[0]
+                ui = json.loads(widget.development_describe_ui())
+                enabled = [c['value'] for c in ui['controls'] if c['action']=='play-card' and c['enabled']]
+                guard.check(enabled, 'No draggable card after first dispatch')
+                state['dragWidget'] = widget; state['dragCard'] = enabled[0]
+                guard.check(widget.development_drag_card(enabled[0], 'enemy', False, 'begin'), 'Real pointer down failed after first deal')
+                stage('drag-first')
+            elif current=='drag-first':
+                guard.check(state['dragWidget'].development_drag_card(state['dragCard'],'enemy',False,'move'), 'Post-deal pointer drag failed')
+                stage('cancel-first-drag')
+            elif current=='cancel-first-drag':
+                guard.check(state['dragWidget'].development_drag_card(state['dragCard'],'cancel',False,'release'), 'Post-deal capture cancellation failed')
+                passed('first-deal-unlocks-real-pointer-drag-and-cancel')
                 state['read']=pool.submit(read_battle,state['ids'][0]); stage('read-first')
             elif current=='read-first' and state['read'].done():
                 state['firstAuthority']=state['read'].result()
                 guard.check(state['firstAuthority']['revision']==1 and state['firstAuthority']['state']['actionIndex']==0,
                             'Completed source entrance changed authoritative state')
+                state.pop('dragWidget', None)
                 game.return_to_hall(); stage('hall-continue')
             elif current=='hall-continue' and game.is_hall_scene_ready() and sample['map']==HALL:
                 guard.check(not sample['locked'],'Hall retained first entrance lock'); game.continue_battle(state['ids'][0]); stage('continue')
             elif current=='continue' and sample['map']==BATTLE:
                 guard.check(not sample.get('playing') and not sample['locked'] and sample.get('entrancePhase')=='none'
                             and sample.get('opening', {}).get('openingSeconds') == -1
-                            and sample.get('opening', {}).get('openingPaintedNodes') == 0, 'Continue replayed an entrance/banner')
+                            and sample.get('opening', {}).get('openingPaintedNodes') == 0
+                            and sample.get('opening', {}).get('dealtCards') == [], 'Continue replayed an entrance/banner')
                 state.setdefault('continueObservedAt',time.monotonic())
                 if time.monotonic()-state['continueObservedAt']>=5 and sample['canSubmit']:
                     passed('continue-no-replay-for-five-seconds'); capture('continue-source2133'); stage('capture-continue')

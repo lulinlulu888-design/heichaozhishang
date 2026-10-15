@@ -3,6 +3,7 @@
 #include "HczsSessionTypes.h"
 #include "HczsWorldlineWidget.h"
 #include "HczsBattlePresentation.h"
+#include "HczsCardDeal.h"
 #include "Engine/FontFace.h"
 #include "Engine/Texture2D.h"
 #include "Dom/JsonObject.h"
@@ -639,6 +640,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     ++LastPaintSerial;
     LastPaintedTexts.Reset();
     LastOpeningNodes.Reset();
+    LastDealtCards.Reset();
     LastOpeningSeconds = FreshOpeningSeconds();
     bLastPaintedDragCue = false;
     LastPaintedSprites.Reset();
@@ -738,15 +740,39 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 const bool bHover = HoveredCard == Card.InstanceId || SelectedCardInstance == Card.InstanceId;
                 const FVector3f Placement = Placements && Placements->IsValidIndex(Index) ? (*Placements)[Index]
                     : FVector3f((Index - (Battle.Hand.Num() - 1) * 0.5f) * 90, 90, 0);
-                const FVector2f Center(640 + Placement.X, 682 - Placement.Y - (bHover ? 28 : 0));
-                const FQuat2D Rotation(FMath::DegreesToRadians(Placement.Z));
-                const FSlateRenderTransform Transform(Rotation, Center - TransformPoint(Rotation, FVector2f(63, 83)));
+                FVector2f Center(640 + Placement.X, 720 - Placement.Y - (bHover ? 28 : 0));
+                float Angle = Placement.Z, Tilt = 0;
+                const bool bDispatching = LastOpeningSeconds >= 0 && Battle.Hand.Num() <= 8 &&
+                    LastOpeningSeconds < 3.5 + 1.1 + .01 * Battle.Hand.Num();
+                if (bDispatching && LastOpeningSeconds < 3.5) continue;
+                if (bDispatching)
+                {
+                    HczsCardDeal::FSample Deal; FString Error;
+                    if (HczsCardDeal::Sample(LastOpeningSeconds - 3.5, Index, Battle.Hand.Num(),
+                        FVector2D(1280, 720), 126, FVector2D(640, 720), FVector2D(Center), Angle, Deal, Error))
+                    {
+                        auto Row = MakeShared<FJsonObject>();
+                        Row->SetNumberField(TEXT("index"), Index);
+                        Row->SetNumberField(TEXT("x"), Deal.Position.X); Row->SetNumberField(TEXT("y"), Deal.Position.Y);
+                        Row->SetNumberField(TEXT("angle"), Deal.AngleZ); Row->SetNumberField(TEXT("tilt"), Deal.TiltX);
+                        Row->SetStringField(TEXT("phase"), HczsCardDeal::PhaseName(Deal.Phase)); Row->SetBoolField(TEXT("visible"), Deal.bVisible);
+                        LastDealtCards.Add(MakeShared<FJsonValueObject>(Row));
+                        if (!Deal.bVisible) continue;
+                        Center = FVector2f(Deal.Position); Angle = Deal.AngleZ; Tilt = Deal.TiltX;
+                    }
+                    else UE_LOG(LogTemp, Warning, TEXT("HCZS source card dispatch rejected: %s"), *Error);
+                }
+                // Orthographic projection of the authored X tilt. Original
+                // Cocos perspective is not recovered by this Slate adapter.
+                const FMatrix2x2 CardLinear = Concatenate(FScale2D(1.0f, FMath::Cos(FMath::DegreesToRadians(Tilt))),
+                    FQuat2D(FMath::DegreesToRadians(Angle)));
+                const FSlateRenderTransform Transform(CardLinear, Center - TransformPoint(CardLinear, FVector2f(63, 83)));
                 const FGeometry CardGeometry = Canvas.MakeChild(FVector2f(126, 166), FSlateLayoutTransform(), Transform, FVector2f::ZeroVector);
                 FSessionPainter C(CardGeometry, Elements, P.Layer, Brushes, IconDrawAdjustments, CompositeFont,
                     &LastPaintedTexts, &LastPaintedSprites);
                 C.bSmoothCard = true;
                 const bool bCardEnabled = !bBusy && CanDragCard(Card.InstanceId);
-                const FLinearColor Tint(1, 1, 1, bCardEnabled ? 1.0f : 0.56f);
+                const FLinearColor Tint(1, 1, 1, (bDispatching || bCardEnabled) ? 1.0f : 0.56f);
                 if (bHover) C.Box(-3, -3, 132, 172, FLinearColor(Accent.R, Accent.G, Accent.B, 0.85f));
                 C.Box(2, 2, 122, 162, FLinearColor(0.94f, 0.95f, 0.97f, 1));
                 const FString CardArt = TEXT("card-") + Card.CardId;
@@ -797,7 +823,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             End.bEnabled = bEnd;
             Controls.Add(End);
             if (Battle.Hand.IsEmpty()) P.Text(TEXT("本回合已无手牌"), 385, 584, 510, 50, 23, Muted, true);
-            else P.Text(TEXT("拖牌到敌方 · 松手出牌"), 390, 485, 500, 24, 17, Accent, true);
+            else if (!bPresentationBusy) P.Text(TEXT("拖牌到敌方 · 松手出牌"), 390, 485, 500, 24, 17, Accent, true);
             if (bCardDetailOpen)
                 if (const auto* Selected = Battle.Hand.FindByPredicate([this](const FHczsHandCard& C) { return C.InstanceId == SelectedCardInstance; }))
                 {
@@ -815,7 +841,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 const int32 CardIndex = Battle.Hand.IndexOfByPredicate([this](const FHczsHandCard& C) { return C.InstanceId == CardGestureInstance; });
                 if (const auto* NormalPlacements = CardPlacements.Find(Battle.Hand.Num()))
                     if (NormalPlacements->IsValidIndex(CardIndex))
-                        ArrowStart = FVector2f(640 + (*NormalPlacements)[CardIndex].X, 682 - (*NormalPlacements)[CardIndex].Y);
+                        ArrowStart = FVector2f(640 + (*NormalPlacements)[CardIndex].X, 720 - (*NormalPlacements)[CardIndex].Y);
                 const int32 BeforeArrow = P.Layer;
                 P.Layer = PaintSourceTargetArrow(Canvas, Elements, P.Layer, ArrowStart, CardGesturePoint);
                 bLastPaintedDragCue = P.Layer > BeforeArrow;
@@ -956,7 +982,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         P.Box(464, 115, 352, 38, FLinearColor(0.015f, 0.024f, 0.05f, 0.91f));
         P.Text(TEXT("正在与本地服务同步…"), 465, 117, 350, 34, 18, Accent, true);
     }
-    else if (bPresentationBusy)
+    else if (bPresentationBusy && !Session->IsBattleEntranceLocked())
         P.Text(TEXT("正在播放战斗动作…"), 464, 117, 352, 34, 18, Accent, true);
     else if (Session->bHasPendingIntent)
     {
@@ -1424,6 +1450,10 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
     Root->SetNumberField(TEXT("openingSeconds"), LastOpeningSeconds);
     Root->SetNumberField(TEXT("openingPaintedNodes"), LastOpeningNodes.Num());
     Root->SetBoolField(TEXT("openingTimelineValid"), EliteOpening.bValid);
+    Root->SetArrayField(TEXT("dealtCards"), LastDealtCards);
+    Root->SetNumberField(TEXT("sourceOwnCardOriginY"), 720);
+    Root->SetStringField(TEXT("dealClockPolicy"), TEXT("local-BattleBegin3s-plus-original-first-delay0.5s"));
+    Root->SetBoolField(TEXT("originalCardPerspectiveRecovered"), false);
     Root->SetBoolField(TEXT("dragPreviewPainted"), bLastPaintedDragCue);
     Root->SetBoolField(TEXT("sourceArrowResourcesReady"), Brushes.Contains(TEXT("target-arrow-ribbon")) && Brushes.Contains(TEXT("target-arrow-head")));
     Root->SetStringField(TEXT("sourceArrowGeometry"), TEXT("apk-native-parabolic-60x2"));

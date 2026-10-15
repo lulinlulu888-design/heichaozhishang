@@ -207,6 +207,7 @@ bool AHczsBattlePresentation::TryPlayFreshEntrance(const FHczsBattleView& View)
     if (!Session) Session = Cast<UHczsGameInstance>(GetGameInstance());
     if (!Session || !Session->ConsumeFreshBattleEntrance(View.Id)) return false;
     OpeningWorldStart = -1.0;
+    FirstDealCount = View.Hand.Num();
     EntranceBattleId = View.Id; EntranceLastPosition = 0; bEntranceEventEmitted = false;
     EntranceAnimation = LoadObject<UAnimSequence>(nullptr,
         TEXT("/Game/Recovered/Battle/Entrance/elsa_entrance.elsa_entrance"));
@@ -290,6 +291,16 @@ void AHczsBattlePresentation::ObserveEntrance()
     if (FPlatformTime::Seconds() >= EntranceDeadline)
     { StopEntrance(false, TEXT("source-playback-watchdog")); return; }
     if (EntrancePhase == TEXT("waiting-hidden")) return;
+    if (EntrancePhase == TEXT("first-deal"))
+    {
+        // Local action bridge: source BattleBeginAction reserves 3s, then the
+        // first DrawCard action delays .5s. Its actual visible flight lasts
+        // 1.1+.01*N, not the longer reserved action duration. Wait for both
+        // source SHOW completion and card dispatch before enabling input.
+        if (GetFreshOpeningSeconds(EntranceBattleId) >= 3.5 + 1.1 + .01 * FirstDealCount)
+            StopEntrance(true, TEXT("source-SHOW-and-first-dispatch-completed"));
+        return;
+    }
     auto* Playback = PlayerComponent ? PlayerComponent->GetSingleNodeInstance() : nullptr;
     if (!Playback || !EntranceAnimation || Playback->GetAnimationAsset() != EntranceAnimation ||
         !FMath::IsFinite(Playback->GetCurrentTime()))
@@ -304,7 +315,16 @@ void AHczsBattlePresentation::ObserveEntrance()
             *EntranceBattleId, EntranceLastPosition, VisualUnixMs());
     }
     if (EntranceLastPosition >= EntranceAnimation->GetPlayLength() - .002f)
-        StopEntrance(true, TEXT("source-SHOW-completed-to-idle_1"));
+    {
+        if (FirstDealCount > 0 && FirstDealCount <= 8 &&
+            GetFreshOpeningSeconds(EntranceBattleId) < 3.5 + 1.1 + .01 * FirstDealCount)
+        {
+            if (bSceneReady) ApplyStablePose(DesiredSnapshot);
+            EntrancePhase = TEXT("first-deal");
+            EntranceDiagnostic = TEXT("Source SHOW ended; waiting for first-card dispatch, source _C_H curves / local action-clock bridge.");
+        }
+        else StopEntrance(true, TEXT("source-SHOW-and-first-dispatch-completed"));
+    }
 }
 
 void AHczsBattlePresentation::CheckEntranceFinished()
