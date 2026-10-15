@@ -47,8 +47,14 @@ def sample_pinned(source, pins, label, scale_format=1):
     text=text.replace('raw[25] == 1',f'raw[25] == {scale_format}')
     destination = RUNTIME/(label+'-wrapper')
     destination.mkdir(exist_ok=True)
-    (destination/'acl_sample.cpp').write_text(text, encoding='utf8')
-    (destination/'CMakeLists.txt').write_text((RUNTIME/'wrapper/CMakeLists.txt').read_text('utf8'), encoding='utf8')
+    # Preserve timestamps for identical build inputs. Rewriting these on every
+    # recovery needlessly relinks the decoder and can change its embedded PE
+    # identity, which would invalidate otherwise identical pose provenance.
+    def write_changed(path, value):
+        if not path.exists() or path.read_text('utf8') != value:
+            path.write_text(value, encoding='utf8')
+    write_changed(destination/'acl_sample.cpp', text)
+    write_changed(destination/'CMakeLists.txt', (RUNTIME/'wrapper/CMakeLists.txt').read_text('utf8'))
     cmake = Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe')
     build = RUNTIME/(label+'-build')
     subprocess.run([str(cmake), '-S', str(destination), '-B', str(build), '-G', 'Visual Studio 17 2022', '-A', 'x64'], check=True)

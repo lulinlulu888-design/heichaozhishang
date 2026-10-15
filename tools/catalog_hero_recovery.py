@@ -204,8 +204,12 @@ def ue_evidence(hero_id):
                                     'currentFilePresent': disk.is_file(), 'currentFile': reference(disk) if disk.is_file() else None,
                                     'currentNativeReadbackReexecuted': False})
     converted = []
-    for relative in {1: ['analysis/elsa-hall/export-report.json'], 2: ['analysis/characters/lynn/export/export-report.json'],
-                     33: ['analysis/characters/shiranui/export/export-report.json']} .get(hero_id, []):
+    generic_root = ROOT / 'analysis/characters' / ('hero-' + str(hero_id).zfill(3))
+    relative_reports = {1: ['analysis/elsa-hall/export-report.json'], 2: ['analysis/characters/lynn/export/export-report.json'],
+                       33: ['analysis/characters/shiranui/export/export-report.json']}.get(hero_id, [])
+    relative_reports += [(generic_root / purpose / 'export/export-report.json').relative_to(ROOT).as_posix()
+                         for purpose in ('hall', 'battle') if (generic_root / purpose / 'export/export-report.json').is_file()]
+    for relative in relative_reports:
         path = ROOT / relative
         if not path.is_file():
             continue
@@ -214,6 +218,30 @@ def ue_evidence(hero_id):
         if output.is_file() and sha(output) == doc.get('sha256'):
             converted.append({'report': reference(path), 'output': reference(output), 'sourceAnimationNames':
                               [a.get('name') for a in doc.get('animations', [])], 'originalMaterialFidelityVerified': False})
+    native_path = generic_root / 'hall/unreal-preview/native-render.json'
+    export_path = generic_root / 'hall/export/export-report.json'
+    if native_path.is_file() and export_path.is_file():
+        native = json.loads(native_path.read_text('utf8'))
+        exported = json.loads(export_path.read_text('utf8'))
+        frames = native.get('frames', [])
+        source = Path(exported['output']).resolve()
+        valid_frames = len(frames) == 2 and all(Path(frame['path']).resolve().is_relative_to(generic_root.resolve())
+            and Path(frame['path']).is_file() and sha(Path(frame['path'])) == frame['sha256'] for frame in frames)
+        if (native.get('characterId') == hero_id and native.get('nativeRenderVerified')
+            and native.get('nativeContinuousPlaybackObserved') and valid_frames
+            and source.is_relative_to(generic_root.resolve()) and source.is_file()
+            and sha(source) == exported['sha256'] == native.get('sourceGlbSha256')):
+            reports.append({**reference(native_path), 'engineVersion':native.get('engineVersion'),
+                'scope':'retained independent hall comparison and PIE bone motion; original shaders/gameplay not verified'})
+            for kind, field in [('SkeletalMesh','mesh'), ('AnimSequence','animation')]:
+                asset = native[field]
+                if not asset.startswith('/Game/Recovered/Heroes/Hero'+str(hero_id).zfill(3)+'/'):
+                    raise ValueError('Generic hero native asset ownership differs')
+                disk = PROJECT / 'Content' / (asset.split('.')[0].removeprefix('/Game/') + '.uasset')
+                objects.append({'class':kind, 'asset':asset,
+                    'sourceAnimations':[exported['selection']['clip']] if kind == 'AnimSequence' else None,
+                    'currentFilePresent':disk.is_file(), 'currentFile':reference(disk) if disk.is_file() else None,
+                    'currentNativeReadbackReexecuted':False})
     return {'status': 'retained-native-readback-and-current-files' if objects else 'no-mapped-native-readback',
             'reports': reports, 'objects': objects, 'convertedColourReferenceModels': converted,
             'fullHeroRecovered': False, 'originalLightingVerified': None, 'allVfxVerified': None,
