@@ -21,12 +21,16 @@ test('complete directory exposes reviewed Elsa UE hall and Shiranui migration pr
   assert.equal(result.sources.npkIndex, 8995);
   assert.equal(result.heroes.find(hero => hero.id === 33).name, '不知火');
   assert.equal(result.heroes.some(hero => hero.id === 20), false);
-  assert.deepEqual(result.heroes.filter(hero => hero.availability.hallPreview === 'verified').map(hero => hero.id), [1, 33]);
+  assert.deepEqual(result.heroes.filter(hero => hero.availability.hallPreview === 'verified').map(hero => hero.id), [1, 3, 33]);
   const elsa = result.heroes.find(hero => hero.id === 1);
   assert.equal(elsa.name, '艾尔莎');
   assert.equal(elsa.hallPreviewVerification.renderer, 'unreal-editor');
   assert.equal(elsa.hallPreviewVerification.platform, 'windows');
   assert.equal(elsa.hallPreviewVerification.sourceAnimation, 'home_stand_idle_1');
+  const future = result.heroes.find(hero => hero.id === 3);
+  assert.equal(future.hallPreviewVerification.sourceModelSha256, '857f554062f0d61d2a529ff6407caebafaa13131f04f6be123fd86ef8f91c522');
+  assert.equal(future.hallPreviewVerification.platform, 'windows');
+  assert.equal(future.availability.fullBattle, 'not-verified');
   assert.equal(result.heroes.find(hero => hero.id === 33).hallPreviewVerification.renderer, 'legacy-web-preview');
   assert.ok(result.heroes.every(hero => hero.availability.fullBattle === 'not-verified'));
   assert.ok(result.heroes.every(hero => !('owned' in hero) && !('combatEligible' in hero)));
@@ -69,7 +73,7 @@ test('untrusted ownership/availability fields cannot grant recovery capability',
   assert.deepEqual(result.heroes[1].availability, {hallPreview: 'not-integrated', fullBattle: 'not-verified'});
   assert.equal('owned' in result.heroes[1], false);
   assert.equal('hallPreviewVerification' in result.heroes[1], false);
-  assert.equal(result.recoveryPolicy, 'hczs-hall-preview-policy-v2');
+  assert.equal(result.recoveryPolicy, 'hczs-hall-preview-policy-v3');
 });
 
 test('oversized input is rejected before JSON parsing', async t => {

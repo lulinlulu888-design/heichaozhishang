@@ -8,15 +8,19 @@ const PAYLOAD = '04f68a25876383d410811c454260c3d8f058c08fa573e144fe1c16263d5f8df
 const PROJECTION = 'c7dd949b6398079ca1c5fefc1417a66ee00bb2491d3b44509420b79d928fdcba';
 // Reviewed reconstruction policy; input JSON can never grant availability.
 // Elsa's Windows Editor import, original hall idle and aligned pose were read back.
+// Future's original hall idle and source-color adaptation were played in native PIE.
 // Shiranui remains selectable as a previously verified migration reference.
 const HALL_PREVIEWS = new Map([
   [1, {renderer: 'unreal-editor', platform: 'windows', sourceAnimation: 'home_stand_idle_1',
     evidence: 'elsa-hall-unreal', verification: 'import-readback-and-aligned-editor-pose',
     sourceModelSha256: '823397c87ae22bbdaa1fc20b07352da0b2b3a252d0f755fb1998dd5d2578b193'}],
+  [3, {renderer: 'unreal-editor', platform: 'windows', sourceAnimation: 'home_stand_idle_1',
+    evidence: 'future-hall-unreal', verification: 'native-pie-continuous-idle-and-source-color',
+    sourceModelSha256: '857f554062f0d61d2a529ff6407caebafaa13131f04f6be123fd86ef8f91c522'}],
   [33, {renderer: 'legacy-web-preview', platform: 'web', evidence: 'shiranui-migration-reference',
     verification: 'recovered-reference-preview'}],
 ]);
-const RECOVERY_POLICY = 'hczs-hall-preview-policy-v2';
+const RECOVERY_POLICY = 'hczs-hall-preview-policy-v3';
 const MAX_BYTES = 64 * 1024;
 const requireValid = (valid, reason) => { if (!valid) throw new Error(`Invalid hero directory: ${reason}`); };
 

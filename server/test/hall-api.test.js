@@ -89,9 +89,25 @@ test('bootstrap advertises actual optional hero content and independent hall sta
   assert.equal(bootstrap.body.content.heroesId, heroes.body.contentId);
   assert.deepEqual(bootstrap.body.profiles, [profile]);
   assert.equal(heroes.body.heroes.length, 35);
-  assert.deepEqual(heroes.body.heroes.filter(hero => hero.availability.hallPreview === 'verified').map(hero => hero.id), [1, 33]);
+  assert.deepEqual(heroes.body.heroes.filter(hero => hero.availability.hallPreview === 'verified').map(hero => hero.id), [1, 3, 33]);
   assert.deepEqual((await request(app.address, `/profiles/${profile.id}/hall`)).body.hall,
     { profileId: profile.id, revision: 0, selectedHeroId: null, updatedAt: null });
+});
+
+test('Future hall preference persists across a Node restart without granting battle eligibility', async t => {
+  const app = await hallFixture(t);
+  const profile = await createProfile(app, '未来大厅恢复');
+  const path = `/profiles/${profile.id}/hall`;
+  const command = {requestId:'choose-future',expectedRevision:0,selectedHeroId:3};
+  const saved = await request(app.address,path,'PATCH',command);
+  assert.equal(saved.status,200);
+  assert.equal(saved.body.hall.selectedHeroId,3);
+  await app.restart();
+  assert.deepEqual((await request(app.address,path)).body.hall,saved.body.hall);
+  assert.equal((await request(app.address,path,'PATCH',command)).body.replayed,true);
+  const heroes = (await request(app.address,'/heroes')).body.heroes;
+  assert.equal(heroes.find(hero=>hero.id===3).availability.fullBattle,'not-verified');
+  assert.equal((await request(app.address,path,'PATCH',{requestId:'stale-future',expectedRevision:0,selectedHeroId:1})).status,409);
 });
 
 test('hall HTTP commits and retry receipts survive a new Node process without changing the old selection', async t => {

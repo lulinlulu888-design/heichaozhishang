@@ -58,6 +58,11 @@ def main():
         observation['bytecode_sha256'] = match[0]['bytecode_sha256']
     out = ROOT/'analysis/hall/state'
     out.mkdir(parents=True, exist_ok=True)
+    # Preserve the distinct preview, confirmation and exit handlers. This is
+    # static call-site evidence, not proof of original server persistence/RPCs.
+    hero_selection = export(row, ('_onCharListChooseChar', '_onCharListChooseClicked',
+                                 '_onCharListQuitClicked', 'onChangeChar', 'onCloseChangeChar'))
+    (out/'hero-selection.json').write_text(json.dumps(hero_selection,ensure_ascii=False,indent=2),'utf8')
     (out/'consumers.json').write_text(json.dumps(evidence, ensure_ascii=False, indent=2), 'utf8')
     bindings = [export(next(r for r in rows if r['index']==index),
                        ('_initAutoWidgets', '_initAutoControls')) for index in (4567, 8233)]
