@@ -35,7 +35,7 @@ public:
     UPROPERTY(EditAnywhere) TMap<int32, FHczsHallHeroVisual> Heroes;
 };
 
-/** Display a confirmed hall preference; never selects/saves a hero itself. */
+/** Source-style temporary hall preview with explicit confirmation. */
 UCLASS()
 class HCZS_API AHczsHallHeroPresentation : public AActor
 {
@@ -47,6 +47,12 @@ public:
     UPROPERTY(EditAnywhere) TObjectPtr<UHczsHallHeroCatalogAsset> Catalog;
     UPROPERTY(BlueprintReadOnly) int32 DisplayedHeroId = 0;
     UPROPERTY(BlueprintReadOnly) FString LastProblem;
+    UPROPERTY(BlueprintReadOnly) bool bPreviewActive = false;
+    UPROPERTY(BlueprintReadOnly) bool bPreviewSaving = false;
+    UFUNCTION(BlueprintCallable) bool BeginPreview();
+    UFUNCTION(BlueprintCallable) bool PreviewHero(int32 HeroId);
+    UFUNCTION(BlueprintCallable) bool ConfirmPreview();
+    UFUNCTION(BlueprintCallable) bool CancelPreview();
 private:
     void SessionChanged();
     bool ApplyHero(int32 HeroId);
@@ -54,4 +60,8 @@ private:
     UPROPERTY() TObjectPtr<ASkeletalMeshActor> BaseHero;
     UPROPERTY() TObjectPtr<ASkeletalMeshActor> Replacement;
     FDelegateHandle StateHandle;
+    FString PreviewProfile;
+    int32 ConfirmedHeroId = 1;
+    int32 SavingHeroId = 0;
+    int64 PreviewRevision = 0;
 };

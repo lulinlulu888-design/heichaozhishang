@@ -29,14 +29,34 @@ def main(actor='monster'):
     else:
         table_index, entity_id, field, stem, asset = 2363, 991, 'MonsterHead', 'monster-991', 'monster-head'
     OUT = ROOT / f'analysis/battle-ui/health/{actor}-portrait'
+    table = literal_table(table_index, {entity_id}) if actor == 'breakdown' else export_table(table_index, [entity_id])
+    logical = table['rows'][0]['fields'][field]
+    report = recover_virtual_sprite(logical, OUT, stem, provenance=dict(
+        actor=actor, source_table=table, source_field=field))
+    destination = ROOT/f'legacy/cocos-poc/assets/resources/recovered/battle-ui/{asset}.png'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT/report['output'], destination)
+    print(json.dumps(dict(output=report['output'], size=report['size'], tiles=len(report['tiles']),
+                          scanned=report['scanned_metadata_candidates'])))
+
+
+def recover_virtual_sprite(logical, output_directory, stem='sprite', provenance=None):
+    """Shared source-path -> VT alias -> unique atlas frame -> original pixels.
+
+    Does not write client assets. All decoded output stays under analysis, and
+    callers retain the static table/script binding separately from VT assumptions.
+    """
+    OUT = Path(output_directory).resolve()
+    if not OUT.is_relative_to((ROOT/'analysis').resolve()) or Path(stem).name != stem:
+        raise ValueError('VT output must stay in analysis with a plain filename')
+    if not isinstance(logical, str) or not logical.startswith('uires/') or not logical.endswith('.png'):
+        raise ValueError('Expected explicit original UI PNG path')
     apk = ROOT / 'heichaozhishang_v1.222180.224889_ervajk_anfensi.com.apk'
     with apk.open('rb') as f:
         if hashlib.file_digest(f, 'sha256').hexdigest() != APK_SHA256:
             raise ValueError('APK identity mismatch')
     OUT.mkdir(parents=True, exist_ok=True)
     catalogue = read_catalogue(apk)
-    table = literal_table(table_index, {entity_id}) if actor == 'breakdown' else export_table(table_index, [entity_id])
-    logical = table['rows'][0]['fields'][field]
     sources = {}
     for name in ('vt.table', 'vt_config.jsondata'):
         sources[name] = extract(apk, catalogue, 'packed_png/vt_data/' + name, OUT/name, APK_SHA256)
@@ -110,10 +130,7 @@ def main(actor='monster'):
     portrait.paste(sprite, (sx, sy))
     output = OUT/(stem+'.png')
     portrait.save(output)
-    destination = ROOT/f'legacy/cocos-poc/assets/resources/recovered/battle-ui/{asset}.png'
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(output, destination)
-    report = dict(apk_sha256=APK_SHA256, actor=actor, source_table=table, source_field=field, logical=logical, alias=alias,
+    report = dict(apk_sha256=APK_SHA256, **(provenance or {}), logical=logical, alias=alias,
         mapping=mapping[0], vt_sources=sources, scanned_metadata_candidates=scanned,
         frame=frame_matches[0], tiles=tiles, output=str(output.relative_to(ROOT)),
         output_sha256=hashlib.sha256(output.read_bytes()).hexdigest(), size=source_size,
@@ -121,7 +138,7 @@ def main(actor='monster'):
         assumptions=['ASTC 4x4 LDR linear', '512-column virtual grid with 124-pixel stride and 2-pixel tile border',
             'Runtime colour profile not verified'])
     (OUT/'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), 'utf8')
-    print(json.dumps(dict(output=str(output), size=source_size, tiles=len(tiles), scanned=scanned)))
+    return report
 
 
 if __name__ == '__main__':

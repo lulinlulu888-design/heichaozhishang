@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT/'analysis/battle-ui'
-CLASSES = {'Node', 'SingleNode', 'Button', 'Panel', 'Sprite', 'Particle', 'ImageView', 'ProjectNode', 'Text', 'TextAtlas', 'TextBMFont', 'LoadingBar', 'ListView'}
+CLASSES = {'Node', 'SingleNode', 'Button', 'Panel', 'Sprite', 'Particle', 'ImageView', 'ProjectNode', 'Text', 'TextAtlas', 'TextBMFont', 'LoadingBar', 'ListView', 'ScrollView'}
 
 
 class Reader:
@@ -117,17 +117,28 @@ class Reader:
             result['direction'] = self.scalar('i', direction) if direction else 0
             if result['direction'] not in (0, 1):
                 raise ValueError('Unsupported LoadingBar direction')
-        if classname == 'ListView':
+        if classname in ('ListView', 'ScrollView'):
             # Original standard ListViewOptions; no layout/scroll runtime execution.
             result['background_resource'] = self.resource(self.pointer(self.field(data, 1)))
             result['inner_size'] = self.pair(self.field(data, 12))
             for key,index,fmt,default in (('clip_enabled',2,'B',0), ('direction',13,'i',0),
-                                         ('bounce_enabled',14,'B',0), ('item_margin',15,'i',0)):
+                                         ('bounce_enabled',14,'B',0)):
                 field=self.field(data,index)
                 number=self.scalar(fmt,field) if field else default
                 result[key]=bool(number) if fmt=='B' else number
-            for key,index in (('direction_type',16),('horizontal_type',17),('vertical_type',18)):
-                result[key]=self.string(self.field(data,index))
+            if classname == 'ListView':
+                field=self.field(data,15)
+                result['item_margin']=self.scalar('i',field) if field else 0
+                for key,index in (('direction_type',16),('horizontal_type',17),('vertical_type',18)):
+                    result[key]=self.string(self.field(data,index))
+            else:
+                for key,index,fmt,default in (('scrollbar_enabled',15,'B',1),
+                    ('scrollbar_auto_hide',16,'B',1),('scrollbar_auto_hide_time',17,'f',0.2)):
+                    field=self.field(data,index)
+                    number=self.scalar(fmt,field) if field else default
+                    if not math.isfinite(number):
+                        raise ValueError('Nonfinite scrollbar configuration')
+                    result[key]=bool(number) if fmt=='B' else number
             if result['direction'] not in (0,1,2,3):
                 raise ValueError('Unsupported ListView direction')
         if classname in ('Sprite', 'Particle'):

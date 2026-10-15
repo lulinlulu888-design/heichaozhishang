@@ -27,16 +27,19 @@ def nodes(tree):
         yield from nodes(child)
 
 
-def main():
+def main(entry=ENTRY, output=None):
     apk = ROOT/'heichaozhishang_v1.222180.224889_ervajk_anfensi.com.apk'
     with apk.open('rb') as stream:
         actual = hashlib.file_digest(stream, 'sha256').hexdigest()
     if actual != APK_SHA256:
         raise ValueError('Unexpected APK bytes')
     catalogue = read_catalogue(apk)
-    out = ROOT/'analysis/hall/ui-dependencies'
+    entry = ui_path(entry)
+    out = Path(output).resolve() if output is not None else ROOT/'analysis/hall/ui-dependencies'
+    if not out.resolve().is_relative_to((ROOT/'analysis').resolve()):
+        raise ValueError('UI dependency output must stay in analysis')
     out.mkdir(parents=True, exist_ok=True)
-    queue, visited, layouts, edges, resources = deque([ENTRY]), set(), [], [], []
+    queue, visited, layouts, edges, resources = deque([entry]), set(), [], [], []
     while queue:
         logical = queue.popleft()
         if logical in visited:
@@ -108,7 +111,7 @@ def main():
         resource_references=len(resources), resource_status=dict(Counter(x['status'] for x in resources)),
         unique_resource_paths=len({x['lookup_path'] for x in resources}),
         atlas_frame_checks=dict(Counter(str(x['frame_present']) for x in resources if 'frame_present' in x)))
-    report = dict(apk_sha256=actual, entry=ENTRY, summary=summary, layouts=layouts,
+    report = dict(apk_sha256=actual, entry=entry, summary=summary, layouts=layouts,
         project_edges=edges, resources=resources, atlases=atlases,
         evidence_kind='Local extraction and bounded static parser; not REA runtime evidence',
         limitations=['UI root prefix resolution only; unresolved references may use another mount',

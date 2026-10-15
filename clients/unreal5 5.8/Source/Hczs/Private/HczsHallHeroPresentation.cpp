@@ -40,13 +40,83 @@ void AHczsHallHeroPresentation::BeginPlay()
 
 void AHczsHallHeroPresentation::SessionChanged()
 {
+    if (bPreviewActive && (!Session || Session->SelectedProfileId != PreviewProfile || Session->Phase != EHczsSessionPhase::Hall))
+    {
+        bPreviewActive = bPreviewSaving = false;
+        PreviewProfile.Reset();
+        ApplyHero(ConfirmedHeroId);
+    }
     // A PATCH receipt is followed by an authoritative GET in GameInstance.
     // Pending requests never preview or commit a different display selection.
     if (!Session || !Session->IsHallSceneReady()) return;
     const int32 Requested = Session->HallPreference.SelectedHeroId == 0 ? 1 : Session->HallPreference.SelectedHeroId;
+    if (bPreviewActive)
+    {
+        if (!bPreviewSaving && Session->HallPreference.Revision == PreviewRevision) return;
+        if (bPreviewSaving && Session->HallPreference.Revision == PreviewRevision && !Session->ErrorCode.IsEmpty())
+        {
+            bPreviewSaving = false;
+            LastProblem = Session->UserMessage;
+            return;
+        }
+        // Authoritative refresh (including a concurrent edit) ends the preview.
+        bPreviewActive = bPreviewSaving = false;
+        PreviewProfile.Reset();
+    }
+    ConfirmedHeroId = Requested;
     if (Requested == DisplayedHeroId) { LastProblem.Reset(); return; }
     if (!ApplyHero(Requested))
         UE_LOG(LogTemp, Warning, TEXT("HCZS hall hero requested=%d displayed=%d: %s"), Requested, DisplayedHeroId, *LastProblem);
+}
+
+bool AHczsHallHeroPresentation::BeginPreview()
+{
+    if (bPreviewActive || !Session || !Session->IsHallSceneReady() || !BaseHero || !Catalog) return false;
+    PreviewProfile = Session->SelectedProfileId;
+    PreviewRevision = Session->HallPreference.Revision;
+    ConfirmedHeroId = Session->HallPreference.SelectedHeroId == 0 ? 1 : Session->HallPreference.SelectedHeroId;
+    if (DisplayedHeroId != ConfirmedHeroId || (ConfirmedHeroId != 1 && !Catalog->Heroes.Contains(ConfirmedHeroId))) return false;
+    bPreviewActive = true;
+    LastProblem.Reset();
+    return true;
+}
+
+bool AHczsHallHeroPresentation::PreviewHero(int32 HeroId)
+{
+    if (!bPreviewActive || bPreviewSaving || !Session || !Session->IsHallSceneReady() || Session->SelectedProfileId != PreviewProfile) return false;
+    if (HeroId == DisplayedHeroId) return true;
+    return ApplyHero(HeroId);
+}
+
+bool AHczsHallHeroPresentation::CancelPreview()
+{
+    if (!bPreviewActive || bPreviewSaving) return false;
+    if (!ApplyHero(ConfirmedHeroId)) return false;
+    bPreviewActive = false;
+    PreviewProfile.Reset();
+    return true;
+}
+
+bool AHczsHallHeroPresentation::ConfirmPreview()
+{
+    if (!bPreviewActive || !Session || Session->SelectedProfileId != PreviewProfile) return false;
+    if (bPreviewSaving)
+    {
+        if (!Session->bHasPendingIntent || !Session->bPendingIntentRetryable || Session->bRequestInFlight) return false;
+        Session->RetryPendingIntent();
+        return true;
+    }
+    if (!Session->IsHallSceneReady() || Session->HallPreference.Revision != PreviewRevision) return false;
+    if (DisplayedHeroId == ConfirmedHeroId)
+    {
+        bPreviewActive = false;
+        PreviewProfile.Reset();
+        return true;
+    }
+    SavingHeroId = DisplayedHeroId;
+    bPreviewSaving = true;
+    Session->SaveHallHero(SavingHeroId);
+    return true;
 }
 
 bool AHczsHallHeroPresentation::ApplyHero(int32 HeroId)

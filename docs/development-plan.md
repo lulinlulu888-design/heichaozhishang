@@ -62,7 +62,7 @@ SHA-256：`aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4`。
 
 | 内容 | 真实状态 | 尚未达到的标准 |
 | --- | --- | --- |
-| UE 大厅 | 已接入原场景、部分原 UI、艾尔莎大厅动作；确认保存的偏好可驱动艾尔莎/未来显示，并已验证 UE 重启恢复 | 原角色列表的预览/确认/取消界面、全部按钮业务、统一材质与光照、不同分辨率及角色互动仍需补齐 |
+| UE 大厅 | 原场景、部分原 UI、艾尔莎/未来待机；原底部头像条、选择/退出和选中框已接入两位初始角色，鼠标/触摸验证预览不保存、取消还原、确认保存与 UE 重启恢复 | 原更换入口的裁切菜单、完整角色列表、稀有度/等级标记、列表动画、统一光照及多分辨率仍需补齐 |
 | 世界线 | 已恢复原 `MainLineStoryDialog` 静态入口 | 章节状态、地图、真实进度和剧情链尚未完整接入；本地选关是单独预览适配 |
 | UE 首战 | 已能显示角色、怪物、手牌，并请求本地服务 | 仍是重建规则与展示适配，存在明显画面差距；不是原版首战完整恢复 |
 | 拖拽出牌 | 已有真实 UE 鼠标/触摸交互验证；取消手势不发出牌请求 | 全目标规则、更多卡牌机制、断线后完整恢复及源视觉还需验收 |
@@ -293,7 +293,7 @@ UE API 的语义应支持多角色、多目标、事件队列和配置版本，�
 
 优先做下面这批实际交付；本文件完成后不继续堆同类计划或一次性开发总结。
 
-大厅角色偏好已接入正式大厅地图的 `AHczsHallHeroPresentation`：只在本地会话确认偏好并完成权威读取后更换显示，支持当前艾尔莎与未来资源，不改战斗队伍。原大厅包变更前已保存带哈希的本地备份，目录安装与角色资产由 `tools/unreal/install_hall_hero_catalog.py` 重建。UE5.8 C++ 编译及服务端 79 项测试通过（另 11 项因未指定独立 Mongo 测试 URI 跳过）；独立生成的 MongoDB 测试库中，原生 GameInstance 实际完成未来→艾尔莎→未来的版本 1/2/3 保存，重启 UE 并重新选择同一测试档案后显示未来，独立 HTTP 读取确认所存角色/版本仍为 3/3；该测试库已核对所有权后清理。证据为 `analysis/unreal/hall-hero-selection/native-create.json`、`native-resume.json` 与 `persistence-readback.json`。这次直接调用客户端会话函数验证，未证明鼠标/触摸选择界面；Mongo 实际测试未重启 Node，SQLite 接口测试另有 Node 进程重启覆盖。原脚本角色列表区分预览、确认和退出事件，源字节码导出见 `tools/trace_hall_state.py` 的 `hero-selection.json`；下一步还原这一界面及取消回退，不能把点击预览直接当成确认保存。
+大厅角色选择已接入正式大厅：`tools/prepare_hall_hero_picker.py --recover` 复用 NPK、CSB、图集与 VT 转换器，恢复原底部横向条、选择/退出按钮、头像模板和单选框。两位初始角色的原头像按 `SquareUnlockIcon → PowerSupportSystemIcon` 静态绑定提取；不把角色目录当成原账号解锁状态。`tools/unreal/import_hall_hero_picker.py` 导入独立 DataAsset；`AHczsHallHeroPresentation` 区分临时预览、退出还原、确认后的权威存档，不改战斗队伍。UE5.8 编译及真实 Slate 鼠标/触摸路径验证通过：预览和两次取消均不发保存请求，确认仅提交一次 PATCH；独立 HTTP 读回与 UE 进程重启确认未来/版本 1 保持不变。结果与实际含 UI 截图在 `analysis/unreal/hall-hero-picker/native-picker.json`、`native-picker-resume.json`，网络记录在 `analysis/unreal/session-test/hall-hero-picker-20261015/`。原裁切菜单入口仍未恢复，当前使用本地页眉入口；完整列表、稀有度/等级/职业角标、滚动动画与 Android 验证继续待做。本轮未重启 Node，不能称为 Node 重启验收。
 
 战斗画面对照基线：`analysis/unreal/battle-reference/comparison.jpg`。缓存《正式服第一期》05:00 是双人红幕剧院战斗，15:00 是三人白天街道备战；终结技视频 00:28 是三人紫色夜景。各片段关卡与录像版本不同，不能统一套场景或用跨关卡截图宣称像素还原。当前教程仍是单人样例及 `city_battle_1` 替代场景。
 

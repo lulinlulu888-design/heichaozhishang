@@ -31,14 +31,20 @@ def crop_frame(image, frame):
     return canvas
 
 
-def main():
-    audit()  # Revalidates APK and all parsed layout/atlas source bytes.
-    base = ROOT/'analysis/hall/ui-dependencies'
+def main(dependency_directory=None, output_directory=None):
+    if dependency_directory is None:
+        audit()  # Revalidates APK and all parsed layout/atlas source bytes.
+    base = Path(dependency_directory).resolve() if dependency_directory is not None else ROOT/'analysis/hall/ui-dependencies'
     evidence = base/'report.json'
     report = json.loads(evidence.read_text('utf8'))
-    out = ROOT/'analysis/hall/ui-sprites'
+    out = Path(output_directory).resolve() if output_directory is not None else ROOT/'analysis/hall/ui-sprites'
+    if not all(path.resolve().is_relative_to((ROOT/'analysis').resolve()) for path in (base,out)):
+        raise ValueError('UI dependency and pixel directories must stay in analysis')
     out.mkdir(parents=True, exist_ok=True)
     apk = ROOT/'heichaozhishang_v1.222180.224889_ervajk_anfensi.com.apk'
+    with apk.open('rb') as stream:
+        if hashlib.file_digest(stream,'sha256').hexdigest()!=APK_SHA256 or report['apk_sha256']!=APK_SHA256:
+            raise ValueError('UI source APK identity differs')
     catalogue = read_catalogue(apk)
     sources, frames, fonts = [], [], []
     for logical in sorted({r['lookup_path'] for r in report['resources']

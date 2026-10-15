@@ -67,7 +67,7 @@ class HallReader(Reader):
         result['callback_type'] = self.string(self.field(widget, 18))
         result['callback_name'] = self.string(self.field(widget, 19))
         cls = result['classname']
-        if cls == 'Panel':
+        if cls in ('Panel', 'ScrollView'):
             result['background_resource'] = self.resource(self.pointer(self.field(data, 1)))
             result['clip_enabled'] = bool(scalar(data, 2, 'B', 0))
             result['background_color_argb'] = color(data, 3)
@@ -192,15 +192,22 @@ def preview_reason(layout, node, ancestry):
     return None
 
 
-def build():
+def build(entry=ENTRY, dependency_report=DEP, pixel_report=PIXELS, output_directory=OUT,
+          root_matrix=None):
+    entry = ui_path(entry)
+    dependency_report, pixel_report, output_directory = map(Path,
+        (dependency_report, pixel_report, output_directory))
+    if not all(p.resolve().is_relative_to((ROOT/'analysis').resolve())
+               for p in (dependency_report, pixel_report, output_directory)):
+        raise ValueError('UI build inputs and output must stay in analysis')
     apk = ROOT/'heichaozhishang_v1.222180.224889_ervajk_anfensi.com.apk'
     if digest(apk) != APK_SHA256:
         raise ValueError('Unexpected APK bytes')
-    report = json.loads(DEP.read_text('utf8'))
-    pictures = json.loads(PIXELS.read_text('utf8'))
+    report = json.loads(dependency_report.read_text('utf8'))
+    pictures = json.loads(pixel_report.read_text('utf8'))
     if report['apk_sha256'] != APK_SHA256 or pictures['apk_sha256'] != APK_SHA256:
         raise ValueError('Mixed APK reports')
-    if digest(DEP) != pictures['dependency_report_sha256'] or report['entry'] != ENTRY:
+    if digest(dependency_report) != pictures['dependency_report_sha256'] or report['entry'] != entry:
         raise ValueError('Dependency graph drift')
     evidence = json.loads(REA.read_text('utf8'))
     evidence_ids = [r['evidence_id'] for r in evidence['records']
@@ -359,21 +366,21 @@ def build():
     def count(node):
         return 1 + sum(count(child) for child in node['children'])
 
-    used_layouts.append(ENTRY)
-    visit(layouts[ENTRY], ENTRY, None, [1, 0, 0, 1, 0, 0], 1, True, [], [], [])
+    used_layouts.append(entry)
+    visit(layouts[entry], entry, None, root_matrix or [1, 0, 0, 1, 0, 0], 1, True, [], [], [])
     visible_items = [x for x in draw_items if x['visible'] and x['opacity'] > 0]
     preview_items = [x for x in visible_items if not x['previewExcludedReason']]
     output = dict(schemaVersion=1, canvas=dict(width=1280, height=720, sourceOrigin='bottom-left',
                    drawOrigin='top-left', matrixOrder=['a','b','c','d','tx','ty'],
-                   cornerOrder=['top-left','top-right','bottom-right','bottom-left']), entry=ENTRY,
+                   cornerOrder=['top-left','top-right','bottom-right','bottom-left']), entry=entry,
                   apkSha256=APK_SHA256, nodes=nodes, drawItems=visible_items,
                   previewDrawItems=preview_items, sprites=sprites, fonts=fonts, sources=sources,
                   unresolved=unresolved, previewPolicy=dict(authority='local-reconstruction-design-policy',
                   reason='Close unsupported menus and hide account/online authoring placeholders',
                   exclusions=exclusions),
                   evidence=dict(reaArchiveEvidenceIds=evidence_ids, reaBundle=str(REA),
-                  reaBundleSha256=digest(REA), dependencyReportSha256=digest(DEP),
-                  spriteReportSha256=digest(PIXELS), schemaSha256=digest(SCHEMA),
+                  reaBundleSha256=digest(REA), dependencyReportSha256=digest(dependency_report),
+                  spriteReportSha256=digest(pixel_report), schemaSha256=digest(SCHEMA),
                   layoutEvidenceKind='ordinary-tool-static-CSB-conversion'),
                   limitations=[
                       'No original UI runtime, responsive adaptation, timeline or button execution.',
@@ -385,22 +392,23 @@ def build():
                       'Text values are CSB authoring data, never proof of level, chapter, time or account state.',
                       'Only explicit atlas references have recovered pixels; unresolved standalone files omitted.'
                   ])
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT/'layout.json').write_text(packed(output), 'utf8')
+    output_directory.mkdir(parents=True, exist_ok=True)
+    (output_directory/'layout.json').write_text(packed(output), 'utf8')
     summary = dict(schemaVersion=1, sourceLayouts=len(layouts), expandedInstances=len(used_layouts),
                    nodes=len(nodes), sourceVisibleDrawItems=len(visible_items), previewDrawItems=len(preview_items),
                    drawKinds=dict(Counter(x['kind'] for x in preview_items)),
                    sprites=len(sprites), fonts=len(fonts), unresolvedKinds=dict(Counter(x['kind'] for x in unresolved)),
                    usedSpriteIds=sorted({x['spriteId'] for x in preview_items if x['kind']=='sprite'}),
-                   layoutSha256=digest(OUT/'layout.json'))
-    (OUT/'report.json').write_text(packed(summary), 'utf8')
+                   layoutSha256=digest(output_directory/'layout.json'))
+    (output_directory/'report.json').write_text(packed(summary), 'utf8')
     return summary
 
 
-def render_reference():
+def render_reference(output_directory=OUT):
     """Software visual sanity check, not a screenshot from the original game/UE."""
     from PIL import Image, ImageChops, ImageDraw, ImageFont
-    payload = json.loads((OUT/'layout.json').read_text('utf8'))
+    output_directory = Path(output_directory)
+    payload = json.loads((output_directory/'layout.json').read_text('utf8'))
     pictures = {row['id']: Image.open(row['png']).convert('RGBA') for row in payload['sprites']}
     fonts = {row['id']: row['ttf'] for row in payload['fonts']}
     node_map = {row['id']: row for row in payload['nodes']}
@@ -444,9 +452,9 @@ def render_reference():
             ImageDraw.Draw(clip).polygon([tuple(p) for p in node_map[clip_id]['clipGeometry']['corners']], fill=255)
             layer.putalpha(ImageChops.multiply(layer.getchannel('A'), clip))
         canvas = Image.alpha_composite(canvas, layer)
-    canvas.save(OUT/'reference-transparent.png')
+    canvas.save(output_directory/'reference-transparent.png')
     dark = Image.new('RGBA', canvas.size, (35,40,48,255))
-    Image.alpha_composite(dark, canvas).convert('RGB').save(OUT/'reference-on-dark.png')
+    Image.alpha_composite(dark, canvas).convert('RGB').save(output_directory/'reference-on-dark.png')
 
 
 if __name__ == '__main__':

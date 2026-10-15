@@ -10,7 +10,14 @@
 #include "Rendering/SlateRenderer.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
+#if WITH_EDITOR
+#include "ShaderCompiler.h"
+#endif
 #include "HczsGameInstance.h"
+#include "HczsHallHeroPresentation.h"
+#include "EngineUtils.h"
 #include "Styling/CoreStyle.h"
 #include "Input/Reply.h"
 #include "InputCoreTypes.h"
@@ -59,13 +66,48 @@ void UHczsHallWidget::NativeConstruct()
     }
     if (!Layout)
         Layout = LoadObject<UHczsHallLayoutAsset>(nullptr, TEXT("/Game/Recovered/Hall/UI/HallLayout.HallLayout"));
-    if (!Layout) return;
+    LoadDrawItems(Layout, Items, true);
+    PickerLayout = LoadObject<UHczsHallLayoutAsset>(nullptr, TEXT("/Game/Recovered/Hall/HeroPicker/HallHeroPicker.HallHeroPicker"));
+    PickerItems.Reset(); PickerControls.Reset(); PickerHeroes.Reset();
+    LoadDrawItems(PickerLayout, PickerItems, false);
+    if (!PickerLayout || PickerItems.IsEmpty()) return;
+    TSharedPtr<FJsonObject> Picker;
+    if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(PickerLayout->LayoutJson), Picker) || !Picker) return;
+    const TArray<TSharedPtr<FJsonValue>>* Controls = nullptr;
+    if (!Picker->TryGetArrayField(TEXT("controls"), Controls)) return;
+    for (const auto& Value : *Controls)
+    {
+        const auto Row = Value->AsObject();
+        const TSharedPtr<FJsonObject>* Geometry = nullptr;
+        TArray<double> Bounds; FString Action;
+        if (!Row || !Row->TryGetStringField(TEXT("action"), Action)
+            || !Row->TryGetObjectField(TEXT("geometry"), Geometry) || !Numbers(*Geometry, TEXT("bounds"), 4, Bounds)) continue;
+        PickerControls.Add(Action, FSlateRect(Bounds[0], Bounds[1], Bounds[0]+Bounds[2], Bounds[1]+Bounds[3]));
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Heroes = nullptr;
+    if (Picker->TryGetArrayField(TEXT("heroes"), Heroes))
+        for (const auto& Value : *Heroes)
+        {
+            const auto Row = Value->AsObject(); FString Name; double Id;
+            if (Row && Row->TryGetNumberField(TEXT("id"), Id) && Row->TryGetStringField(TEXT("name"), Name)) PickerHeroes.Add(int32(Id), Name);
+        }
+}
+
+AHczsHallHeroPresentation* UHczsHallWidget::HeroPresenter() const
+{
+    for (TActorIterator<AHczsHallHeroPresentation> It(GetWorld()); It; ++It) return *It;
+    return nullptr;
+}
+
+void UHczsHallWidget::LoadDrawItems(UHczsHallLayoutAsset* Source, TArray<FHczsHallDrawItem>& Destination, bool bHallBindings)
+{
+    if (!Source) return;
     TSharedPtr<FJsonObject> Root;
-    if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Layout->LayoutJson), Root) || !Root) return;
+    if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Source->LayoutJson), Root) || !Root) return;
     const TArray<TSharedPtr<FJsonValue>>* DrawItems = nullptr;
     if (!Root->TryGetArrayField(TEXT("items"), DrawItems) || DrawItems->Num() > 2048) return;
     TMap<FString, TSharedPtr<const FCompositeFont>> Fonts;
-    for (const auto& Pair : Layout->Fonts)
+    for (const auto& Pair : Source->Fonts)
     {
         TSharedPtr<FCompositeFont> Composite = MakeShared<FCompositeFont>();
         FTypefaceEntry Entry;
@@ -85,13 +127,17 @@ void UHczsHallWidget::NativeConstruct()
             || !Object->TryGetObjectField(TEXT("geometry"), Geometry)
             || !Numbers(*Geometry, TEXT("matrix"), 6, Matrix)) continue;
         FHczsHallDrawItem Item;
+        double HeroId = 0;
+        Object->TryGetNumberField(TEXT("heroId"), HeroId);
+        Item.HeroId = int32(HeroId);
+        Object->TryGetBoolField(TEXT("selectedOnly"), Item.bSelectedOnly);
         Item.bText = Kind == TEXT("text");
         Item.Size = FVector2f(Size[0], Size[1]);
         Item.Transform = FSlateRenderTransform(FMatrix2x2(Matrix[0], Matrix[1], Matrix[2], Matrix[3]),
             FVector2f(Matrix[4], Matrix[5]));
         FString InstancePath;
         Object->TryGetStringField(TEXT("instancePath"), InstancePath);
-        if (Kind == TEXT("sprite") && InstancePath == TEXT("Layer/Main/RightBottom/EnteranceStory/BattleStory/@HomeBattle_story_ext/Node/BtnStory"))
+        if (bHallBindings && Kind == TEXT("sprite") && InstancePath == TEXT("Layer/Main/RightBottom/EnteranceStory/BattleStory/@HomeBattle_story_ext/Node/BtnStory"))
         {
             WorldlineSize = Item.Size;
             WorldlineTransform = Item.Transform;
@@ -140,7 +186,7 @@ void UHczsHallWidget::NativeConstruct()
             // CSB sizes are pixels. Slate font sizes are points at RenderDPI.
             Item.Font = FSlateFontInfo(Fonts[FontId], FontSize * 72.0f / FontConstants::RenderDPI,
                 TEXT("Regular"), Outline);
-            if (!bProfileFontReady)
+            if (bHallBindings && !bProfileFontReady)
             {
                 ProfileFont = FSlateFontInfo(Fonts[FontId], 18 * 72.0f / FontConstants::RenderDPI, TEXT("Regular"));
                 bProfileFontReady = true;
@@ -162,8 +208,8 @@ void UHczsHallWidget::NativeConstruct()
         else if (Kind == TEXT("sprite"))
         {
             FString SpriteId;
-            if (!Object->TryGetStringField(TEXT("spriteId"), SpriteId) || !Layout->Sprites.Contains(SpriteId)) continue;
-            UTexture2D* Texture = Layout->Sprites[SpriteId];
+            if (!Object->TryGetStringField(TEXT("spriteId"), SpriteId) || !Source->Sprites.Contains(SpriteId)) continue;
+            UTexture2D* Texture = Source->Sprites[SpriteId];
             Item.Brush.SetResourceObject(Texture);
             Item.Brush.DrawAs = ESlateBrushDrawType::Image;
             Item.Brush.ImageSize = FVector2f(Texture->GetSizeX(), Texture->GetSizeY());
@@ -174,11 +220,11 @@ void UHczsHallWidget::NativeConstruct()
                 : (bFlipY ? ESlateBrushMirrorType::Vertical : ESlateBrushMirrorType::NoMirror);
         }
         else continue;
-        Items.Add(MoveTemp(Item));
+        Destination.Add(MoveTemp(Item));
     }
     UE_LOG(LogTemp, Display, TEXT("HCZS: hall UI layout loaded %d items, %d textures, %d font faces; iconVariant=%s"),
-        Items.Num(), Layout->Sprites.Num(), Layout->Fonts.Num(),
-        *Layout->GetName());
+        Destination.Num(), Source->Sprites.Num(), Source->Fonts.Num(),
+        *Source->GetName());
 }
 
 int32 UHczsHallWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geometry,
@@ -194,8 +240,11 @@ int32 UHczsHallWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geom
     const float Scale = FMath::Min(Available.X / DesignSize.X, Available.Y / DesignSize.Y);
     if (Scale <= 0) return Layer;
     const FVector2f Offset = (Available - DesignSize * Scale) * 0.5f;
-    for (const FHczsHallDrawItem& Item : Items)
+    const AHczsHallHeroPresentation* Presenter = HeroPresenter();
+    const bool bPicker = Presenter && Presenter->bPreviewActive;
+    for (const FHczsHallDrawItem& Item : bPicker ? PickerItems : Items)
     {
+        if (Item.bSelectedOnly && (!Presenter || Presenter->DisplayedHeroId != Item.HeroId)) continue;
         for (const FSlateClippingZone& Clip : Item.Clips)
         {
             Elements.PushClip(FSlateClippingZone(
@@ -231,7 +280,7 @@ int32 UHczsHallWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geom
             ESlateDrawEffect::None, Item.Color);
         for (int32 Index = 0; Index < Item.Clips.Num(); ++Index) Elements.PopClip();
     }
-    if (bProfileFontReady)
+    if (bProfileFontReady && !bPicker)
     {
         const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
         FString Label = TEXT("选择本地档案");
@@ -250,6 +299,33 @@ int32 UHczsHallWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geom
         const FGeometry Text = Button.MakeChild(TextSize, FSlateLayoutTransform(FVector2f(12, (38 - TextSize.Y) / 2)));
         FSlateDrawElement::MakeText(Elements, ++Layer, Text.ToPaintGeometry(), Label, ProfileFont, ESlateDrawEffect::None, FLinearColor::White);
         Elements.PopClip();
+        if (!PickerItems.IsEmpty() && Presenter)
+        {
+            const bool bEnabled = Session && Session->IsHallSceneReady();
+            const FGeometry Entry = Geometry.MakeChild(FVector2f(HeroEntryRect.GetSize()), FSlateLayoutTransform(Scale, Offset),
+                FSlateRenderTransform(FVector2f(HeroEntryRect.Left, HeroEntryRect.Top)), FVector2f::ZeroVector);
+            FSlateDrawElement::MakeBox(Elements, ++Layer, Entry.ToPaintGeometry(), FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")),
+                ESlateDrawEffect::None, FLinearColor(0.055f, 0.11f, 0.18f, 0.66f));
+            const FString EntryLabel = TEXT("更换大厅角色");
+            LastPaintedTexts.Add(EntryLabel);
+            const FGeometry TextGeometry = Entry.MakeChild(FVector2f(180,38), FSlateLayoutTransform(FVector2f(12,5)));
+            FSlateDrawElement::MakeText(Elements, ++Layer, TextGeometry.ToPaintGeometry(), EntryLabel, ProfileFont,
+                ESlateDrawEffect::None, bEnabled ? FLinearColor::White : FLinearColor(0.5f,0.5f,0.5f));
+        }
+    }
+    if (bProfileFontReady && bPicker)
+    {
+        FString Status = PickerHeroes.FindRef(Presenter->DisplayedHeroId);
+        if (Presenter->bPreviewSaving)
+        {
+            const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
+            Status += Session && Session->bPendingIntentRetryable ? TEXT(" · 保存结果待确认，点选择重试") : TEXT(" · 正在确认保存…");
+        }
+        else if (!Presenter->LastProblem.IsEmpty()) Status += TEXT(" · ") + Presenter->LastProblem;
+        const FGeometry Text = Geometry.MakeChild(FVector2f(800,32), FSlateLayoutTransform(Scale, Offset),
+            FSlateRenderTransform(FVector2f(40,550)), FVector2f::ZeroVector);
+        FSlateDrawElement::MakeText(Elements, ++Layer, Text.ToPaintGeometry(), Status, ProfileFont, ESlateDrawEffect::None, FLinearColor::White);
+        LastPaintedTexts.Add(Status);
     }
     return Layer;
 }
@@ -261,7 +337,26 @@ FReply UHczsHallWidget::PressAt(const FGeometry& Geometry, const FVector2D& Abso
     if (Scale <= 0) return FReply::Unhandled();
     const FVector2f Point = (FVector2f(Geometry.AbsoluteToLocal(AbsolutePosition)) - (Available - DesignSize * Scale) * 0.5f) / Scale;
     FString Action;
-    if (ProfileRect.ContainsPoint(Point)) Action = TEXT("profile");
+    AHczsHallHeroPresentation* Presenter = HeroPresenter();
+    const bool bPicker = Presenter && Presenter->bPreviewActive;
+    if (bPicker)
+    {
+        for (const auto& Pair : PickerControls)
+            if (Pair.Value.ContainsPoint(Point)) { Action = Pair.Key; break; }
+        if (Action.IsEmpty()) return FReply::Handled();
+        bool Accepted = false;
+        if (Action == TEXT("hero-confirm")) Accepted = Presenter->ConfirmPreview();
+        else if (Action == TEXT("hero-cancel")) Accepted = Presenter->CancelPreview();
+        else if (Action.StartsWith(TEXT("hero-preview-")))
+            Accepted = Presenter->PreviewHero(FCString::Atoi(*Action.RightChop(13)));
+        if (!Accepted) return FReply::Handled();
+    }
+    else if (HeroEntryRect.ContainsPoint(Point) && !PickerItems.IsEmpty() && Presenter)
+    {
+        if (!Presenter->BeginPreview()) return FReply::Handled();
+        Action = TEXT("hero-open");
+    }
+    else if (ProfileRect.ContainsPoint(Point)) Action = TEXT("profile");
     else if (bHasWorldline)
     {
         const FVector2f Local = TransformPoint(Inverse(WorldlineTransform), Point);
@@ -272,7 +367,7 @@ FReply UHczsHallWidget::PressAt(const FGeometry& Geometry, const FVector2D& Abso
     LastPointerAction = Action;
     bLastPointerTouch = bTouch;
     if (Action == TEXT("profile")) OnProfileRequested.Broadcast();
-    else OnWorldlineRequested.Broadcast();
+    else if (Action == TEXT("worldline")) OnWorldlineRequested.Broadcast();
     return FReply::Handled();
 }
 
@@ -293,12 +388,20 @@ bool UHczsHallWidget::DevelopmentClickControl(const FString& Action, bool bTouch
     return false;
 #else
     int32 Port = 0;
-    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")) ||
+    if ((!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")) && !FParse::Param(FCommandLine::Get(), TEXT("HczsHallHeroPickerTest"))) ||
         !FParse::Value(FCommandLine::Get(), TEXT("HczsServerPort="), Port) || Port <= 0 || Port > 65535 || Port == 7460 ||
         !FSlateApplication::IsInitialized() || !IsInViewport() || !bHasPaintGeometry || GetVisibility() != ESlateVisibility::Visible) return false;
     FVector2f Point;
-    if (Action == TEXT("worldline") && bHasWorldline) Point = TransformPoint(WorldlineTransform, WorldlineSize * 0.5f);
-    else if (Action == TEXT("profile")) Point = FVector2f((ProfileRect.Left + ProfileRect.Right) / 2, (ProfileRect.Top + ProfileRect.Bottom) / 2);
+    const AHczsHallHeroPresentation* Presenter = HeroPresenter();
+    const bool bPicker = Presenter && Presenter->bPreviewActive;
+    if (bPicker && PickerControls.Contains(Action))
+    {
+        const FSlateRect& Rect = PickerControls[Action];
+        Point = FVector2f((Rect.Left+Rect.Right)/2, (Rect.Top+Rect.Bottom)/2);
+    }
+    else if (!bPicker && Action == TEXT("hero-open")) Point = FVector2f((HeroEntryRect.Left+HeroEntryRect.Right)/2, (HeroEntryRect.Top+HeroEntryRect.Bottom)/2);
+    else if (!bPicker && Action == TEXT("worldline") && bHasWorldline) Point = TransformPoint(WorldlineTransform, WorldlineSize * 0.5f);
+    else if (!bPicker && Action == TEXT("profile")) Point = FVector2f((ProfileRect.Left + ProfileRect.Right) / 2, (ProfileRect.Top + ProfileRect.Bottom) / 2);
     else return false;
     FSlateApplication& Slate = FSlateApplication::Get();
     const TSharedPtr<SWidget> SlateWidget = GetCachedWidget();
@@ -340,7 +443,7 @@ FString UHczsHallWidget::DevelopmentDescribeUI() const
 #if UE_BUILD_SHIPPING
     return TEXT("{}");
 #else
-    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest"))) return TEXT("{}");
+    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsUITest")) && !FParse::Param(FCommandLine::Get(), TEXT("HczsHallHeroPickerTest"))) return TEXT("{}");
     auto Root = MakeShared<FJsonObject>();
     Root->SetStringField(TEXT("mode"), TEXT("actual-nativepaint-and-slate-pointer-observation"));
     Root->SetStringField(TEXT("map"), UGameplayStatics::GetCurrentLevelName(this, true));
@@ -348,6 +451,11 @@ FString UHczsHallWidget::DevelopmentDescribeUI() const
     Root->SetBoolField(TEXT("visible"), GetVisibility() == ESlateVisibility::Visible && IsInViewport());
     Root->SetBoolField(TEXT("battleScene"), false);
     Root->SetBoolField(TEXT("sourceChineseFont"), bProfileFontReady);
+#if WITH_EDITOR
+    Root->SetNumberField(TEXT("pendingShaderJobs"), GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0);
+#else
+    Root->SetNumberField(TEXT("pendingShaderJobs"), 0);
+#endif
     Root->SetStringField(TEXT("lastPointerAction"), LastPointerAction);
     Root->SetStringField(TEXT("lastPointerValue"), TEXT(""));
     Root->SetBoolField(TEXT("lastPointerTouch"), bLastPointerTouch);
@@ -365,8 +473,22 @@ FString UHczsHallWidget::DevelopmentDescribeUI() const
         for (float Value : {Rect.Left, Rect.Top, Rect.Right, Rect.Bottom}) Bounds.Add(MakeShared<FJsonValueNumber>(Value));
         Row->SetArrayField(TEXT("rect"), Bounds); Controls.Add(MakeShared<FJsonValueObject>(Row));
     };
-    AddControl(TEXT("profile"), ProfileRect);
-    if (bHasWorldline)
+    const AHczsHallHeroPresentation* Presenter = HeroPresenter();
+    const bool bPicker = Presenter && Presenter->bPreviewActive;
+    Root->SetBoolField(TEXT("heroPickerOpen"), bPicker);
+    if (Presenter)
+    {
+        Root->SetNumberField(TEXT("displayedHeroId"), Presenter->DisplayedHeroId);
+        Root->SetBoolField(TEXT("heroPickerSaving"), Presenter->bPreviewSaving);
+        Root->SetStringField(TEXT("heroProblem"), Presenter->LastProblem);
+    }
+    if (bPicker) { for (const auto& Pair : PickerControls) AddControl(Pair.Key, Pair.Value); }
+    else
+    {
+        AddControl(TEXT("profile"), ProfileRect);
+        if (!PickerItems.IsEmpty() && Presenter) AddControl(TEXT("hero-open"), HeroEntryRect);
+    }
+    if (bHasWorldline && !bPicker)
     {
         const FVector2f Origin = TransformPoint(WorldlineTransform, FVector2f::ZeroVector);
         const FVector2f End = TransformPoint(WorldlineTransform, WorldlineSize);
@@ -383,5 +505,20 @@ FString UHczsHallWidget::DevelopmentDescribeUI() const
     FString Result;
     FJsonSerializer::Serialize(Root, TJsonWriterFactory<>::Create(&Result));
     return Result;
+#endif
+}
+
+bool UHczsHallWidget::DevelopmentCaptureFrame(const FString& Filename)
+{
+#if UE_BUILD_SHIPPING
+    return false;
+#else
+    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsHallHeroPickerTest")) || !bHasPaintGeometry || !IsInViewport()) return false;
+    FString Path = FPaths::ConvertRelativePathToFull(Filename);
+    FString Allowed = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../../analysis/unreal/hall-hero-picker")));
+    FPaths::CollapseRelativeDirectories(Path); FPaths::CollapseRelativeDirectories(Allowed);
+    if (!FPaths::IsUnderDirectory(Path, Allowed) || FPaths::GetExtension(Path) != TEXT("png")) return false;
+    FScreenshotRequest::RequestScreenshot(Path, true, false, false);
+    return true;
 #endif
 }
