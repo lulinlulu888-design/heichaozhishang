@@ -7,6 +7,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Guid.h"
+#include "HAL/PlatformTime.h"
 
 using namespace HczsSessionContract;
 namespace
@@ -14,6 +15,31 @@ namespace
     FString RequestId() { return FString::Printf(TEXT("ue-%s"), *FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower)); }
     FString Json(const TSharedRef<FJsonObject>& O) { return Serialize(O); }
     constexpr int32 MaxResponseBytes = 8 * 1024 * 1024;
+}
+
+void FHczsFreshBattleEntranceGate::Reset()
+{
+    BattleId.Reset(); ProfileId.Reset(); CreationNonce.Reset(); Epoch = 0; Deadline = 0; bConsumed = false;
+}
+bool FHczsFreshBattleEntranceGate::Arm(const FHczsBattleView& View, const FString& Nonce, uint64 SessionEpoch, double Now)
+{
+    Reset();
+    if (!View.bIsValid || View.Id.IsEmpty() || View.ProfileId.IsEmpty() || Nonce.IsEmpty() ||
+        View.Revision != 1 || View.ActionIndex != 0 || View.Status != TEXT("player-turn") || !FMath::IsFinite(Now)) return false;
+    BattleId = View.Id; ProfileId = View.ProfileId; CreationNonce = Nonce; Epoch = SessionEpoch;
+    Deadline = Now + 12.0; // Bounded map-travel handoff; never blocks an unavailable scene forever.
+    return true;
+}
+bool FHczsFreshBattleEntranceGate::IsCurrent(const FHczsBattleView& View, const FString& SelectedProfile, uint64 SessionEpoch, double Now) const
+{
+    return !CreationNonce.IsEmpty() && View.bIsValid && View.Id == BattleId && View.ProfileId == ProfileId &&
+        SelectedProfile == ProfileId && SessionEpoch == Epoch && View.Revision == 1 && View.ActionIndex == 0 &&
+        View.Status == TEXT("player-turn") && FMath::IsFinite(Now) && Now < Deadline;
+}
+bool FHczsFreshBattleEntranceGate::Consume(const FHczsBattleView& View, const FString& SelectedProfile, uint64 SessionEpoch, double Now)
+{
+    if (bConsumed || !IsCurrent(View, SelectedProfile, SessionEpoch, Now)) return false;
+    bConsumed = true; Deadline = Now + 7.0; return true;
 }
 
 void UHczsGameInstance::Init()
@@ -27,6 +53,7 @@ void UHczsGameInstance::Init()
 void UHczsGameInstance::Shutdown()
 {
     bShuttingDown = true; ++SessionEpoch;
+    FreshBattleEntrance.Reset();
     ClearPendingIntent();
     if (PendingRequest.IsValid())
     {
@@ -143,6 +170,7 @@ void UHczsGameInstance::RefreshProfilesAfterUncertainCreation() { RefreshBootstr
 void UHczsGameInstance::RefreshBootstrap()
 {
     if (!CanStartRead()) return;
+    FreshBattleEntrance.Reset();
     UserMessage = TEXT("正在连接本地重建服务…"); ErrorCode.Reset();
     if (SelectedProfileId.IsEmpty()) Phase = EHczsSessionPhase::Connecting;
     Fetch(TEXT("bootstrap"), TEXT("GET"), TEXT("/bootstrap"), TEXT(""), [this](TSharedPtr<FJsonObject> O, int32 Code, const FString& Error)
@@ -185,6 +213,7 @@ void UHczsGameInstance::SelectProfile(const FString& ProfileId)
     if (!IsUuid(ProfileId) || !Profiles.ContainsByPredicate([&ProfileId](const FHczsLocalProfile& P) { return P.Id == ProfileId; }))
     { Fail(TEXT("INVALID_PROFILE"), TEXT("请选择列表中存在的本地档案。")); return; }
     ++SessionEpoch; SelectedProfileId = ProfileId; SelectedEncounterId.Reset(); SelectedDefinitionId.Reset();
+    FreshBattleEntrance.Reset();
     CurrentBattle = FHczsBattleView(); HallPreference = FHczsHallPreference(); LastEvents.Reset(); Battles.Reset();
     ResetMainlineProgress();
     LastVisualReceipt = FHczsBattleVisualReceipt(); bProfileStateCurrent = false;
@@ -235,6 +264,7 @@ void UHczsGameInstance::CreateLocalProfile(const FString& DisplayName)
             return;
         }
         Profiles.Add(Profile); ++SessionEpoch; SelectedProfileId = Profile.Id;
+        FreshBattleEntrance.Reset();
         SelectedEncounterId.Reset(); CurrentBattle = FHczsBattleView(); HallPreference = FHczsHallPreference();
         ResetMainlineProgress();
         LastEvents.Reset(); Battles.Reset(); bBattleStateCurrent = false; bEncounterScenarioReady = false; MinimumBattleRevision = 0;
@@ -324,6 +354,7 @@ void UHczsGameInstance::ContinueBattle(const FString& BattleId)
 void UHczsGameInstance::ReadBattle(const FString& BattleId, bool bAfterReceipt, bool bPrepareSettlement)
 {
     if (SelectedProfileId.IsEmpty()) return;
+    if (!bAfterReceipt) FreshBattleEntrance.Reset(); // Continue/refresh never creates an entrance permission.
     const FString ProfileId = SelectedProfileId; bBattleStateCurrent = false;
     if (!bAfterReceipt) LastVisualReceipt = FHczsBattleVisualReceipt();
     UserMessage = bAfterReceipt ? TEXT("操作已保存，正在同步最新战斗…") : TEXT("正在读取已保存战斗…");
@@ -340,6 +371,18 @@ void UHczsGameInstance::ReadBattle(const FString& BattleId, bool bAfterReceipt, 
         LastVisualReceipt = bAfterReceipt && CanPublishVisualReceipt(CurrentBattle, PendingVisualReceipt)
             ? PendingVisualReceipt : FHczsBattleVisualReceipt();
         Phase = EHczsSessionPhase::Battle; ErrorCode.Reset();
+        // The nonce originates only in this process's CreateSelectedBattle. A
+        // matching creation receipt AND its authoritative GET must both pass.
+        // The explicit native HTTP-only harness owns no world/presenter. Real
+        // Editor PIE UI tests use Init(), so they still exercise this handoff.
+        if (!bIsIsolatedAutomationSession && bAfterReceipt && bHasPendingIntent && bPendingReceiptConfirmed && PendingIntentKind == TEXT("create-battle") &&
+            !CreationEntranceNonce.IsEmpty() && PendingIntentProfile == ProfileId && ConfirmedBattleId == CurrentBattle.Id &&
+            ConfirmedBattleRevision == 1 && CurrentBattle.Revision == 1 && CurrentBattle.ActionIndex == 0)
+        {
+            FreshBattleEntrance.Arm(CurrentBattle, CreationEntranceNonce, SessionEpoch, FPlatformTime::Seconds());
+            UE_LOG(LogTemp, Display, TEXT("HCZS fresh entrance armed after creation receipt + GET: battle=%s nonce=%s"),
+                *CurrentBattle.Id, *CreationEntranceNonce);
+        }
         if (bAfterReceipt) ClearPendingIntent(LastVisualReceipt.bValid);
         UserMessage = CurrentBattle.Status == TEXT("player-turn") ? TEXT("轮到本方行动，操作会自动保存。") : CurrentBattle.Status == TEXT("won") ? TEXT("战斗胜利，结果已保存。") : TEXT("战斗结束，结果已保存。");
         UE_LOG(LogTemp, Display, TEXT("HCZS battle synchronized: revision=%lld round=%d status=%s hand=%d"), CurrentBattle.Revision, CurrentBattle.Round, *CurrentBattle.Status, CurrentBattle.Hand.Num());
@@ -489,6 +532,7 @@ void UHczsGameInstance::ClearPendingIntent(bool bConfirmedCard)
     const bool bWasDispatched = PendingCardVisual.bDispatched;
     PendingCardVisual = FHczsCardIntentVisual();
     bHasPendingIntent = false; bPendingIntentRetryable = false; bPendingReceiptConfirmed = false;
+    CreationEntranceNonce.Reset();
     PendingIntentKind.Reset(); PendingIntentVerb.Reset(); PendingIntentRoute.Reset(); PendingIntentBody.Reset();
     PendingIntentProfile.Reset(); PendingIntentBattle.Reset(); PendingIntentEncounter.Reset(); PendingIntentRevision = 0;
     PendingSettlementContentId.Reset(); PendingSettlementBattleRevision = 0;
@@ -499,7 +543,8 @@ void UHczsGameInstance::ClearPendingIntent(bool bConfirmedCard)
 void UHczsGameInstance::CreateSelectedBattle()
 {
     if (!CanStartRead() || !bLocalServiceAvailable || SelectedProfileId.IsEmpty() || !bProfileStateCurrent || !bEncounterScenarioReady || !bAllowNewBattles) return;
-    auto Input = MakeShared<FJsonObject>(); Input->SetStringField(TEXT("requestId"), RequestId());
+    FreshBattleEntrance.Reset(); CreationEntranceNonce = RequestId();
+    auto Input = MakeShared<FJsonObject>(); Input->SetStringField(TEXT("requestId"), CreationEntranceNonce);
     Input->SetStringField(TEXT("encounterId"), SelectedEncounterId);
 #if !UE_BUILD_SHIPPING
     int64 DebugSeed = 0;
@@ -512,7 +557,26 @@ void UHczsGameInstance::CreateSelectedBattle()
 bool UHczsGameInstance::CanSubmitBattleIntent() const
 {
     return !bShuttingDown && bLocalServiceAvailable && Phase == EHczsSessionPhase::Battle && CurrentBattle.bIsValid &&
-        bProfileStateCurrent && CurrentBattle.ProfileId == SelectedProfileId && bBattleStateCurrent && !bRequestInFlight && !bHasPendingIntent && CurrentBattle.Status == TEXT("player-turn");
+        bProfileStateCurrent && CurrentBattle.ProfileId == SelectedProfileId && bBattleStateCurrent && !bRequestInFlight && !bHasPendingIntent &&
+        !IsBattleEntranceLocked() && CurrentBattle.Status == TEXT("player-turn");
+}
+bool UHczsGameInstance::IsBattleEntranceLocked() const
+{
+    return !bShuttingDown && Phase == EHczsSessionPhase::Battle &&
+        FreshBattleEntrance.IsCurrent(CurrentBattle, SelectedProfileId, SessionEpoch, FPlatformTime::Seconds());
+}
+bool UHczsGameInstance::ConsumeFreshBattleEntrance(const FString& BattleId)
+{
+    return BattleId == CurrentBattle.Id && bBattleStateCurrent && !bHasPendingIntent && !bRequestInFlight &&
+        IsBattleEntranceLocked() && FreshBattleEntrance.Consume(CurrentBattle, SelectedProfileId, SessionEpoch, FPlatformTime::Seconds());
+}
+bool UHczsGameInstance::IsFreshBattleEntranceActive(const FString& BattleId) const
+{
+    return BattleId == CurrentBattle.Id && FreshBattleEntrance.bConsumed && IsBattleEntranceLocked();
+}
+void UHczsGameInstance::CompleteFreshBattleEntrance(const FString& BattleId)
+{
+    if (FreshBattleEntrance.BattleId == BattleId) FreshBattleEntrance.Reset();
 }
 bool UHczsGameInstance::IsPendingReceiptConfirmed() const { return bHasPendingIntent && bPendingReceiptConfirmed; }
 bool UHczsGameInstance::IsHallSceneReady() const
@@ -661,6 +725,42 @@ void UHczsGameInstance::RetryPendingIntent()
 void UHczsGameInstance::ReturnToHall()
 {
     if (!CanStartRead() || SelectedProfileId.IsEmpty() || !bProfileStateCurrent) return;
+    FreshBattleEntrance.Reset();
     LastVisualReceipt = FHczsBattleVisualReceipt();
     Phase = EHczsSessionPhase::Hall; UserMessage = TEXT("已返回大厅，战斗保留在此档案中。"); ErrorCode.Reset(); Notify(); RefreshBattles();
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHczsFreshBattleEntranceGateTest, "Hczs.Session.FreshBattleEntranceGate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FHczsFreshBattleEntranceGateTest::RunTest(const FString& Parameters)
+{
+    FHczsFreshBattleEntranceGate Gate;
+    FHczsBattleView View; View.bIsValid = true; View.Id = TEXT("battle-a"); View.ProfileId = TEXT("profile-a");
+    View.Status = TEXT("player-turn"); View.ActionIndex = 0; View.Revision = 1;
+    TestFalse(TEXT("revision 1 alone cannot consume an entrance"), Gate.Consume(View, View.ProfileId, 3, 100.));
+    TestFalse(TEXT("no creation nonce cannot arm"), Gate.Arm(View, FString(), 3, 100.));
+    TestTrue(TEXT("verified fresh create handoff arms"), Gate.Arm(View, TEXT("create-request-a"), 3, 100.));
+    TestTrue(TEXT("map handoff locks commands"), Gate.IsCurrent(View, View.ProfileId, 3, 100.));
+    TestFalse(TEXT("other profile cannot consume"), Gate.Consume(View, TEXT("profile-b"), 3, 100.));
+    TestFalse(TEXT("new session epoch cannot consume"), Gate.Consume(View, View.ProfileId, 4, 100.));
+    FHczsBattleView Other = View; Other.Id = TEXT("battle-b");
+    TestFalse(TEXT("other battle cannot consume"), Gate.Consume(Other, View.ProfileId, 3, 100.));
+    TestTrue(TEXT("correct fresh battle consumes once"), Gate.Consume(View, View.ProfileId, 3, 101.));
+    TestFalse(TEXT("second presenter or repeated GET cannot replay"), Gate.Consume(View, View.ProfileId, 3, 101.));
+    TestTrue(TEXT("playing retains command lock"), Gate.IsCurrent(View, View.ProfileId, 3, 105.));
+    TestFalse(TEXT("missing completion cannot lock forever"), Gate.IsCurrent(View, View.ProfileId, 3, 108.));
+    Gate.Reset();
+    TestFalse(TEXT("hall/continue/reconnect reset rev1 cannot replay"), Gate.Consume(View, View.ProfileId, 3, 109.));
+    Gate.Arm(View, TEXT("new-creation-request"), 3, 110.);
+    TestFalse(TEXT("missing scene expires the handoff"), Gate.IsCurrent(View, View.ProfileId, 3, 122.));
+    Other = View; Other.ActionIndex = 1; Other.Revision = 2;
+    TestFalse(TEXT("advanced battle cannot arm even with a nonce"), Gate.Arm(Other, TEXT("creation-request"), 3, 123.));
+    Gate.Arm(View, TEXT("new-creation-request"), 3, 125.);
+    TestFalse(TEXT("authority advances cancel remaining permission"), Gate.IsCurrent(Other, View.ProfileId, 3, 125.));
+    TestEqual(TEXT("presentation gate never changes authority revision"), View.Revision, int64(1));
+    TestEqual(TEXT("presentation gate never advances action"), View.ActionIndex, int64(0));
+    return true;
+}
+#endif

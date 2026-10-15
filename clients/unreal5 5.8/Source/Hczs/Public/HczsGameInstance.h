@@ -22,6 +22,19 @@ struct FHczsCardIntentVisual
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnHczsCardIntentDispatched, const FHczsCardIntentVisual&);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnHczsCardIntentSettled, const FString&, bool);
 
+/** Process-local presentation permission, never reconstructed from revision 1 alone. */
+struct HCZS_API FHczsFreshBattleEntranceGate
+{
+    FString BattleId, ProfileId, CreationNonce;
+    uint64 Epoch = 0;
+    double Deadline = 0.0;
+    bool bConsumed = false;
+    void Reset();
+    bool Arm(const FHczsBattleView& View, const FString& Nonce, uint64 SessionEpoch, double Now);
+    bool IsCurrent(const FHczsBattleView& View, const FString& SelectedProfile, uint64 SessionEpoch, double Now) const;
+    bool Consume(const FHczsBattleView& View, const FString& SelectedProfile, uint64 SessionEpoch, double Now);
+};
+
 /** Explicit local reconstruction session, never an original-account login. */
 UCLASS(Config=Game)
 class HCZS_API UHczsGameInstance : public UGameInstance
@@ -50,6 +63,11 @@ public:
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void ConfirmMainlineVictory();
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool CanConfirmMainlineVictory() const;
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool CanSubmitBattleIntent() const;
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsBattleEntranceLocked() const;
+    /** Native scene coordinator only. Does not submit or change authoritative state. */
+    bool ConsumeFreshBattleEntrance(const FString& BattleId);
+    bool IsFreshBattleEntranceActive(const FString& BattleId) const;
+    void CompleteFreshBattleEntrance(const FString& BattleId);
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool IsPendingReceiptConfirmed() const;
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool IsHallSceneReady() const;
     UFUNCTION(BlueprintPure, Category="HCZS|Session") bool IsBattleSceneReady() const;
@@ -116,6 +134,8 @@ private:
     int64 ConfirmedBattleRevision = 0;
     FHczsBattleVisualReceipt PendingVisualReceipt;
     FHczsCardIntentVisual PendingCardVisual;
+    FString CreationEntranceNonce;
+    FHczsFreshBattleEntranceGate FreshBattleEntrance;
     using FReply = TFunction<void(TSharedPtr<FJsonObject>, int32, const FString&)>;
 
     void Fetch(const FString& RequestPhase, const FString& Verb, const FString& Route, const FString& Body, FReply Completion);

@@ -1,5 +1,6 @@
 #include "HczsBattlePresentation.h"
 #include "HczsUltimateSequence.h"
+#include "HczsWeaponSourceFx.h"
 
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
@@ -10,11 +11,14 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "HczsGameInstance.h"
+#include "HAL/PlatformTime.h"
 
 namespace
 {
     constexpr int32 MaxPresentationEvents = 128;
     constexpr int32 MaxPresentationSteps = 128;
+    constexpr float SourceEntranceSeconds = 3.7f;
+    constexpr float SourceEntranceEffectRatio = 0.144595f;
     bool IsDead(const FHczsScalar& Hp) { return Hp.Approximate <= 0.0; }
     int64 VisualUnixMs() { const FDateTime Now = FDateTime::UtcNow(); return Now.ToUnixTimestamp() * 1000 + Now.GetMillisecond(); }
 }
@@ -88,6 +92,7 @@ AHczsBattlePresentation::AHczsBattlePresentation()
     PrimaryActorTick.bCanEverTick = true;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
     UltimateSequence = CreateDefaultSubobject<UHczsUltimateSequence>(TEXT("UltimateSequence"));
+    WeaponSourceFx = CreateDefaultSubobject<UHczsWeaponSourceFx>(TEXT("WeaponSourceFx"));
     Tags.Add(TEXT("HCZSBattlePresentation"));
 }
 
@@ -112,6 +117,7 @@ void AHczsBattlePresentation::EndPlay(const EEndPlayReason::Type EndPlayReason)
         Session->OnCardIntentSettledNative.Remove(IntentSettledHandle);
     }
     CancelPresentation(); Cursor.Reset();
+    WeaponSourceFx->Release();
     Session = nullptr;
     OnPresentationChangedNative.Clear();
     Super::EndPlay(EndPlayReason);
@@ -162,8 +168,158 @@ void AHczsBattlePresentation::IntentSettled(const FString& RequestId, bool bConf
 void AHczsBattlePresentation::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    if (bEntrancePlaying)
+    {
+        // BeginPlay/map loading can precede the world's first delta. Starting
+        // this clock in the first actor tick excludes that loading time.
+        if (EntrancePhase == TEXT("waiting-hidden") && EntranceHiddenWorldStart < 0.0 &&
+            Session && Session->IsFreshBattleEntranceActive(EntranceBattleId))
+        {
+            EntranceHiddenWorldStart = GetWorld()->GetTimeSeconds();
+            EntranceHiddenRealStart = FPlatformTime::Seconds();
+            GetWorldTimerManager().SetTimer(EntranceStartTimer, this, &AHczsBattlePresentation::StartEntranceClip, .5f, false);
+            UE_LOG(LogTemp, Display, TEXT("HCZS entrance fresh-start: battle=%s source=fight_idle_show delay=0.5 worldTime=%.6f atUnixMs=%lld"),
+                *EntranceBattleId, EntranceHiddenWorldStart, VisualUnixMs());
+        }
+        ObserveEntrance(); return;
+    }
     ObserveLocalImpact();
     ReleaseLocalReaction();
+}
+
+float AHczsBattlePresentation::GetEntrancePosition() const
+{
+    const auto* Playback = PlayerComponent ? PlayerComponent->GetSingleNodeInstance() : nullptr;
+    return bEntrancePlaying && Playback && Playback->GetAnimationAsset() == EntranceAnimation
+        ? Playback->GetCurrentTime() : EntranceLastPosition;
+}
+
+bool AHczsBattlePresentation::TryPlayFreshEntrance(const FHczsBattleView& View)
+{
+    if (!Session) Session = Cast<UHczsGameInstance>(GetGameInstance());
+    if (!Session || !Session->ConsumeFreshBattleEntrance(View.Id)) return false;
+    EntranceBattleId = View.Id; EntranceLastPosition = 0; bEntranceEventEmitted = false;
+    EntranceAnimation = LoadObject<UAnimSequence>(nullptr,
+        TEXT("/Game/Recovered/Battle/Entrance/elsa_entrance.elsa_entrance"));
+    if (!PlayerComponent || !SceneAssets || !SceneAssets->PlayerMesh || !EntranceAnimation ||
+        EntranceAnimation->GetSkeleton() != SceneAssets->PlayerMesh->GetSkeleton() ||
+        PlayerComponent->GetNumBones() != 180 || !FMath::IsFinite(EntranceAnimation->GetPlayLength()) ||
+        FMath::Abs(EntranceAnimation->GetPlayLength() - SourceEntranceSeconds) > .002f)
+    {
+        EntrancePhase = TEXT("unavailable"); EntranceDiagnostic = TEXT("Source entrance asset, 180-bone battle skeleton or 3.7s duration mismatch; skipped.");
+        Session->CompleteFreshBattleEntrance(EntranceBattleId);
+        UE_LOG(LogTemp, Warning, TEXT("HCZS entrance unavailable: battle=%s; source entrance skipped, commands unlocked"), *View.Id);
+        return false;
+    }
+    bEntrancePlaying = true; EntrancePhase = TEXT("waiting-hidden");
+    EntranceHiddenWorldStart = -1.0; EntranceHiddenRealStart = -1.0; EntranceShowWorldStart = -1.0;
+    EntranceDiagnostic = TEXT("Original BattleScene.playerShow: hidden, waiting 0.5 seconds.");
+    EntranceDeadline = FPlatformTime::Seconds() + 6.5;
+    // Source playerShow hides only our side. Entity6605 has no SHOW animation.
+    SetSideVisible(false, false);
+    SetBusy(true);
+    UE_LOG(LogTemp, Display, TEXT("HCZS entrance prepared: battle=%s source=fight_idle_show waitingForFirstTick=1 atUnixMs=%lld"),
+        *View.Id, VisualUnixMs());
+    return true;
+}
+
+void AHczsBattlePresentation::StartEntranceClip()
+{
+    if (!bEntrancePlaying || EntrancePhase != TEXT("waiting-hidden") || EntranceHiddenWorldStart < 0.0) return;
+    if (!Session || !Session->IsFreshBattleEntranceActive(EntranceBattleId) || !PlayerComponent || !EntranceAnimation)
+    { StopEntrance(false, TEXT("session-or-source-changed")); return; }
+    const double WorldNow = GetWorld()->GetTimeSeconds();
+    const double HiddenElapsed = WorldNow - EntranceHiddenWorldStart;
+    const double RealHiddenElapsed = FPlatformTime::Seconds() - EntranceHiddenRealStart;
+    if (HiddenElapsed < .5 || RealHiddenElapsed < .5)
+    {
+        // TimerManager can consume the first loading delta after SetTimer.
+        // Its callback is only a wake-up. A delayed loading delta can reach
+        // the game clock a frame later too; it must not shorten the visible wait.
+        GetWorldTimerManager().SetTimer(EntranceStartTimer, this, &AHczsBattlePresentation::StartEntranceClip,
+            FMath::Max(.001f, static_cast<float>(FMath::Max(.5 - HiddenElapsed, .5 - RealHiddenElapsed))), false);
+        return;
+    }
+    EntranceShowWorldStart = WorldNow;
+    PlayerComponent->PlayAnimation(EntranceAnimation, false);
+    PlayerComponent->SetPosition(0, false);
+    PlayerComponent->SetPlayRate(1.0f);
+    // Keep every authored translation, including the jump-in. No root-motion
+    // extraction, upright correction or actor transform is applied here.
+    EntrancePhase = TEXT("show-hidden"); EntranceDiagnostic = TEXT("Source SHOW playing; reveal after 0.01 seconds.");
+    GetWorldTimerManager().SetTimer(EntranceVisibleTimer, this, &AHczsBattlePresentation::RevealEntrancePlayer, .01f, false);
+    GetWorldTimerManager().SetTimer(EntranceFinishTimer, this, &AHczsBattlePresentation::CheckEntranceFinished,
+        EntranceAnimation->GetPlayLength(), false);
+    UE_LOG(LogTemp, Display, TEXT("HCZS entrance source SHOW: battle=%s duration=%.6f hiddenElapsed=%.6f worldTime=%.6f atUnixMs=%lld"),
+        *EntranceBattleId, EntranceAnimation->GetPlayLength(), HiddenElapsed, WorldNow, VisualUnixMs());
+}
+
+void AHczsBattlePresentation::RevealEntrancePlayer()
+{
+    if (!bEntrancePlaying || EntrancePhase != TEXT("show-hidden") || EntranceShowWorldStart < 0.0) return;
+    if (!Session || !Session->IsFreshBattleEntranceActive(EntranceBattleId))
+    { StopEntrance(false, TEXT("session-changed-before-reveal")); return; }
+    const double WorldNow = GetWorld()->GetTimeSeconds();
+    const double ShowElapsed = WorldNow - EntranceShowWorldStart;
+    if (ShowElapsed < .01)
+    {
+        GetWorldTimerManager().SetTimer(EntranceVisibleTimer, this, &AHczsBattlePresentation::RevealEntrancePlayer,
+            FMath::Max(.001f, static_cast<float>(.01 - ShowElapsed)), false);
+        return;
+    }
+    SetSideVisible(false, true); EntrancePhase = TEXT("show-visible");
+    EntranceDiagnostic = TEXT("Original 3.7-second fight_idle_show; source event_1 effect not imported.");
+    UE_LOG(LogTemp, Display, TEXT("HCZS entrance source visible: battle=%s showElapsed=%.6f worldTime=%.6f atUnixMs=%lld"),
+        *EntranceBattleId, ShowElapsed, WorldNow, VisualUnixMs());
+}
+
+void AHczsBattlePresentation::ObserveEntrance()
+{
+    if (!bEntrancePlaying) return;
+    if (!Session || !Session->IsFreshBattleEntranceActive(EntranceBattleId))
+    { StopEntrance(false, TEXT("session-changed-or-entrance-permission-expired")); return; }
+    if (FPlatformTime::Seconds() >= EntranceDeadline)
+    { StopEntrance(false, TEXT("source-playback-watchdog")); return; }
+    if (EntrancePhase == TEXT("waiting-hidden")) return;
+    auto* Playback = PlayerComponent ? PlayerComponent->GetSingleNodeInstance() : nullptr;
+    if (!Playback || !EntranceAnimation || Playback->GetAnimationAsset() != EntranceAnimation ||
+        !FMath::IsFinite(Playback->GetCurrentTime()))
+    { StopEntrance(false, TEXT("source-playback-interrupted")); return; }
+    EntranceLastPosition = Playback->GetCurrentTime();
+    if (!bEntranceEventEmitted && EntranceLastPosition / EntranceAnimation->GetPlayLength() >= SourceEntranceEffectRatio)
+    {
+        bEntranceEventEmitted = true;
+        // Explicit source event hook. The original chuchang.sfx is not yet
+        // imported, so do not substitute a generic flash or claim it played.
+        UE_LOG(LogTemp, Display, TEXT("HCZS entrance source cue: battle=%s event=event_1 ratio=0.144595 position=%.6f socket=fx_center sfx=effects/player/001/fight_idle_show_chuchang.sfx effectPlayed=0 atUnixMs=%lld"),
+            *EntranceBattleId, EntranceLastPosition, VisualUnixMs());
+    }
+    if (EntranceLastPosition >= EntranceAnimation->GetPlayLength() - .002f)
+        StopEntrance(true, TEXT("source-SHOW-completed-to-idle_1"));
+}
+
+void AHczsBattlePresentation::CheckEntranceFinished()
+{
+    ObserveEntrance();
+    // A timer is only a wake-up: completion follows the actual clip position.
+    if (bEntrancePlaying)
+        GetWorldTimerManager().SetTimer(EntranceFinishTimer, this, &AHczsBattlePresentation::CheckEntranceFinished, .02f, false);
+}
+
+void AHczsBattlePresentation::StopEntrance(bool bCompleted, const FString& Reason, bool bRestoreStablePose)
+{
+    if (!bEntrancePlaying) return;
+    bEntrancePlaying = false;
+    GetWorldTimerManager().ClearTimer(EntranceStartTimer);
+    GetWorldTimerManager().ClearTimer(EntranceVisibleTimer);
+    GetWorldTimerManager().ClearTimer(EntranceFinishTimer);
+    if (Session) Session->CompleteFreshBattleEntrance(EntranceBattleId);
+    EntranceDeadline = 0; EntranceHiddenWorldStart = -1.0; EntranceShowWorldStart = -1.0;
+    EntrancePhase = bCompleted ? TEXT("complete") : TEXT("cancelled"); EntranceDiagnostic = Reason;
+    if (bRestoreStablePose && bSceneReady) ApplyStablePose(DesiredSnapshot);
+    SetBusy(false);
+    UE_LOG(LogTemp, Display, TEXT("HCZS entrance finished: battle=%s completed=%d position=%.6f reason=%s atUnixMs=%lld"),
+        *EntranceBattleId, bCompleted, EntranceLastPosition, *Reason, VisualUnixMs());
 }
 
 void AHczsBattlePresentation::ObserveLocalImpact()
@@ -327,7 +483,7 @@ void AHczsBattlePresentation::FinishLocalPlayerClip()
 
 void AHczsBattlePresentation::FinishVisualsIfIdle()
 {
-    if (bUltimatePlaying || bLocalPlayerPlaying || bWaitingForImpact || bLocalEnemyReacting) return;
+    if (bEntrancePlaying || bUltimatePlaying || bLocalPlayerPlaying || bWaitingForImpact || bLocalEnemyReacting) return;
     if (!UltimateIntent.RequestId.IsEmpty() && !UltimateIntent.bConfirmed) return;
     if (Queue.IsValidIndex(QueueIndex))
     {
@@ -396,6 +552,9 @@ bool AHczsBattlePresentation::EnsureSceneReady()
     TArray<AActor*> Weapons; UGameplayStatics::GetAllActorsWithTag(GetWorld(), TEXT("HCZSBattleWeapon"), Weapons);
     if (Weapons.Num() != 1) return false;
     WeaponActor = Weapons[0];
+    // Independent original weapon001 overlay; it does not advance combat or
+    // stand in for the separate weapon_dao particle group.
+    WeaponSourceFx->Initialise(PlayerComponent, WeaponActor);
     PlayerComponent->PlayAnimation(FindAnimation(false, TEXT("idle_1")), true);
     EnemyComponent->PlayAnimation(FindAnimation(true, TEXT("idle")), true);
     bSceneReady = true;
@@ -461,6 +620,7 @@ void AHczsBattlePresentation::ApplySnapshot(const FHczsBattleView& View, const F
     if (Decision != EHczsVisualSnapshotDecision::PresentReceipt)
     {
         ApplyStablePose(View);
+        if (Decision == EHczsVisualSnapshotDecision::Baseline && TryPlayFreshEntrance(View)) return;
         UE_LOG(LogTemp, Display, TEXT("HCZS battle visual baseline: actionIndex=%lld; no historical action replay"), View.ActionIndex);
         return;
     }
@@ -576,6 +736,7 @@ void AHczsBattlePresentation::FinishStep()
 
 void AHczsBattlePresentation::CancelPresentation(bool bKeepUnconfirmedIntent)
 {
+    StopEntrance(false, TEXT("presentation-cancelled"), false);
     bUltimatePlaying = false;
     if (UltimateSequence) UltimateSequence->Cancel();
     UltimateIntent.Reset(); bUltimateIntentAborted = false;

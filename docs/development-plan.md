@@ -297,11 +297,15 @@ UE API 的语义应支持多角色、多目标、事件队列和配置版本，�
 
 序章源关系由 `tools/prepare_prologue_progression.py` 从 Activity 2、挑战 3997/3998、迷宫及战斗配置生成：3997→5000，3998 依赖 3997 并加载 1703；两挑战 `HasLoot=false`、`MaxTimes=1`。Mongo 主线接口已接 UE 胜利确认及选关进度，并通过项目 PM2 配置在 7460 启用。独立真实 UE 鼠标确认、重复触摸、返回大厅重进、UE/Node 进程重启，以及“提交后响应截断→原请求重试→确认后 GET 截断→仅 GET 重试”均通过；始终只记一次通关。历史定义快照保留旧回执，绑定新增兼容、丢失状态及不可能完成项的 Mongo 回归通过。证据在 `analysis/unreal/session-test/mainline-ui-20261016/`、`mainline-faults-20261016/`，两测试库均已清理。UE 契约 8 项、普通服务端 82 项通过；这仍是本地进度适配，3998 的 BOSS/剧情尚不可玩，不把 `DropPersistentItems` 直接当玩家奖励。
 
-用户最新反馈优先补武器、技能及命中特效：先恢复当前转换遗漏的原武器第二层 `weapon001/lancer2` 流光，再接普通攻击 AGS→GIM→SFX 刀光与目标 `shouji_01`。这些与 `weapon_dao.sfx` 常驻粒子、终结技特效是独立层，不能挂一层就宣称全部完成。BOSS 1703 已定位原终焉使者模型、剧院场景与逐回合 AI；未得到强制败北或第二血条的触发证据，不据剧情猜测实现。
+武器第二层 `weapon001/lancer2` 流光已按原 UV、线性 noise 与 shader 参数导入，运行组件复用现武器挂点和相对变换，随暂停、显隐、离场同步；独立 UE 检查 10 项及四张同机位截图通过，测试库已清理。普通刀光两个原网格的包围盒是保守圆包围，不是导出变形；源哈希限定的导出与逐字节检查通过，双流动/溶解材质已导入，尚未挂入出牌。`weapon_dao.sfx` 常驻粒子、目标 `shouji_01` 与终结技特效仍是独立缺口，不能用武器一层流光冒充全部完成。
+
+缓存《正式服第一期》03:37–03:45 的原进场已截帧并保留短片，位于 `analysis/video-references/diagnostics/entry-effects-20261016/`。已按挑战覆盖把首战接到独立 `L_TutorialSource2133`，复用原 `pszdu_battle_1` 环境、配置派生站位与当前战斗角色。源线性 ASTC 被 glTF 颜色纹理路径额外按 sRGB 解码的问题经 UE 原生读回确认；新地图使用独立派生线性纹理与曝光适配，原地图/贴图/角色保持不变。原相机 FOV 的水平/垂直语义、画面比例及完整光影仍需逐项录像对照，不能称像素还原。
+
+艾尔莎原 `fight_idle_show`（3.7 秒、180 骨骼、112 帧）已恢复并导入战斗骨架，只在本次客户端真正新建并经权威 GET 确认的战斗播放。原隐藏等待、SHOW、显形、回 idle 已接入；加载产生的时间跳跃不再压缩最低可见等待。真实 UE 验证首次播放、一次事件接点、续战不重播、中途返回清锁及两场权威状态不变通过，证据在 `analysis/unreal/session-test/entrance-source2133-clock-20261016/`，测试库已清理。入场 SFX 尚未播放；开战横幅/HUD In/首轮飞牌的 52 张原图与 CSB/轨迹已恢复配方，尚未接运行时。BOSS 1703 的原模型与七段动作已转换验证，未证明强制败北或第二血条；对应双人卡组、BOSS 战斗仍待实现。
 
 大厅角色选择已接入正式大厅：`tools/prepare_hall_hero_picker.py --recover` 复用 NPK、CSB、图集与 VT 转换器，恢复原底部横向条、选择/退出按钮、头像模板和单选框。两位初始角色的原头像按 `SquareUnlockIcon → PowerSupportSystemIcon` 静态绑定提取；不把角色目录当成原账号解锁状态。`tools/unreal/import_hall_hero_picker.py` 导入独立 DataAsset；`AHczsHallHeroPresentation` 区分临时预览、退出还原、确认后的权威存档，不改战斗队伍。UE5.8 编译及真实 Slate 鼠标/触摸路径验证通过：预览和两次取消均不发保存请求，确认仅提交一次 PATCH；独立 HTTP 读回与 UE 进程重启确认未来/版本 1 保持不变。结果与实际含 UI 截图在 `analysis/unreal/hall-hero-picker/native-picker.json`、`native-picker-resume.json`，网络记录在 `analysis/unreal/session-test/hall-hero-picker-20261015/`。原裁切菜单入口仍未恢复，当前使用本地页眉入口；完整列表、稀有度/等级/职业角标、滚动动画与 Android 验证继续待做。本轮未重启 Node，不能称为 Node 重启验收。
 
-战斗画面对照基线：`analysis/unreal/battle-reference/comparison.jpg`。缓存《正式服第一期》05:00 是双人红幕剧院战斗，15:00 是三人白天街道备战；终结技视频 00:28 是三人紫色夜景。各片段关卡与录像版本不同，不能统一套场景或用跨关卡截图宣称像素还原。当前教程仍是单人样例及 `city_battle_1` 替代场景。
+战斗画面对照基线：`analysis/unreal/battle-reference/comparison.jpg`。缓存《正式服第一期》03:39 首战是橙天废墟，05:00 是双人红幕剧院战斗，15:00 是三人白天街道备战；终结技视频 00:28 是三人紫色夜景。各片段关卡与录像版本不同，不能统一套场景。当前首战已使用 2133 废墟，仍是单人规则样例；旧 `city_battle_1` 地图仅保留历史对照。
 
 下一步先核实关卡→有效场景加载映射，再恢复镜头、完整编队和原 HUD，随后补材质、接触阴影/反射及源特效。`boss_theatre`（12 网格、20 实例、8 颜色贴图）和 `pszdu_battle_1` 已导入独立 UE 地图 `/Game/Recovered/SourceStages/Maps/L_Theatre`、`L_RuinedCity`，实际渲染位于 `analysis/unreal/battle-reference/`；未绑定玩法或替换现有教程。原 FOV 暂按垂直角转换到 20:9 检查，原摄像机投影仍待验证。`pszdu_battle_1` 的原贴图是橙天废墟，不能因序章覆盖引用就称其为录像里的剧院。相关源资源在 `analysis/battle-visual/prologue-theatre/`；目录同时保留这两个候选的证据。
 

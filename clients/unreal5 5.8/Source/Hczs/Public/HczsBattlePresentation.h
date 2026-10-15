@@ -12,6 +12,7 @@ class USkeletalMesh;
 class USkeletalMeshComponent;
 class UHczsGameInstance;
 class UHczsUltimateSequence;
+class UHczsWeaponSourceFx;
 struct FHczsCardIntentVisual;
 
 /** Original source clip names; actual imported UObject references live in the maps below. */
@@ -110,14 +111,38 @@ public:
     void ApplySnapshot(const FHczsBattleView& View, const FHczsBattleVisualReceipt& Receipt);
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsPresentationBusy() const { return bPresentationBusy; }
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsSceneReady() const { return bSceneReady; }
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") bool IsEntrancePlaying() const { return bEntrancePlaying; }
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") float GetEntrancePosition() const;
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") FString GetEntrancePhase() const { return EntrancePhase; }
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") FString GetEntranceDiagnostic() const { return EntranceDiagnostic; }
     bool CanPresentBattle(const FHczsBattleView& View) const;
     UHczsUltimateSequence* GetUltimateSequence() const { return UltimateSequence; }
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") UHczsWeaponSourceFx* GetWeaponSourceFx() const { return WeaponSourceFx; }
     FOnHczsBattlePresentationChanged OnPresentationChangedNative;
 
     UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<UHczsBattleSceneAssets> SceneAssets;
 
 private:
+    UPROPERTY() TObjectPtr<UAnimSequence> EntranceAnimation;
+    bool bEntrancePlaying = false;
+    bool bEntranceEventEmitted = false;
+    FString EntranceBattleId;
+    FString EntrancePhase = TEXT("none");
+    FString EntranceDiagnostic;
+    float EntranceLastPosition = 0.0f;
+    double EntranceDeadline = 0.0;
+    double EntranceHiddenWorldStart = -1.0;
+    double EntranceHiddenRealStart = -1.0;
+    double EntranceShowWorldStart = -1.0;
+    FTimerHandle EntranceStartTimer, EntranceVisibleTimer, EntranceFinishTimer;
+    bool TryPlayFreshEntrance(const FHczsBattleView& View);
+    void StartEntranceClip();
+    void RevealEntrancePlayer();
+    void ObserveEntrance();
+    void CheckEntranceFinished();
+    void StopEntrance(bool bCompleted, const FString& Reason, bool bRestoreStablePose = true);
     UPROPERTY() TObjectPtr<UHczsUltimateSequence> UltimateSequence;
+    UPROPERTY() TObjectPtr<UHczsWeaponSourceFx> WeaponSourceFx;
     bool bUltimatePlaying = false;
     FHczsCardVisualGate UltimateIntent;
     bool bUltimateIntentAborted = false;

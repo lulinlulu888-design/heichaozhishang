@@ -14,7 +14,7 @@
 
 namespace
 {
-const TCHAR* BattleMap = TEXT("/Game/Recovered/Battle/Maps/L_TutorialBattle");
+const TCHAR* BattleMap = TEXT("/Game/Recovered/Battle/Maps/L_TutorialSource2133");
 const TCHAR* HallMap = TEXT("/Game/Recovered/Hall/Maps/L_ElsaHallFxPreview");
 
 bool SupportedBattle(const UHczsGameInstance* Session)
