@@ -297,7 +297,9 @@ UE API 的语义应支持多角色、多目标、事件队列和配置版本，�
 
 场景材质公共转换已增加 `surface_materials=True` 分支，保留原法线与 Tex1/Tex2 通道。剧院 PBR 及原方向光适配已导入并渲染；4 个无歧义实例已核对源 UV1、接入原烘焙漫反射，保存为 `L_TheatreSurfaceBaked`，结果见 `analysis/unreal/battle-reference/baked-diffuse/lit-native-render.json`。另 6 个多材质实例的绑定、SIMPLE_SHADING 分支、完整 BRDF 与光照仍未还原；未接编队与玩法。
 
-公共资源查找支持 `.cube`→`.ktx`；增加 `.surf` 材质入口和 HLSL 字面 include 的候选追踪后，两个场景已命中 433 条依赖，仍有 4 条未命中。条件编译分支、include 搜索顺序和隐式依赖仍未运行验证。剧院原反射探针的 6 面×8 级原 mip（48 张图）已由 `prepare_scene_reflection_dds.py` 无重采样打包成线性 DDS，并通过 `tools/unreal/import_source_stage_reflection.py` 导入独立 TextureCube；UE 读回尺寸为 128×128×6，设置保留已有 mip。GPU 实际 mip 数、坐标基、探针选择及完整着色仍待验证，尚未应用到场景光照，不能把资源导入称为画面还原。
+公共资源查找支持 `.cube`→`.ktx`；增加 `.surf` 材质入口和 HLSL 字面 include 的候选追踪后，两个场景已命中 433 条依赖，仍有 4 条未命中。条件编译分支、include 搜索顺序和隐式依赖仍未运行验证。剧院原反射探针的 6 面×8 级原 mip（48 张图）已无重采样打包成线性 DDS，并导入独立 TextureCube，尺寸 128×128×6。`tools/unreal/verify_source_reflection_sampling.py` 实际渲染并读回 GPU 上全部 48 个面/mip 中心采样点；与原 PNG 中心双线性取样的最大线性 RGB 误差为 0.0002892，结果见 `analysis/unreal/battle-reference/reflection-gpu-comparison.json`。这只证明这些采样点的值，不证明全部像素、边缘方向或原引擎一致。
+
+反射材质对照已通过原 HLSL BRDF 近似和源探针 RGB 采样接入两处显式 `UseReflectionProbe=1` 实例，保存为独立地图 `L_TheatreSurfaceReflection_63e504080343`，未改动教程战斗。4 个派生材质编译通过，实际截图与源地图未改动的哈希检查见 `analysis/unreal/battle-reference/baked-diffuse/reflection-native-render.json`。当前采用原 mip 0..7 范围和现有场景逆坐标适配；原 `ReflectionProbeInfo` 的 mip 标量、SIMPLE_SHADING 分支、探针选择与 KTX/D3D 方向仍待运行核实。未显式开启探针的地板等实例保持原有烘焙漫反射，不能把这次对照称为完整战斗光影还原。
 
 - [x] 汇总源 APK 全系统目录，区分包索引、配置/脚本与运行验证。
 - [x] 建立 35 位角色、服装、模型、动画、终结技的机器目录，列出未命中引用。

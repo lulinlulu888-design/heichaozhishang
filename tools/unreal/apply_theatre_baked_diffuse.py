@@ -17,7 +17,10 @@ camera = None
 result = None
 handle = None
 started = time.monotonic()
-lit_surface = '-HczsTheatreLitDiffuse' in u.SystemLibrary.get_command_line()
+reflection_mode = '-HczsTheatreReflection' in u.SystemLibrary.get_command_line()
+lit_surface = reflection_mode or '-HczsTheatreLitDiffuse' in u.SystemLibrary.get_command_line()
+REPORT_PREFIX = 'reflection-' if reflection_mode else ('lit-' if lit_surface else '')
+SCREEN_NAME = 'theatre-surface-reflection.png' if reflection_mode else ('theatre-surface-baked.png' if lit_surface else 'theatre-baked-diffuse.png')
 
 
 def digest(path):
@@ -25,14 +28,21 @@ def digest(path):
 
 
 def apply():
-    recipe = json.loads((BASE / 'recipe.json').read_text('utf8'))
+    recipe = json.loads((BASE / ('reflection-recipe.json' if reflection_mode else 'recipe.json')).read_text('utf8'))
     if lit_surface:
         recipe['sourceMap'] = '/Game/Recovered/SourceStages/Maps/L_TheatreSurface'
-        recipe['targetMap'] = '/Game/Recovered/SourceStages/Maps/L_TheatreSurfaceBaked'
+        recipe['targetMap'] = '/Game/Recovered/SourceStages/Maps/' + ('L_TheatreSurfaceReflection_' + recipe['recipeSha256'][:12] if reflection_mode else 'L_TheatreSurfaceBaked')
         for row in recipe['bindings']:
             row['actorLabel'] = row['actorLabel'].replace('boss_theatre_node_', 'boss_theatre_surface_node_')
     output = dict(recipeSha256=recipe['recipeSha256'], applied=[], deferred=recipe['deferred'],
         limitations=recipe['limitations'], nativeRenderVerified=False)
+    cube = None
+    if reflection_mode:
+        cube = u.load_asset(recipe['reflectionCube'])
+        if not isinstance(cube, u.TextureCube) or u.EditorAssetLibrary.get_metadata_tag(cube, 'HczsSourceDDS') != recipe['reflectionDdsSha256']:
+            raise RuntimeError('Original reflection cube identity differs')
+        output.update(reflectionCube=cube.get_path_name(), reflectionMaxMip=recipe['previewMaxMip'],
+            reflectionInstanceCount=sum(row['reflectionWeight'] for row in recipe['bindings']))
     world = u.get_editor_subsystem(u.UnrealEditorSubsystem).get_editor_world()
     if world.get_path_name().split('.')[0] != recipe['sourceMap']:
         raise RuntimeError('Start the editor in the original theatre inspection map')
@@ -57,7 +67,7 @@ def apply():
                              build.get_editor_property('dst_lightmap_index') == 1):
             raise RuntimeError('Original source UV1 missing or replaced by generated UVs')
         verified.append((row, component, mesh.get_path_name(), channels))
-    destination = '/Game/Recovered/SourceStages/TheatreBakedDiffuse/' + ('Lit_' if lit_surface else 'v_') + recipe['recipeSha256'][:16]
+    destination = '/Game/Recovered/SourceStages/TheatreBakedDiffuse/' + ('Reflection_' if reflection_mode else ('Lit_' if lit_surface else 'v_')) + recipe['recipeSha256'][:16]
     plan = dict(destination=destination, recipe_sha256=recipe['recipeSha256'])
     textures = {}
     for key, row in recipe['images'].items():
@@ -101,6 +111,8 @@ def apply():
                 code=recipe['shader'], output_type=u.CustomMaterialOutputType.CMOT_FLOAT3,
                 description='APK UE4_lm decoded baked diffuse only')
             names = ['UV0', 'UV1', 'Albedo', 'Mix', 'Lightmap', 'UVScaleOffset', 'LMScale', 'LMAdd']
+            if reflection_mode:
+                names += ['SourceProbe', 'ReflectionDirectionUE', 'WorldNormal', 'ViewDirectionUE', 'MaxMip', 'ReflectionWeight']
             inputs = []
             for name in names:
                 pin = u.CustomInput(); pin.set_editor_property('input_name', name); inputs.append(pin)
@@ -116,6 +128,19 @@ def apply():
                 value = node(u, material, u.MaterialExpressionVectorParameter, -1000, 100 + i * 150,
                     parameter_name=name, default_value=u.LinearColor(*values))
                 link(u, value, 'RGBA' if name == 'UVScaleOffset' else 'RGB', custom, name)
+            if reflection_mode:
+                probe = node(u, material, u.MaterialExpressionTextureObject, -650, 800,
+                    texture=cube, sampler_type=u.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+                link(u, probe, '', custom, 'SourceProbe')
+                for i, (name, cls) in enumerate([
+                        ('ReflectionDirectionUE', u.MaterialExpressionReflectionVectorWS),
+                        ('WorldNormal', u.MaterialExpressionPixelNormalWS),
+                        ('ViewDirectionUE', u.MaterialExpressionCameraVectorWS)]):
+                    value = node(u, material, cls, -1000, 700 + i*100)
+                    link(u, value, '', custom, name)
+                for i, (name, value) in enumerate([('MaxMip', recipe['previewMaxMip']), ('ReflectionWeight', row['reflectionWeight'])]):
+                    scalar = node(u, material, u.MaterialExpressionConstant, -1000, 1050 + i*100, r=float(value))
+                    link(u, scalar, '', custom, name)
             prop(u, custom, '', u.MaterialProperty.MP_EMISSIVE_COLOR)
             if lit_surface:
                 albedo = node(u, material, u.MaterialExpressionTextureSample, -650, -200,
@@ -140,7 +165,7 @@ def apply():
     if digest(source_file) != before:
         raise RuntimeError('Original inspection map changed')
     output.update(map=recipe['targetMap'], sourceMapUnchanged=True, sourceMapSha256=before)
-    (BASE / ('lit-native-apply.json' if lit_surface else 'native-apply.json')).write_text(json.dumps(output, indent=2), 'utf8')
+    (BASE / (REPORT_PREFIX + 'native-apply.json')).write_text(json.dumps(output, indent=2), 'utf8')
     return camera, output
 
 
@@ -151,13 +176,13 @@ def tick(delta):
             raise RuntimeError('Screenshot deadline exceeded')
         if task is None and time.monotonic() - started > 10:
             task = u.AutomationLibrary.take_high_res_screenshot(1600, 720,
-                str(BASE / ('theatre-surface-baked.png' if lit_surface else 'theatre-baked-diffuse.png')), camera=camera, delay=1)
+                str(BASE / SCREEN_NAME), camera=camera, delay=1)
         elif task is not None and task.is_task_done():
-            path = BASE / ('theatre-surface-baked.png' if lit_surface else 'theatre-baked-diffuse.png')
+            path = BASE / SCREEN_NAME
             if not path.is_file() or path.stat().st_size < 10000:
                 raise RuntimeError('Screenshot missing')
             result.update(nativeRenderVerified=True, screenshot=str(path), screenshotSha256=digest(path))
-            (BASE / ('lit-native-render.json' if lit_surface else 'native-render.json')).write_text(json.dumps(result, indent=2), 'utf8')
+            (BASE / (REPORT_PREFIX + 'native-render.json')).write_text(json.dumps(result, indent=2), 'utf8')
             u.unregister_slate_post_tick_callback(handle)
             u.SystemLibrary.quit_editor()
     except Exception:
