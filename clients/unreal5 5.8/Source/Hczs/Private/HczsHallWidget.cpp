@@ -95,8 +95,8 @@ void UHczsHallWidget::NativeConstruct()
 
 AHczsHallHeroPresentation* UHczsHallWidget::HeroPresenter() const
 {
-    for (TActorIterator<AHczsHallHeroPresentation> It(GetWorld()); It; ++It) return *It;
-    return nullptr;
+    TActorIterator<AHczsHallHeroPresentation> Presenter(GetWorld());
+    return Presenter ? *Presenter : nullptr;
 }
 
 void UHczsHallWidget::LoadDrawItems(UHczsHallLayoutAsset* Source, TArray<FHczsHallDrawItem>& Destination, bool bHallBindings)
