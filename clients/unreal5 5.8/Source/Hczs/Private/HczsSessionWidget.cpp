@@ -946,7 +946,13 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         }
         {
             FSessionPainter Round = Group(HudNow, HudInRest, TEXT("RoundNode"));
-            Round.Text(FString::Printf(TEXT("第 %d 回合"), Battle.Round), 490, 55, 300, 38, 29, Accent, true);
+            // TopRoundArea Text_1, parented under TopInfoArea Node_round at design (0, 148).
+            FVector2D RoundSlot(640, 0);
+            for (const auto& Node : HudInRest.Nodes)
+                if (Node.Name == TEXT("RoundNode"))
+                    RoundSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
+            const FVector2D RoundText = RoundSlot + FVector2D(0 - 48.5, 148 - 10.5);
+            Round.Text(FString::Printf(TEXT("第%d回合"), Battle.Round), RoundText.X, RoundText.Y, 97, 21, 20, Accent, true);
             P.Layer = Round.Layer;
         }
         // Intention text belongs to IntentionTop, which HUD In does not animate.

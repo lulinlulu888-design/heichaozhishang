@@ -116,10 +116,6 @@ def show(title, nodes, design_origin_y, names=None):
         print(f"{node['name']:24} {node['classname']:12} origin=({origin[0]:8.2f},{origin[1]:8.2f}) size={node['size']}{extra}")
 
 
-fight = tree_nodes('FightMainPanel')
-show('FightMainPanel slots', fight, 720, {
-    'EnterancePlayerHeads', 'EnteranceMonsterHeads', 'RoundNode', 'HPArea_left_1', 'HPArea_right_1',
-    'HPArea_right_boss', 'TopInfo', 'IntentionTop'})
 def raw(title, nodes, wanted):
     print('-- raw', title)
     for node in nodes:
@@ -130,30 +126,36 @@ def raw(title, nodes, wanted):
                   'size', [round(v, 2) for v in node['size']],
                   'flip', node.get('flip_x'), node.get('flip_y'))
 
-player = tree_nodes('PlayerHeadArea')
-monster = tree_nodes('MonsterHeadArea')
-show('PlayerHeadArea', player, 0)
-raw('player', player, {'bg2', 'bg1', 'icon', 'hp', 'txt_name', 'txt_hp', 'Panel'})
-show('MonsterHeadArea', monster, 0)
-raw('monster', monster, {'bg2', 'bg1', 'icon', 'hp', 'txt_name', 'txt_hp', 'Panel'})
-show('MonsterHeadArea', tree_nodes('MonsterHeadArea'), 0)
-energy = load_csb(ROOT / 'analysis/battle-ui/EnergyArea.csb')
-show('EnergyArea', energy, 0)
+def main():
+    fight = tree_nodes('FightMainPanel')
+    show('FightMainPanel slots', fight, 720, {
+        'EnterancePlayerHeads', 'EnteranceMonsterHeads', 'RoundNode', 'HPArea_left_1', 'HPArea_right_1',
+        'HPArea_right_boss', 'TopInfo', 'IntentionTop'})
+    player = tree_nodes('PlayerHeadArea')
+    monster = tree_nodes('MonsterHeadArea')
+    show('PlayerHeadArea', player, 0)
+    raw('player', player, {'bg2', 'bg1', 'icon', 'hp', 'txt_name', 'txt_hp', 'Panel'})
+    show('MonsterHeadArea', monster, 0)
+    raw('monster', monster, {'bg2', 'bg1', 'icon', 'hp', 'txt_name', 'txt_hp', 'Panel'})
+    energy = load_csb(ROOT / 'analysis/battle-ui/EnergyArea.csb')
+    show('EnergyArea', energy, 0)
+    hud = json.loads((ROOT / 'analysis/battle-ui/hud-in/own-card-area-in.json').read_text('utf8'))['clip']['nodes']
+    for node in hud:
+        node.setdefault('flip_x', False)
+        node.setdefault('visible', True)
+    print('Energy slot', [round(v, 2) for v in visual_box(hud, 720, 'Energy')[0]])
+    for title, nodes in (('player', player), ('monster', monster)):
+        print('-- visual', title)
+        for name in ('bg2', 'bg1', 'icon', 'txt_name', 'hp_bg', 'hp', 'txt_hp', 'icon_shield', 'debug_hp'):
+            origin, size, flip, visible = visual_box(nodes, 0, name)
+            print(f'{name:12} visible={visible} flip={flip} origin=({origin[0]:7.2f},{origin[1]:7.2f}) size=({size[0]:6.2f},{size[1]:6.2f})')
+    number = load_csb(ROOT / 'analysis/battle-ui/EnergyNumArea.csb')
+    show('EnergyNumArea', number, 0)
+    print('-- visual energy')
+    for name in ('bg_s2', 'icon_s2', 'energy_icon_s1', 'EnergyNum'):
+        origin, size, flip, visible = visual_box(energy, 0, name)
+        print(f'{name:16} visible={visible} flip={flip} origin=({origin[0]:7.2f},{origin[1]:7.2f}) size=({size[0]:6.2f},{size[1]:6.2f})')
 
-hud = json.loads((ROOT / 'analysis/battle-ui/hud-in/own-card-area-in.json').read_text('utf8'))['clip']['nodes']
-for node in hud:
-    node.setdefault('flip_x', False)
-    node.setdefault('visible', True)
-print('Energy slot', [round(v, 2) for v in visual_box(hud, 720, 'Energy')[0]])
 
-for title, nodes in (('player', player), ('monster', monster)):
-    print('-- visual', title)
-    for name in ('bg2', 'bg1', 'icon', 'txt_name', 'hp_bg', 'hp', 'txt_hp', 'icon_shield', 'debug_hp'):
-        origin, size, flip, visible = visual_box(nodes, 0, name)
-        print(f'{name:12} visible={visible} flip={flip} origin=({origin[0]:7.2f},{origin[1]:7.2f}) size=({size[0]:6.2f},{size[1]:6.2f})')
-number = load_csb(ROOT / 'analysis/battle-ui/EnergyNumArea.csb')
-show('EnergyNumArea', number, 0)
-print('-- visual energy')
-for name in ('bg_s2', 'icon_s2', 'energy_icon_s1', 'EnergyNum'):
-    origin, size, flip, visible = visual_box(energy, 0, name)
-    print(f'{name:16} visible={visible} flip={flip} origin=({origin[0]:7.2f},{origin[1]:7.2f}) size=({size[0]:6.2f},{size[1]:6.2f})')
+if __name__ == '__main__':
+    main()
