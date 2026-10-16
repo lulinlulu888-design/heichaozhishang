@@ -292,6 +292,28 @@ public:
         }
         // txt_hp is the short number on the bar. The "/ max" string belongs to debug_hp and stays off.
         Text(TrimScalar(Hp), Number.X, Number.Y, 54, 20, 16, Light, true);
+        // PlayerHeadArea.setShieldPercent fills the track when shield > 0 and there is no
+        // prognosis. MonsterBaseArea.refreshShield uses ceil(shield * 100 / maxHp). Direction 0
+        // grows from the left. The preview bar and break icon stay off without those states.
+        const FVector2D ShieldBar = bEnemy ? At(-222, 92) : At(-62, 92);
+        const FVector2D ShieldSize = bEnemy ? FVector2D(144, 16) : FVector2D(140, 16);
+        Image(TEXT("shield-bg"), ShieldBar.X, ShieldBar.Y, ShieldSize.X, ShieldSize.Y, FLinearColor::White, bEnemy, true);
+        float ShieldFill = 0;
+        if (bEnemy)
+        {
+            const double Denominator = Maximum.Approximate > 0 ? Maximum.Approximate : 1;
+            ShieldFill = FMath::Max(0.0, FMath::CeilToFloat(Shield.Approximate * 100.0 / Denominator) / 100.0);
+        }
+        else if (Shield.Approximate > 0)
+            ShieldFill = 1;
+        if (ShieldFill > 0)
+        {
+            const FVector2f ClipTL = Canvas.LocalToAbsolute(FVector2f(ShieldBar.X, ShieldBar.Y));
+            const FVector2f ClipBR = Canvas.LocalToAbsolute(FVector2f(ShieldBar.X + ShieldSize.X * ShieldFill, ShieldBar.Y + ShieldSize.Y));
+            Elements.PushClip(FSlateClippingZone(FSlateRect(ClipTL.X, ClipTL.Y, ClipBR.X, ClipBR.Y)));
+            Image(TEXT("shield-fill"), ShieldBar.X, ShieldBar.Y, ShieldSize.X, ShieldSize.Y, FLinearColor::White, false, true);
+            Elements.PopClip();
+        }
         if (Shield.Approximate > 0)
             Image(TEXT("shield-icon"), ShieldIcon.X, ShieldIcon.Y, 32, 32, FLinearColor::White, false, true);
     }
