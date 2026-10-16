@@ -22,6 +22,7 @@ PINS = {
     'analysis/battle-ui/health/monster-portrait/report.json': '59c554541d488c984513f226e72760d4919b9b4e1de158babe5f5843a04bd654',
     'analysis/unreal/hall-ui/layout.json': '815367f3f73b4580d88d94e24ec36ea9128b2110f7a8eb4054a54f01f30e643d',
     'analysis/battle-ui/round-bg/report.json': '0b2aef0e17fa8807d309b3f10b227b4b20c565968812a259d7995de6cd48a9d5',
+    'analysis/battle-ui/menu-icon/report.json': 'a1cc2b656954cc4844c675dedd758142d49f39b36d136f8a9887d2f1176e4e98',
 }
 
 
@@ -61,6 +62,11 @@ def main():
         raise ValueError('Round background provenance changed')
     sprite('round-bg', round_bg['png'], round_bg['png_sha256'],
            'analysis/battle-ui/round-bg/report.json', round_bg['logical'])
+    menu_icon = sources['analysis/battle-ui/menu-icon/report.json']
+    if menu_icon['apk_sha256'] != APK_SHA or menu_icon['size'] != [56, 56]:
+        raise ValueError('Menu icon provenance changed')
+    sprite('menu-icon', menu_icon['png'], menu_icon['png_sha256'],
+           'analysis/battle-ui/menu-icon/report.json', menu_icon['logical'])
     frames = sources['analysis/battle-ui/card-frames/provenance.json']
     for row in frames['frames']:
         if row['key'] in ('card/bg_atk_s.png', 'card/cost_s1.png'):
@@ -135,7 +141,7 @@ def main():
         'deck-icon': '左下抽牌/弃牌计数旁图标；绘制 39×43 设计像素',
         'card-cost': '每张手牌左上费用宝石；绘制 32×38 设计像素',
     }
-    inventory = {'schemaVersion': 1, 'scope': 'all 27 source assets imported by the new UE playable session HUD',
+    inventory = {'schemaVersion': 1, 'scope': 'all 28 source assets imported by the new UE playable session HUD',
                  'consumer': 'clients/unreal5 5.8/Source/Hczs/Private/HczsSessionWidget.cpp',
                  'sourceAsset': '/Game/Recovered/Battle/UI/BattlePresentation.BattlePresentation',
                  'variantAsset': '/Game/Recovered/Battle/UI/AI/BattlePresentationHD.BattlePresentationHD',

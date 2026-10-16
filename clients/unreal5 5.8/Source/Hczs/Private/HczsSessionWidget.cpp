@@ -361,7 +361,7 @@ void UHczsSessionWidget::NativeConstruct()
             if (IconVariant)
             {
                 const TSet<FString> IconKeys{TEXT("energy-icon"), TEXT("end-icon-normal"),
-                    TEXT("end-icon-active"), TEXT("shield-icon"), TEXT("deck-icon"), TEXT("card-cost")};
+                    TEXT("end-icon-active"), TEXT("shield-icon"), TEXT("deck-icon"), TEXT("menu-icon"), TEXT("card-cost")};
                 for (const auto& Pair : IconVariant->Sprites)
                 {
                     if (!IconKeys.Contains(Pair.Key) || !Pair.Value) continue;
@@ -985,6 +985,13 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     DeckSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
             Deck.Image(TEXT("deck-icon"), DeckSlot.X - 28, DeckSlot.Y - 28, 56, 56, FLinearColor::White, false, true);
             Deck.Text(TEXT("牌堆"), DeckSlot.X - 21.5, DeckSlot.Y + 20, 43, 20, 20, Light, true);
+            // btn_menu_ext under MeauNode (44, 70): img_btn_return 56x56 and the configured "菜单" label.
+            FVector2D MenuSlot(44, 650);
+            for (const auto& Node : OwnCardInRest.Nodes)
+                if (Node.Name == TEXT("MeauNode"))
+                    MenuSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
+            Deck.Image(TEXT("menu-icon"), MenuSlot.X - 27.28, MenuSlot.Y - 30.88, 56, 56, FLinearColor::White, false, true);
+            Deck.Text(TEXT("菜单"), MenuSlot.X - 21.5, MenuSlot.Y + 20, 43, 20, 20, Light, true);
             P.Layer = Deck.Layer;
         }
         Button(TEXT("hall"), TEXT(""), TEXT("返回大厅"), 180, 666, 143, 32);
