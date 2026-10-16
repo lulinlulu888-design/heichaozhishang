@@ -601,6 +601,7 @@ bool ParseBattle(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, con
     B.EncounterId = Scenario.EncounterId; B.Title = Scenario.Title; B.Notice = Scenario.Notice;
     B.PlayerId = Scenario.PlayerId; B.EnemyId = Scenario.EnemyId; B.PlayerName = Scenario.PlayerName; B.EnemyName = Scenario.EnemyName;
     B.PlayerMaxHp = Scenario.PlayerMaxHp; B.EnemyMaxHp = Scenario.EnemyMaxHp; B.MaxRounds = Scenario.MaxRounds;
+    B.EnergyPerRound = Scenario.EnergyPerRound;
     B.bIsValid = true; Out = MoveTemp(B); return true;
 }
 bool ParseReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, const FString& BattleId,

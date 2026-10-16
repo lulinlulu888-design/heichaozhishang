@@ -959,11 +959,13 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     EnergySlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
             const FVector2D EnergyBg = EnergySlot + FVector2D(-96, -39);
             const FVector2D EnergyIcon = EnergySlot + FVector2D(6.58, -37.27);
-            // EnergyNumArea txt_num1. txt_num2 needs energyPerRound, which this battle view does not carry.
-            const FVector2D EnergyNum = EnergySlot + FVector2D(80 - 26.5, 15 - 19);
+            // EnergyNumArea: txt_num1 current, txt_cut "/", txt_num2 energyPerRound.
+            const FVector2D EnergyOrigin = EnergySlot + FVector2D(80, 15);
             Energy.Image(TEXT("energy-bg"), EnergyBg.X, EnergyBg.Y, 226, 78, FLinearColor::White, false, true);
             Energy.Image(TEXT("energy-icon"), EnergyIcon.X, EnergyIcon.Y, 58, 66, FLinearColor::White, false, true);
-            Energy.Text(FString::FromInt(Battle.Energy), EnergyNum.X, EnergyNum.Y, 21, 32, 32, Accent, true);
+            Energy.Text(FString::FromInt(Battle.Energy), EnergyOrigin.X - 26.5, EnergyOrigin.Y - 19, 21, 32, 32, Accent, true);
+            Energy.Text(TEXT("/"), EnergyOrigin.X - 5.5, EnergyOrigin.Y - 13, 11, 26, 26, Light, true);
+            Energy.Text(FString::FromInt(Battle.EnergyPerRound), EnergyOrigin.X + 2.5, EnergyOrigin.Y - 13, 18, 26, 26, Light, true);
             P.Layer = Energy.Layer;
         }
         {

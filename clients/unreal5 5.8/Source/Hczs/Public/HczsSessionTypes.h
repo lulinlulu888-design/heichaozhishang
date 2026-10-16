@@ -112,6 +112,7 @@ struct HCZS_API FHczsBattleView
     UPROPERTY(BlueprintReadOnly) int32 Round = 0;
     UPROPERTY(BlueprintReadOnly) int32 MaxRounds = 0;
     UPROPERTY(BlueprintReadOnly) int32 Energy = 0;
+    UPROPERTY(BlueprintReadOnly) int32 EnergyPerRound = 0;
     UPROPERTY(BlueprintReadOnly) int32 PlayerBreakdown = 0;
     UPROPERTY(BlueprintReadOnly) int32 EnemyBreakdown = 0;
     UPROPERTY(BlueprintReadOnly) FString Status;

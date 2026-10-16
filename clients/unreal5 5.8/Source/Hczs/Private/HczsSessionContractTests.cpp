@@ -202,6 +202,7 @@ bool FHczsSessionBattleContractTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Known reconstruction state is parsed"), ParseBattle(Fixture(), ProfileId, BattleId, View));
     TestEqual(TEXT("Only source hand becomes interactive cards"), View.Hand.Num(), 1);
     TestEqual(TEXT("Server decimal is retained"), View.PlayerHp.Decimal, FString(TEXT("100")));
+    TestEqual(TEXT("Scenario energyPerRound is the HUD maximum"), View.EnergyPerRound, 1);
     TestFalse(TEXT("Cross-profile response is rejected"), ParseBattle(Fixture(), TEXT("33333333-3333-3333-3333-333333333333"), BattleId, View));
     TestFalse(TEXT("Wrong battle response is rejected"), ParseBattle(Fixture(), ProfileId, TEXT("33333333-3333-3333-3333-333333333333"), View));
     auto Bad = Fixture(); Bad->SetNumberField(TEXT("revision"), 2);
