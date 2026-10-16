@@ -253,8 +253,14 @@ def run():
             state['world']=world; game=state['game']=u.GameplayStatics.get_game_instance(world)
             if not game: return
             current=state['stage']; elapsed=time.monotonic()-state['entered']; sample=observe(game,world)
-            if game.get_editor_property('request_in_flight'): return
-            guard.check(not game.get_editor_property('has_pending_intent') and not game.get_editor_property('error_code'), 'Native request failed or left an unresolved intent')
+            if game.get_editor_property('request_in_flight'):
+                if current == 'reject-hold':
+                    clip = sample.get('clip') or ''
+                    if sample.get('busy') and 'idle' not in clip:
+                        state['sawAttackWindup'] = clip
+                return
+            if not (report.get('rejectPlay') and current in ('reject-hold', 'reject-recover')):
+                guard.check(not game.get_editor_property('has_pending_intent') and not game.get_editor_property('error_code'), 'Native request failed or left an unresolved intent')
             if current=='prepare' and future.done():
                 state['profile']=future.result(); report['profileId']=state['profile']; game.refresh_bootstrap(); stage('profile')
             elif current=='profile': game.select_profile(state['profile']); stage('hall-first')
@@ -313,6 +319,8 @@ def run():
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
                     if report.get('roundStartDeal'):
                         game.end_turn(); stage('round-deal')
+                    elif report.get('rejectPlay'):
+                        state['read'] = pool.submit(read_battle, sample['battleId']); stage('reject-choose')
                     elif report.get('dragRetest'):
                         state['steps'] = [
                             ('mouse', 'tap', 'tap', 'below-drag-threshold'),
@@ -370,6 +378,46 @@ def run():
                 guard.check(drawn and drawn <= set(battle['state']['piles']['hand']),
                             'Animated instances are not the authoritative new hand')
                 passed('round-start-draw-uses-source-flight-and-ui-cues')
+                finish()
+            elif current=='reject-choose' and state['read'].done():
+                battle = state['read'].result()
+                cards = {card['instanceId']: card['cardId'] for card in battle['state']['cards']}
+                definition = battle['scenario']['definition']['cards']
+                single = {'110001', '210003', '410102'}
+                choice = next((instance for instance in battle['state']['piles']['hand']
+                               if cards.get(instance) in single and definition[cards[instance]]['cost'] <= battle['state']['energy']), None)
+                guard.check(choice, 'Tutorial hand has no affordable single-hit Elsa card')
+                state['rejectCard'] = choice
+                state['rejectCardId'] = cards[choice]
+                widget = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)[0]
+                guard.check(widget.development_drag_card(choice, 'enemy', False, 'begin'), 'Pointer down failed for the rejected play')
+                guard.check(widget.development_drag_card(choice, 'enemy', False, 'move'), 'Pointer move failed for the rejected play')
+                guard.check(widget.development_drag_card(choice, 'enemy', False, 'release'), 'Pointer up failed for the rejected play')
+                state['rejectStarted'] = time.time()
+                stage('reject-hold')
+            elif current=='reject-hold' and not game.get_editor_property('request_in_flight'):
+                if not state.get('sawAttackWindup') and time.time() - state['rejectStarted'] < 3:
+                    return
+                guard.check(state.get('sawAttackWindup'), 'Single-hit windup did not start before the rejected response')
+                guard.check(sample['actionIndex'] == 0 and sample['revision'] == 1, 'Rejected play changed authoritative state')
+                guard.check(not sample.get('busy') and sample.get('clip') and 'idle_1' in sample['clip'], 'Rejection did not restore the idle pose')
+                log = native_log.read_text('utf8', errors='replace')
+                if ('HCZS visual intent cleared:' not in log or 'abortedPending=0' not in log) and time.time() - state['rejectStarted'] < 8:
+                    return
+                guard.check('HCZS source impact held for authority' in log, 'Impact was not held until authority')
+                guard.check('HCZS visual intent cleared:' in log and 'abortedPending=0' in log, 'Rejected windup was not cleared')
+                state['read'] = pool.submit(read_battle, sample['battleId']); stage('reject-read')
+            elif current=='reject-read' and state['read'].done():
+                battle = state['read'].result()
+                guard.check(battle['revision'] == 1 and battle['state']['actionIndex'] == 0
+                            and state['rejectCard'] in battle['state']['piles']['hand'], 'Rejected card left the authoritative hand')
+                rows = [json.loads(line) for line in Path(manifest['tracePath']).read_text('utf8').splitlines() if line.strip()]
+                plays = [r for r in rows if r.get('phase') == 'ue-request' and r.get('method') == 'POST' and str(r.get('path', '')).endswith('/actions')]
+                guard.check(len(plays) == 1 and plays[0].get('status') == 409 and plays[0].get('rejectedBeforeCommit') is True
+                            and plays[0].get('instanceId') == state['rejectCard'], 'The rejected play was committed or repeated')
+                report['rejectedPlay'] = dict(cardId=state['rejectCardId'], instanceId=state['rejectCard'], windup=state['sawAttackWindup'],
+                                               held=True, restoredIdle=sample.get('clip'), httpStatus=409)
+                passed('single-hit-windup-holds-for-authority-and-rejection-restores-idle')
                 finish()
             elif current=='drag-matrix':
                 widget = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)[0]
@@ -488,6 +536,11 @@ def run():
 
     report['roundStartDeal'] = guard.flag(command, 'HczsRoundStartDeal')
     report['dragRetest'] = guard.flag(command, 'HczsDragRetest')
+    report['rejectPlay'] = guard.flag(command, 'HczsRejectPlay')
+    guard.check(sum(bool(report[name]) for name in ('roundStartDeal', 'dragRetest', 'rejectPlay')) <= 1, 'Choose one acceptance mode')
+    if report['rejectPlay']:
+        guard.check(manifest.get('rejectFirstPlay') is True and manifest.get('faults') is False
+                    and manifest.get('cardResponseDelayMs', 0) >= 2000, 'Rejection acceptance needs a delayed pre-commit 409')
     window = guard.argument(command, 'HczsPIEWindow')
     if window:
         size = re.fullmatch(r'(\d{3,4})x(\d{3,4})', window)

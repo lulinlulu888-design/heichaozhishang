@@ -21,6 +21,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const { values } = parseArgs({ options: { port: { type: 'string' },
   'record-directory': { type: 'string' }, faults: { type: 'boolean', default: false },
   'card-response-delay-ms': { type: 'string' },
+  'reject-first-play': { type: 'boolean', default: false },
   mainline: { type: 'boolean' },
   'mainline-faults': { type: 'boolean', default: false },
   'preserve-database': { type: 'boolean', default: false }, 'resume-manifest': { type: 'string' } } });
@@ -30,9 +31,11 @@ function parseCardResponseDelayMs(value) {
   return Number(value);
 }
 const requestedCardResponseDelayMs = parseCardResponseDelayMs(values['card-response-delay-ms'] ?? '0');
+const rejectFirstPlay = values['reject-first-play'] === true;
+if (rejectFirstPlay && values.faults) throw Error('--reject-first-play cannot be combined with --faults');
 const resumeMode = Boolean(values['resume-manifest']);
 const mainlineFaults = resolveMainlineFaultOption(values['mainline-faults'], {mainlineEnabled:values.mainline===true,faults:values.faults,resume:resumeMode});
-if(resumeMode && (values.port || values['record-directory'] || values.faults || values['card-response-delay-ms'] !== undefined || values.mainline !== undefined))throw Error('Resume inherits its test port, directory, response delay and mainline mode; overrides and faults are forbidden');
+if(resumeMode && (values.port || values['record-directory'] || values.faults || values['reject-first-play'] || values['card-response-delay-ms'] !== undefined || values.mainline !== undefined))throw Error('Resume inherits its test port, directory, response delay and mainline mode; overrides and faults are forbidden');
 const allowedRoot = resolve(root, 'analysis/unreal/session-test');
 const previousManifestPath = resumeMode ? resolve(values['resume-manifest']) : null;
 const recordDirectory = resumeMode ? dirname(previousManifestPath) : resolve(values['record-directory'] ?? resolve(allowedRoot, randomUUID()));
@@ -75,7 +78,7 @@ async function journal(phase,extra={}) {
   await writeFile(startupPath+'.tmp',JSON.stringify(startupJournal,null,2));await rename(startupPath+'.tmp',startupPath);
 }
 const checks = { droppedCreation: false, creationRetrySamePayload: false, historicalReceiptReadFresh: false,
-  droppedConfirmedRead: false, retryConfirmedReadWithoutNewMutation: false, injectedRevisionConflict: false };
+  droppedConfirmedRead: false, retryConfirmedReadWithoutNewMutation: false, injectedRevisionConflict: false, rejectedFirstPlay: false };
 const mainlineFaultSequence=new MainlineFaultSequence(mainlineFaults);
 let firstCreation, historicalBattleId, postCreationDelivered = false, delayedReadBattle = null;
 let creationMutationCount = 0;
@@ -223,6 +226,22 @@ try {
       const isCreate = request.method === 'POST' && /^\/api\/rebuild\/v1\/profiles\/[0-9a-f-]{36}\/battles$/.test(request.url);
       const isAction = request.method === 'POST' && /\/battles\/[0-9a-f-]{36}\/actions$/.test(request.url);
       const isStateRead = request.method === 'GET' && /\/battles\/[0-9a-f-]{36}$/.test(request.url);
+      if (rejectFirstPlay && isAction && input?.type === 'play-card' && !checks.rejectedFirstPlay) {
+        checks.rejectedFirstPlay = true;
+        const text = JSON.stringify({ error: { code: 'REVISION_CONFLICT', message: 'Isolated test rejected this play before commit' } });
+        const timing = { requestId: input.requestId, path: request.url, type: 'play-card', instanceId: input.instanceId,
+          receivedAtUnixMs, delayMs: cardResponseDelayMs, rejectedBeforeCommit: true };
+        await note({ phase: 'ue-request', receivedAtUnixMs, method: request.method, path: request.url, status: 409,
+          requestId: input.requestId, expectedRevision: input.expectedRevision, type: input.type, instanceId: input.instanceId,
+          rejectedBeforeCommit: true });
+        if (cardResponseDelayMs > 0) {
+          await note({ phase: 'ue-response-delayed', ...timing, delayStartedAtUnixMs: Date.now() });
+          await waitForResponseDelay(cardResponseDelayMs);
+        }
+        if (!response.destroyed) response.writeHead(409, { 'content-type': 'application/json; charset=utf-8' }).end(text);
+        await note({ phase: 'ue-response-delivered', ...timing, deliveredAtUnixMs: Date.now(), status: 409 });
+        return;
+      }
       if (values.faults && isAction && !checks.injectedRevisionConflict) {
         const battlePath = request.url.replace(/\/actions$/, ''); const current = (await upstream(battlePath, 'GET')).json.battle;
         const playable = current.state.piles.hand.find(id => current.scenario.definition.cards[current.state.cards.find(c => c.instanceId === id).cardId].cost <= current.state.energy);
@@ -287,7 +306,7 @@ try {
   await new Promise((resolveListen, reject) => { proxy.once('error', reject); proxy.listen(port, '127.0.0.1', resolveListen); });
   const manifest = { schemaVersion: 2, mode: 'isolated-native-session-test', pid: process.pid, address: `http://127.0.0.1:${port}`, port,
     mongoDatabase, mongoEndpoint: '127.0.0.1:27027', mongoUriSha256, runId, databaseIdentity, processIdentity, processIndex,
-    preserveDatabase:values['preserve-database'], faults: values.faults, cardResponseDelayMs, mainlineEnabled, mainlineFaults, controlToken, recordDirectory, tracePath,
+    preserveDatabase:values['preserve-database'], faults: values.faults, rejectFirstPlay, cardResponseDelayMs, mainlineEnabled, mainlineFaults, controlToken, recordDirectory, tracePath,
     ...(resumeMode?{previousManifestSha256:previousManifestHash,firstManifestSha256:previousManifest.firstManifestSha256??previousManifestHash,
       previousProcessIdentity:previousManifest.processIdentity,previousPid:previousManifest.pid,resumeCheckpoint:previousCheckpoint}: {}) };
   const manifestText=JSON.stringify(manifest,null,2);manifestHash=digest(manifestText);
