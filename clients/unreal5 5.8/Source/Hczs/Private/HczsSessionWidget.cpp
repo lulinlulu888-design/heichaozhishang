@@ -188,23 +188,26 @@ public:
     }
 
     bool Image(const FString& Key, float X, float Y, float W, float H,
-        FLinearColor Tint = FLinearColor::White)
+        FLinearColor Tint = FLinearColor::White, bool bFlipX = false, bool bSourceBox = false)
     {
         const FSlateBrush* Brush = Brushes.Find(Key);
         if (!Brush) return false;
         Tint.A *= Opacity;
         if (PaintedSprites) PaintedSprites->Add(Key);
-        if (const FVector4f* Adjust = IconAdjustments.Find(Key))
-        {
-            X += W * Adjust->Z;
-            Y += H * Adjust->W;
-            W *= Adjust->X;
-            H *= Adjust->Y;
-        }
+        if (!bSourceBox)
+            if (const FVector4f* Adjust = IconAdjustments.Find(Key))
+            {
+                X += W * Adjust->Z;
+                Y += H * Adjust->W;
+                W *= Adjust->X;
+                H *= Adjust->Y;
+            }
         if (bSmoothCard && SmoothQuad(*Brush, X, Y, W, H, Tint)) return true;
-        FSlateDrawElement::MakeBox(Elements, ++Layer,
-            Canvas.MakeChild(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))).ToPaintGeometry(),
-            Brush, ESlateDrawEffect::None, Tint);
+        const FGeometry Geometry = bFlipX
+            ? Canvas.MakeChild(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y)),
+                FSlateRenderTransform(FScale2D(-1.f, 1.f)), FVector2f(1.f, 0.f))
+            : Canvas.MakeChild(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y)));
+        FSlateDrawElement::MakeBox(Elements, ++Layer, Geometry.ToPaintGeometry(), Brush, ESlateDrawEffect::None, Tint);
         return true;
     }
 
@@ -258,32 +261,39 @@ public:
                 Pixels, Color, false, bShadow);
     }
 
+    // PlayerHeadArea / MonsterHeadArea rest boxes from tools/audit_head_area_rest.py.
+    // Slot is the project node's rest design origin. flipX mirrors the frame inside that box.
     void Health(const FString& Name, const FString& Portrait, const FHczsScalar& Hp,
-        const FHczsScalar& Maximum, const FHczsScalar& Shield, float X, bool bEnemy)
+        const FHczsScalar& Maximum, const FHczsScalar& Shield, FVector2D Slot, bool bEnemy)
     {
-        Box(X, 30, 320, 100, FLinearColor(0.018f, 0.025f, 0.05f, 0.78f));
-        Image(TEXT("head-back"), X, 29, 77, 77);
-        if (!Portrait.IsEmpty()) Image(Portrait, X + 4, 31, 70, 66);
-        Image(TEXT("head-front"), X, 29, 77, 77);
-        Text(Name, X + 84, 36, 220, 23, 19, bEnemy ? Warm : Accent);
-        const FString Bar = bEnemy ? TEXT("enemy-hp") : TEXT("player-hp");
-        Image(Bar + TEXT("-bg"), X + 83, 70, 220, 12);
+        const auto At = [Slot](double X, double Y) { return FVector2D(Slot.X + X, Slot.Y + Y); };
+        const FVector2D Back = At(-77, 0), Front = At(-77, 24), Bar = At(-77, 77);
+        const FVector2D PortraitBox = bEnemy ? At(-13, 2) : At(-78.5, -1);
+        const FVector2D PortraitSize = bEnemy ? FVector2D(90, 90) : FVector2D(159, 93);
+        const FVector2D NameBox = bEnemy ? At(-3, 56) : At(-74, 56);
+        const FVector2D Number = At(-27, 76);
+        const FVector2D ShieldIcon = bEnemy ? At(54, 86) : At(-82, 86);
+        Image(TEXT("head-back"), Back.X, Back.Y, 154, 92, FLinearColor::White, bEnemy, true);
+        if (!Portrait.IsEmpty())
+            Image(Portrait, PortraitBox.X, PortraitBox.Y, PortraitSize.X, PortraitSize.Y, FLinearColor::White, !bEnemy, true);
+        Image(TEXT("head-front"), Front.X, Front.Y, 154, 68, FLinearColor::White, bEnemy, true);
+        Text(Name, NameBox.X, NameBox.Y, 77, 22, 18, bEnemy ? Warm : Accent);
+        const FString BarKey = bEnemy ? TEXT("monster-hp") : TEXT("player-hp");
+        Image(BarKey + TEXT("-bg"), Bar.X, Bar.Y, 154, 18, FLinearColor::White, bEnemy, true);
         const float Ratio = Maximum.Approximate > 0
             ? FMath::Clamp(Hp.Approximate / Maximum.Approximate, 0.0, 1.0) : 0;
         if (Ratio > 0)
         {
-            const FVector2f ClipTL = Canvas.LocalToAbsolute(FVector2f(X + 83, 70));
-            const FVector2f ClipBR = Canvas.LocalToAbsolute(FVector2f(X + 83 + 220 * Ratio, 82));
+            const FVector2f ClipTL = Canvas.LocalToAbsolute(FVector2f(Bar.X, Bar.Y));
+            const FVector2f ClipBR = Canvas.LocalToAbsolute(FVector2f(Bar.X + 154 * Ratio, Bar.Y + 18));
             Elements.PushClip(FSlateClippingZone(FSlateRect(ClipTL.X, ClipTL.Y, ClipBR.X, ClipBR.Y)));
-            Image(Bar, X + 83, 70, 220, 12);
+            Image(BarKey, Bar.X, Bar.Y, 154, 18, FLinearColor::White, false, true);
             Elements.PopClip();
         }
-        Text(TrimScalar(Hp) + TEXT(" / ") + TrimScalar(Maximum), X + 83, 87, 215, 18, 13);
+        // txt_hp is the short number on the bar. The "/ max" string belongs to debug_hp and stays off.
+        Text(TrimScalar(Hp), Number.X, Number.Y, 54, 20, 16, Light, true);
         if (Shield.Approximate > 0)
-        {
-            Image(TEXT("shield-icon"), X + 3, 98, 21, 22);
-            Text(TrimScalar(Shield), X + 27, 99, 55, 19, 13, Accent);
-        }
+            Image(TEXT("shield-icon"), ShieldIcon.X, ShieldIcon.Y, 32, 32, FLinearColor::White, false, true);
     }
 };
 }
@@ -916,14 +926,22 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         LastHudIn->SetObjectField(TEXT("groups"), HudGroups);
         {
             FSessionPainter Heads = Group(HudNow, HudInRest, TEXT("EnterancePlayerHeads"));
+            FVector2D PlayerSlot(120, 0);
+            for (const auto& Node : HudInRest.Nodes)
+                if (Node.Name == TEXT("HPArea_left_1"))
+                    PlayerSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
             Heads.Health(Battle.PlayerName, Battle.PlayerId == TEXT("1") ? TEXT("player-1") : TEXT(""),
-                Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, 28, false);
+                Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, PlayerSlot, false);
             P.Layer = Heads.Layer;
         }
         {
             FSessionPainter Heads = Group(HudNow, HudInRest, TEXT("EnteranceMonsterHeads"));
+            FVector2D EnemySlot(1160, 0);
+            for (const auto& Node : HudInRest.Nodes)
+                if (Node.Name == TEXT("HPArea_right_1"))
+                    EnemySlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
             Heads.Health(Battle.EnemyName, Battle.EnemyId == TEXT("991") ? TEXT("monster-991") : TEXT(""),
-                Battle.EnemyHp, Battle.EnemyMaxHp, Battle.EnemyShield, 930, true);
+                Battle.EnemyHp, Battle.EnemyMaxHp, Battle.EnemyShield, EnemySlot, true);
             P.Layer = Heads.Layer;
         }
         {
@@ -935,9 +953,17 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         P.Wrapped(Battle.EnemyIntentText, 946, 139, 300, 16, 3, Warm);
         {
             FSessionPainter Energy = Group(CardNow, OwnCardInRest, TEXT("Energy"));
-            Energy.Image(TEXT("energy-bg"), 23, 535, 155, 62);
-            Energy.Image(TEXT("energy-icon"), 27, 542, 47, 47);
-            Energy.Text(FString::FromInt(Battle.Energy), 78, 547, 75, 42, 30, Accent, true);
+            FVector2D EnergySlot(0, 555);
+            for (const auto& Node : OwnCardInRest.Nodes)
+                if (Node.Name == TEXT("Energy"))
+                    EnergySlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
+            const FVector2D EnergyBg = EnergySlot + FVector2D(-96, -39);
+            const FVector2D EnergyIcon = EnergySlot + FVector2D(6.58, -37.27);
+            // EnergyNumArea txt_num1. txt_num2 needs energyPerRound, which this battle view does not carry.
+            const FVector2D EnergyNum = EnergySlot + FVector2D(80 - 26.5, 15 - 19);
+            Energy.Image(TEXT("energy-bg"), EnergyBg.X, EnergyBg.Y, 226, 78, FLinearColor::White, false, true);
+            Energy.Image(TEXT("energy-icon"), EnergyIcon.X, EnergyIcon.Y, 58, 66, FLinearColor::White, false, true);
+            Energy.Text(FString::FromInt(Battle.Energy), EnergyNum.X, EnergyNum.Y, 21, 32, 32, Accent, true);
             P.Layer = Energy.Layer;
         }
         {
