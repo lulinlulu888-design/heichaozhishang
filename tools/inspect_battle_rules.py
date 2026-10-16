@@ -28,6 +28,9 @@ EXTRA_OP = {0x08: "STORE_MAP", 0x97: "BUILD_MAP", 0x74: "IMPORT_FROM",
             0x34: "BINARY_FLOOR_DIVIDE", 0x15: "INPLACE_ADD",
             0x52: "INPLACE_MULTIPLY", 0x39: "BINARY_SUBTRACT",
             0x37: "INPLACE_SUBTRACT", 0x43: "UNARY_NEGATIVE",
+            # lib/calendar.py formatday builds '%2i' % day, and isleap tests
+            # year % 4 == 0. Both use this opcode. CPython 2.7.18 Lib/calendar.py.
+            0x24: "BINARY_MODULO",
             # lib/calendar.py main: options.locale and not options.encoding;
             # cross-checked against CPython 2.7.18 Lib/calendar.py line 616.
             0x51: "UNARY_NOT"}
