@@ -57,13 +57,18 @@ bool IsIsolatedNativeUiTest()
 
 bool HasRecoveredScene(const FHczsEncounterSummary& Encounter)
 {
-    return Encounter.Id == TEXT("tutorial-5000") && Encounter.DefinitionId.StartsWith(TEXT("tutorial-5000-"))
+    const bool bTutorial = Encounter.Id == TEXT("tutorial-5000") && Encounter.DefinitionId.StartsWith(TEXT("tutorial-5000-"))
         && Encounter.PlayerId == TEXT("1") && Encounter.EnemyId == TEXT("991");
+    const bool bCityPreview = Encounter.Id == TEXT("city-preview-10405") && Encounter.DefinitionId.StartsWith(TEXT("city-preview-10405-"))
+        && Encounter.PlayerId == TEXT("1") && Encounter.EnemyId == TEXT("6605");
+    return bTutorial || bCityPreview;
 }
 
 bool HasRecoveredActors(const FHczsBattleView& Battle)
 {
-    return Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991");
+    return (Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991")) ||
+        (Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("6605") &&
+         (Battle.EncounterId == TEXT("city-preview-10405") || Battle.DefinitionId.StartsWith(TEXT("city-preview-10405-"))));
 }
 
 FVector2f DesignPoint(const FGeometry& Geometry, const FVector2D& Absolute)
@@ -1134,8 +1139,10 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             const bool AvailableScene = HasRecoveredScene(Encounter);
             const float Y = 216 + Index * 78;
             Button(TEXT("select-encounter"), Encounter.Id, Encounter.Title, 224, Y, 408, 45, AvailableScene, Selected);
-            P.Text(AvailableScene ? Encounter.PlayerName + TEXT("  ·  ") + Encounter.EnemyName
-                : TEXT("场景待恢复"), 235, Y + 46, 390, 20, 14, Muted);
+            const FString SceneLine = !AvailableScene ? TEXT("场景待恢复")
+                : Encounter.Id == TEXT("city-preview-10405") ? TEXT("本地预览 · 允许终结技 · 不是序章解锁")
+                : Encounter.PlayerName + TEXT("  ·  ") + Encounter.EnemyName;
+            P.Text(SceneLine, 235, Y + 46, 390, 20, 14, Muted);
         }
         if (Session->Encounters.IsEmpty()) P.Text(TEXT("暂无已开放的关卡"), 227, 245, 400, 40, 21, Muted);
         P.Text(TEXT("战斗记录"), 712, 211, 346, 30, 22, Accent);
@@ -1144,7 +1151,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         for (int32 Index = Page * 4; Index < FMath::Min(Page * 4 + 4, Session->Battles.Num()); ++Index)
         {
             const FHczsBattleSummary& Battle = Session->Battles[Index];
-            const bool AvailableScene = Battle.DefinitionId.StartsWith(TEXT("tutorial-5000-"));
+            const bool AvailableScene = Battle.DefinitionId.StartsWith(TEXT("tutorial-5000-"))
+                || Battle.DefinitionId.StartsWith(TEXT("city-preview-10405-"));
             const FString Status = Battle.Status == TEXT("player-turn") ? TEXT("继续")
                 : Battle.Status == TEXT("won") ? TEXT("已胜利") : TEXT("已结束");
             Button(AvailableScene ? TEXT("continue-battle") : TEXT("inspect-battle"), Battle.Id,

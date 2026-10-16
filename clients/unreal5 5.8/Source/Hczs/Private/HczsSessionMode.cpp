@@ -17,14 +17,24 @@
 
 namespace
 {
-const TCHAR* BattleMap = TEXT("/Game/Recovered/Battle/Maps/L_TutorialSource2133");
+const TCHAR* TutorialMap = TEXT("/Game/Recovered/Battle/Maps/L_TutorialSource2133");
+const TCHAR* CityMap = TEXT("/Game/Recovered/City/Maps/L_City2077Preview");
 const TCHAR* HallMap = TEXT("/Game/Recovered/Hall/Maps/L_ElsaHallFxPreview");
 
-bool SupportedBattle(const UHczsGameInstance* Session)
+bool Identity(const UHczsGameInstance* Session, const TCHAR* Encounter, const TCHAR* Enemy, const TCHAR* DefinitionPrefix)
 {
-    return Session && Session->CurrentBattle.PlayerId == TEXT("1") && Session->CurrentBattle.EnemyId == TEXT("991") &&
-        (Session->CurrentBattle.EncounterId == TEXT("tutorial-5000") ||
-         (Session->CurrentBattle.EncounterId.IsEmpty() && Session->CurrentBattle.DefinitionId.StartsWith(TEXT("tutorial-5000-"))));
+    return Session && Session->CurrentBattle.PlayerId == TEXT("1") && Session->CurrentBattle.EnemyId == Enemy &&
+        (Session->CurrentBattle.EncounterId == Encounter ||
+         (Session->CurrentBattle.EncounterId.IsEmpty() && Session->CurrentBattle.DefinitionId.StartsWith(DefinitionPrefix)));
+}
+
+const TCHAR* RecoveredBattleMap(const UHczsGameInstance* Session)
+{
+    // 3997/5000 stays on the prologue scene and keeps ultimates disabled.
+    // 10405 is the recovered local preview whose source gate allows Elsa's ultimate.
+    if (Identity(Session, TEXT("city-preview-10405"), TEXT("6605"), TEXT("city-preview-10405-"))) return CityMap;
+    if (Identity(Session, TEXT("tutorial-5000"), TEXT("991"), TEXT("tutorial-5000-"))) return TutorialMap;
+    return nullptr;
 }
 }
 
@@ -87,7 +97,7 @@ void AHczsSessionMode::ApplySceneCamera()
 void AHczsSessionMode::SyncPresentation()
 {
     if (!SessionWidget || !Session) return;
-    if (bBattleScene && Presentation && Session->IsBattleSceneReady() && SupportedBattle(Session))
+    if (bBattleScene && Presentation && Session->IsBattleSceneReady() && RecoveredBattleMap(Session))
     {
         Presentation->ApplySnapshot(Session->CurrentBattle, Session->LastVisualReceipt);
     }
@@ -107,8 +117,9 @@ void AHczsSessionMode::SessionChanged()
     FString Problem;
     if (Session->Phase == EHczsSessionPhase::Battle && Session->CurrentBattle.bIsValid)
     {
-        if (!SupportedBattle(Session)) Problem = TEXT("这场战斗的角色场景尚未恢复，可以返回大厅继续其他关卡。");
-        else if (!FPackageName::DoesPackageExist(BattleMap)) Problem = TEXT("序章战斗资源尚未载入，请返回大厅。");
+        const TCHAR* Map = RecoveredBattleMap(Session);
+        if (!Map) Problem = TEXT("这场战斗的角色场景尚未恢复，可以返回大厅继续其他关卡。");
+        else if (!FPackageName::DoesPackageExist(Map)) Problem = TEXT("这场战斗的原场景尚未载入，请返回大厅。");
         else if (bBattleScene && !Presentation) Problem = TEXT("战斗演出资源尚未载入，请返回大厅。");
     }
     SessionWidget->SetSceneProblem(Problem);
@@ -131,8 +142,8 @@ void AHczsSessionMode::TravelWhenReady()
 #endif
     if (!Session) return;
     FString Desired;
-    if (!bBattleScene && Session->IsBattleSceneReady() && SupportedBattle(Session))
-        Desired = BattleMap;
+    if (!bBattleScene && Session->IsBattleSceneReady())
+        if (const TCHAR* Map = RecoveredBattleMap(Session)) Desired = Map;
     else if (bBattleScene && Session->IsHallSceneReady())
         Desired = HallMap;
     if (Desired.IsEmpty() || !FPackageName::DoesPackageExist(Desired)) return;

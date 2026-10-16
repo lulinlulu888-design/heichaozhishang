@@ -135,6 +135,8 @@ void AHczsBattlePresentation::IntentDispatched(const FHczsCardIntentVisual& Inte
         bUltimatePlaying = true; bUltimateIntentAborted = false; SetBusy(true);
         if (!UltimateSequence->PlayElsa(PlayerComponent, Intent.RequestId))
         { bUltimatePlaying = false; bUltimateIntentAborted = true; }
+        else UE_LOG(LogTemp, Display, TEXT("HCZS ultimate battle sequence started: request=%s encounter=%s atUnixMs=%lld"),
+            *Intent.RequestId, *SceneAssets->SupportedEncounterId, VisualUnixMs());
         return;
     }
     const auto* Sequence = SceneAssets->CardAnimationQueues.Find(Intent.CardId);
@@ -623,6 +625,10 @@ void AHczsBattlePresentation::ApplySnapshot(const FHczsBattleView& View, const F
     if (bMatchingUltimate)
     {
         UltimateIntent.bConfirmed = true; DesiredSnapshot = View;
+        int32 DamageEvents = 0;
+        for (const auto& Event : Receipt.Events)
+            if (Event.Type == TEXT("DamageApplied") && Event.Target == TEXT("enemy")) ++DamageEvents;
+        UE_LOG(LogTemp, Display, TEXT("HCZS ultimate receipt during source sequence: damageEvents=%d; nine attack cues stay unmapped"), DamageEvents);
         if (bUltimateIntentAborted) { CancelPresentation(); ApplyStablePose(View); return; }
         // Reactions still use the confirmed receipt queue. Do not invent an
         // eight-damage/nine-cue correspondence until that mapping is recovered.
