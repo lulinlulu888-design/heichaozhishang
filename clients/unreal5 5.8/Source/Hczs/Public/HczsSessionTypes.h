@@ -72,6 +72,8 @@ struct HCZS_API FHczsBattleVisualEvent
     UPROPERTY(BlueprintReadOnly) FString CardId;
     UPROPERTY(BlueprintReadOnly) FString SkillId;
     UPROPERTY(BlueprintReadOnly) FString Target;
+    UPROPERTY(BlueprintReadOnly) FString InstanceId;
+    UPROPERTY(BlueprintReadOnly) int32 Round = 0;
 };
 
 USTRUCT(BlueprintType)

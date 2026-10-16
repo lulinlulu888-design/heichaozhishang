@@ -27,6 +27,9 @@ struct HCZS_API FSample
 
 HCZS_API const TCHAR* PhaseName(EPhase Phase);
 
+/** Nominal completion of the whole _C_H dispatch after the draw call (last-index onLastDispatchEnd). */
+inline double DispatchSeconds(int32 Count) { return 1.1 + .01 * Count; }
+
 // Index is zero-based, Count is 1..8. N>=9 can produce a negative source DelayTime;
 // its native scheduling is unverified and is rejected instead of silently clamped.
 // FitSize and CardWidth are source design units. HandCenter is the final card centre

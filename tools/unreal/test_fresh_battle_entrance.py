@@ -145,7 +145,11 @@ def run():
                     fov=float(cc.get_editor_property('field_of_view')), aspect=float(cc.get_editor_property('aspect_ratio')),
                     constrainAspect=bool(cc.get_editor_property('constrain_aspect_ratio')),
                     viewport=[float(v) for v in (u.WidgetLayoutLibrary.get_viewport_size(world).x, u.WidgetLayoutLibrary.get_viewport_size(world).y)]))
-            guard.check(sample['revision']==1 and sample['actionIndex']==0, 'Entrance unexpectedly changed authoritative state')
+            if report.get('roundStartDeal'):
+                guard.check(sample['actionIndex'] in (0, 1) and sample['revision'] == sample['actionIndex'] + 1,
+                            'Round-start deal changed more than the one end-turn action')
+            else:
+                guard.check(sample['revision']==1 and sample['actionIndex']==0, 'Entrance unexpectedly changed authoritative state')
             if sample['playing']:
                 guard.check(sample['locked'] and not sample['canSubmit'] and sample['busy'], 'Playing entrance did not lock intents')
                 if sample['entrancePhase']=='waiting-hidden': guard.check(not sample['visible'] and sample['actorHidden'], 'Source0.5s wait did not hide player')
@@ -157,7 +161,8 @@ def run():
             widgets = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)
             guard.check(len(widgets) == 1, 'Battle session widget missing/duplicated')
             ui = json.loads(widgets[0].development_describe_ui())
-            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid', 'dealtCards', 'sourceOwnCardOriginY', 'hudIn')}
+            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid', 'dealtCards', 'sourceOwnCardOriginY', 'hudIn', 'roundDeal', 'uiAudio')}
+            sample['playableCards'] = len([c for c in ui.get('controls', []) if c.get('action') == 'play-card' and c.get('enabled')])
             opening = sample['opening']
             hud = opening.get('hudIn') or {}
             if 0.15 < hud.get('seconds', -1) < 0.3 and 'hudInShot' not in state:
@@ -172,14 +177,15 @@ def run():
                     state['openingShot'] = target
                     u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
             cards = opening.get('dealtCards', [])
-            if cards:
+            opening_cards = [c for c in cards if c.get('route') != 'round-start']
+            if opening_cards and sample.get('entrancePhase') == 'first-deal':
                 guard.check(sample['locked'] and not sample['canSubmit'] and sample['busy'], 'Dispatch allowed a gameplay command')
                 guard.check(opening['sourceOwnCardOriginY'] == 720, 'Source OwnCardArea bottom-root offset changed')
-                if 'centre-hold' in {c['phase'] for c in cards} and 'dealShot' not in state:
+                if 'centre-hold' in {c['phase'] for c in opening_cards} and 'dealShot' not in state:
                     target = path.parent/(prefix+'-first-deal-centre.png')
                     state['dealShot'] = target
                     u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
-                if 'drop-to-hand' in {c['phase'] for c in cards} and 'dropShot' not in state:
+                if 'drop-to-hand' in {c['phase'] for c in opening_cards} and 'dropShot' not in state:
                     target = path.parent/(prefix+'-first-deal-drop.png')
                     state['dropShot'] = target
                     u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
@@ -305,8 +311,51 @@ def run():
                     report['sourceCamera']=dict(viewport=view['viewport'],aspect=width/height,horizontalFov=view['fov'],expectedHorizontalFov=expected)
                     passed('source-camera-battle-fov-by-aspect')
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
-                    capture('complete-source2133'); stage('capture-first')
+                    if report.get('roundStartDeal'):
+                        game.end_turn(); stage('round-deal')
+                    else:
+                        capture('complete-source2133'); stage('capture-first')
                 else: guard.check(sample.get('playing'), 'Fresh GI creation did not start the source entrance')
+            elif current=='round-deal':
+                opening = sample.get('opening') or {}
+                deal = opening.get('roundDeal') or {}
+                cards = [c for c in (opening.get('dealtCards') or []) if c.get('route') == 'round-start']
+                phases = state.setdefault('roundPhases', set())
+                phases.update(c['phase'] for c in cards)
+                if deal.get('instances'): state['roundInstances'] = deal['instances']
+                if cards and 'centre-hold' in {c['phase'] for c in cards} and 'roundShot' not in state:
+                    target = path.parent/(prefix+'-round-deal-centre.png')
+                    state['roundShot'] = target
+                    u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
+                if deal.get('active') and deal.get('outcome') == 'dispatching':
+                    guard.check(sample.get('playableCards') == 0, 'Round-start deal left a card playable')
+                if deal.get('outcome') == 'completed' and not deal.get('active'):
+                    guard.check({'fly-to-centre', 'centre-hold', 'drop-to-hand'} <= phases, 'Round-start _C_H phases missing')
+                    guard.check(state.get('roundShot') and state['roundShot'].exists(), 'Round-start deal screenshot missing')
+                    audio = opening.get('uiAudio') or []
+                    reasons = {row.get('reason') for row in audio}
+                    guard.check({'opening-first-draw', 'opening-last-dispatch-end', 'round-start-draw', 'round-last-dispatch-end'} <= reasons,
+                                'Draw/land cues were not played for the opening and the round-start draw')
+                    guard.check(sum(row.get('reason') == 'round-start-draw' for row in audio) == 1
+                                and sum(row.get('reason') == 'round-last-dispatch-end' for row in audio) == 1,
+                                'Round-start draw played more than the authoritative end-turn draw')
+                    guard.check(all(row.get('loaded') and row.get('playing') for row in audio), 'A UI cue asset did not start')
+                    guard.check(any(row.get('reason') == 'round-start-draw' and row.get('volumeDb') == -9 for row in audio)
+                                and any(row.get('reason') == 'round-last-dispatch-end' and row.get('volumeDb') == -4.5 for row in audio),
+                                'Cue volume differs from the in-bank actor-mixer value')
+                    report['roundDeal'] = dict(phases=sorted(phases), audio=audio, screenshot=str(state['roundShot']),
+                                               instances=state.get('roundInstances'), actionIndex=sample['actionIndex'])
+                    state['read'] = pool.submit(read_battle, sample['battleId']); stage('round-read')
+            elif current=='round-read' and state['read'].done():
+                battle = state['read'].result()
+                guard.check(battle['revision'] == 2 and battle['state']['actionIndex'] == 1
+                            and battle['state']['status'] == 'player-turn' and battle['state']['round'] == 2,
+                            'End turn did not advance exactly one authoritative round')
+                drawn = set(report['roundDeal']['instances'] or [])
+                guard.check(drawn and drawn <= set(battle['state']['piles']['hand']),
+                            'Animated instances are not the authoritative new hand')
+                passed('round-start-draw-uses-source-flight-and-ui-cues')
+                finish()
             elif current=='capture-first' and shot_done():
                 widget = u.WidgetLibrary.get_all_widgets_of_class(world,u.load_class(None,'/Script/Hczs.HczsSessionWidget'),True)[0]
                 ui = json.loads(widget.development_describe_ui())
@@ -355,6 +404,7 @@ def run():
         except Exception: finish(traceback.format_exc())
         finally: state['busy']=False
 
+    report['roundStartDeal'] = guard.flag(command, 'HczsRoundStartDeal')
     window = guard.argument(command, 'HczsPIEWindow')
     if window:
         size = re.fullmatch(r'(\d{3,4})x(\d{3,4})', window)

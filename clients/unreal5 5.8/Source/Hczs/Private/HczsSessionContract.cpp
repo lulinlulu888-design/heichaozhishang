@@ -658,6 +658,7 @@ bool ParseReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, co
                         !Bool(E, TEXT("generated"), bGenerated) || !bGenerated || !bUltimate) return false;
                 }
                 else if (!Exact(E, {TEXT("type"), TEXT("instanceId")}) || bUltimate) return false;
+                FHczsBattleVisualEvent VEvent; VEvent.Type = Type; VEvent.InstanceId = Instance; Visual.Events.Add(MoveTemp(VEvent));
             }
             else
             {
@@ -689,7 +690,12 @@ bool ParseReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, co
             Descriptions.Add(FString::Printf(TEXT("%s生命 -%s"), Target == TEXT("player") ? TEXT("本方") : TEXT("敌方"), *Lost.Decimal));
             FHczsBattleVisualEvent VEvent; VEvent.Type = Type; VEvent.Target = Target; Visual.Events.Add(MoveTemp(VEvent));
         }
-        else if (Type == TEXT("TurnStarted")) { int32 Round = 0; if (!Counter(E, TEXT("round"), Round, 1, 1000)) return false; Descriptions.Add(FString::Printf(TEXT("第 %d 回合"), Round)); }
+        else if (Type == TEXT("TurnStarted"))
+        {
+            int32 Round = 0; if (!Counter(E, TEXT("round"), Round, 1, 1000)) return false;
+            Descriptions.Add(FString::Printf(TEXT("第 %d 回合"), Round));
+            FHczsBattleVisualEvent VEvent; VEvent.Type = Type; VEvent.Round = Round; Visual.Events.Add(MoveTemp(VEvent));
+        }
         else if (Type == TEXT("BattleEnded")) Descriptions.Add(Out.Status == TEXT("won") ? TEXT("战斗胜利") : TEXT("战斗失败"));
         else if (Type == TEXT("BattleStarted")) Descriptions.Add(TEXT("战斗已创建并保存"));
         if (Descriptions.Num() > 64) Descriptions.RemoveAt(0, Descriptions.Num() - 64);

@@ -12,6 +12,7 @@ class UTexture2D;
 class UFontFace;
 class UHczsGameInstance;
 class UHczsWorldlineWidget;
+namespace HczsUiAudio { enum class ECue : uint8; }
 
 /** Original APK UI pixels and Chinese typeface, separate from runtime game state. */
 UCLASS()
@@ -90,6 +91,11 @@ protected:
 private:
     void SessionChanged();
     double FreshOpeningSeconds() const;
+    void UpdateDealCues();
+    void FinishRoundDeal(const FString& Reason);
+    bool IsRoundDealActive() const { return !RoundDeal.Instances.IsEmpty(); }
+    double RoundDealElapsed() const;
+    void PlayUiCue(HczsUiAudio::ECue Cue, const FString& Reason);
     int32 PaintFreshOpening(const FGeometry& Canvas, FSlateWindowElementList& Elements, int32 Layer, double Seconds) const;
     FReply PressAt(const FGeometry& Geometry, const FPointerEvent& Event);
     void MoveCardGesture(const FGeometry& Geometry, const FPointerEvent& Event);
@@ -117,6 +123,22 @@ private:
     HczsSourceUiTimeline::FClip HudIn, OwnCardIn;
     HczsSourceUiTimeline::FSample HudInRest, OwnCardInRest;
     mutable TSharedPtr<class FJsonObject> LastHudIn;
+    /** Authoritative end-turn TurnStarted + CardDrawn cards replayed with the round-start _C_H flight. */
+    struct FRoundDeal
+    {
+        FString BattleId;
+        int64 ActionIndex = -1;
+        int32 Round = 0;
+        TArray<FString> Instances;
+        double StartSeconds = -1;
+    };
+    FRoundDeal RoundDeal;
+    FString HandledDealReceipt, LastRoundDealOutcome;
+    FString OpeningCueBattle;
+    bool bOpeningLandCuePlayed = false;
+    int32 LastDrawCueVariant = -1;
+    FRandomStream UiAudioRandom;
+    TArray<TSharedPtr<class FJsonValue>> UiAudioLog;
     UPROPERTY() TObjectPtr<UHczsWorldlineWidget> WorldlineWidget;
     UPROPERTY() TArray<TObjectPtr<UObject>> TargetingResources;
     TSharedPtr<const FCompositeFont> CompositeFont;
@@ -125,6 +147,7 @@ private:
     TMap<FString, FVector4f> IconDrawAdjustments;
     TMap<int32, TArray<FVector3f>> CardPlacements;
     FDelegateHandle StateChangedHandle;
+    FTimerHandle DealTimer;
     mutable TArray<FHczsSessionControl> Controls;
     FString HoveredCard;
     int32 ProfilePage = 0;

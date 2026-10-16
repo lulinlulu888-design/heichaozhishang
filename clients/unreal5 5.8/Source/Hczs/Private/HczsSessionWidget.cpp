@@ -4,6 +4,11 @@
 #include "HczsWorldlineWidget.h"
 #include "HczsBattlePresentation.h"
 #include "HczsCardDeal.h"
+#include "HczsUiAudio.h"
+#include "HczsSessionContract.h"
+#include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundWave.h"
 #include "Engine/FontFace.h"
 #include "Engine/Texture2D.h"
 #include "Dom/JsonObject.h"
@@ -23,6 +28,7 @@
 #include "Layout/WidgetPath.h"
 #include "Widgets/SWindow.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 #include "EngineUtils.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/SkeletalMesh.h"
@@ -281,6 +287,7 @@ void UHczsSessionWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     SetIsFocusable(true);
+    UiAudioRandom.Initialize(int32(FPlatformTime::Cycles()));
     Presentation = LoadObject<UHczsBattlePresentationAsset>(nullptr,
         TEXT("/Game/Recovered/Battle/UI/BattlePresentation.BattlePresentation"));
     EntrancePresentation = LoadObject<UHczsBattlePresentationAsset>(nullptr,
@@ -443,6 +450,8 @@ void UHczsSessionWidget::NativeConstruct()
     Session = Cast<UHczsGameInstance>(GetGameInstance());
     if (Session)
         StateChangedHandle = Session->OnStateChangedNative.AddUObject(this, &UHczsSessionWidget::SessionChanged);
+    if (UWorld* World = GetWorld())
+        World->GetTimerManager().SetTimer(DealTimer, this, &UHczsSessionWidget::UpdateDealCues, 0.01f, true);
     UpdateVisibility();
     UE_LOG(LogTemp, Display, TEXT("HCZS: session UI ready; %d original sprites, sourceFont=%s, %d card arcs"),
         Brushes.Num(), CompositeFont.IsValid() ? TEXT("yes") : TEXT("missing"), CardPlacements.Num());
@@ -452,8 +461,116 @@ void UHczsSessionWidget::NativeDestruct()
 {
     CancelCardGesture(TEXT("widget-destroyed"));
     CloseWorldlineSelection();
+    if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(DealTimer);
     if (Session && StateChangedHandle.IsValid()) Session->OnStateChangedNative.Remove(StateChangedHandle);
     Super::NativeDestruct();
+}
+
+double UHczsSessionWidget::RoundDealElapsed() const
+{
+    return RoundDeal.StartSeconds >= 0 && GetWorld() ? GetWorld()->GetTimeSeconds() - RoundDeal.StartSeconds : -1.0;
+}
+
+void UHczsSessionWidget::FinishRoundDeal(const FString& Reason)
+{
+    if (!IsRoundDealActive()) return;
+    LastRoundDealOutcome = Reason;
+    UE_LOG(LogTemp, Display, TEXT("HCZS round-start deal ended: actionIndex=%lld cards=%d reason=%s"),
+        RoundDeal.ActionIndex, RoundDeal.Instances.Num(), *Reason);
+    RoundDeal = FRoundDeal();
+    InvalidateLayoutAndVolatility();
+}
+
+void UHczsSessionWidget::PlayUiCue(HczsUiAudio::ECue Cue, const FString& Reason)
+{
+    using namespace HczsUiAudio;
+    const FCue& Def = Get(Cue);
+    const int32 Variant = PickVariant(Cue, Cue == ECue::DrawCard ? LastDrawCueVariant : -1, UiAudioRandom);
+    if (Cue == ECue::DrawCard) LastDrawCueVariant = Variant;
+    const uint32 Source = Def.Sources[Variant];
+    USoundWave* Sound = LoadObject<USoundWave>(nullptr, *SoundPath(Source));
+    UAudioComponent* Component = Sound ? UGameplayStatics::SpawnSound2D(this, Sound, VolumeMultiplier(Cue)) : nullptr;
+    auto Row = MakeShared<FJsonObject>();
+    Row->SetStringField(TEXT("cue"), Def.Key);
+    Row->SetStringField(TEXT("event"), Def.Event);
+    Row->SetNumberField(TEXT("source"), Source);
+    Row->SetNumberField(TEXT("volumeDb"), Def.VolumeDb);
+    Row->SetStringField(TEXT("reason"), Reason);
+    Row->SetBoolField(TEXT("loaded"), Sound != nullptr);
+    Row->SetBoolField(TEXT("playing"), Component && Component->IsPlaying());
+    Row->SetNumberField(TEXT("worldSeconds"), GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0);
+    UiAudioLog.Add(MakeShared<FJsonValueObject>(Row));
+    if (UiAudioLog.Num() > 32) UiAudioLog.RemoveAt(0, UiAudioLog.Num() - 32);
+    if (!Sound) UE_LOG(LogTemp, Warning, TEXT("HCZS UI cue %s source %u is not imported"), Def.Key, Source);
+}
+
+void UHczsSessionWidget::UpdateDealCues()
+{
+    using HczsUiAudio::ECue;
+    UWorld* World = GetWorld();
+    if (!Session || !World || !bBattleScene || Session->Phase != EHczsSessionPhase::Battle || !Session->CurrentBattle.bIsValid)
+    {
+        FinishRoundDeal(TEXT("left-battle"));
+        return;
+    }
+    const FHczsBattleView& Battle = Session->CurrentBattle;
+    const int32 HandCount = Battle.Hand.Num();
+    const double Opening = FreshOpeningSeconds();
+    if (Opening >= 3.5 && OpeningCueBattle != Battle.Id && HandCount > 0 && HandCount <= 8)
+    {
+        OpeningCueBattle = Battle.Id;
+        bOpeningLandCuePlayed = Opening >= 3.5 + HczsCardDeal::DispatchSeconds(HandCount);
+        if (!bOpeningLandCuePlayed) PlayUiCue(ECue::DrawCard, TEXT("opening-first-draw"));
+    }
+    if (OpeningCueBattle == Battle.Id && !bOpeningLandCuePlayed && Opening >= 3.5 + HczsCardDeal::DispatchSeconds(HandCount))
+    {
+        bOpeningLandCuePlayed = true;
+        PlayUiCue(ECue::FapaiB, TEXT("opening-last-dispatch-end"));
+    }
+
+    const FHczsBattleVisualReceipt& Receipt = Session->LastVisualReceipt;
+    const FString ReceiptKey = FString::Printf(TEXT("%s:%lld"), *Receipt.BattleId, Receipt.ActionIndex);
+    if (Receipt.bValid && HandledDealReceipt != ReceiptKey && HczsSessionContract::CanPublishVisualReceipt(Battle, Receipt))
+    {
+        HandledDealReceipt = ReceiptKey;
+        FRoundDeal Next;
+        bool bTurnStarted = false;
+        for (const FHczsBattleVisualEvent& Event : Receipt.Events)
+        {
+            if (Event.Type == TEXT("TurnStarted") && Event.Round >= 2) { bTurnStarted = true; Next.Round = Event.Round; Next.Instances.Reset(); }
+            else if (bTurnStarted && Event.Type == TEXT("CardDrawn")
+                && Battle.Hand.ContainsByPredicate([&Event](const FHczsHandCard& C) { return C.InstanceId == Event.InstanceId; }))
+                Next.Instances.AddUnique(Event.InstanceId);
+        }
+        if (bTurnStarted && !Next.Instances.IsEmpty() && Next.Instances.Num() <= 8 && Battle.Status == TEXT("player-turn"))
+        {
+            FinishRoundDeal(TEXT("superseded"));
+            Next.BattleId = Battle.Id; Next.ActionIndex = Receipt.ActionIndex;
+            RoundDeal = MoveTemp(Next);
+            LastRoundDealOutcome = TEXT("armed");
+            CancelCardGesture(TEXT("round-start-deal"));
+            InvalidateLayoutAndVolatility();
+        }
+    }
+    if (!IsRoundDealActive()) return;
+    if (RoundDeal.BattleId != Battle.Id || RoundDeal.ActionIndex != Battle.ActionIndex)
+    { FinishRoundDeal(TEXT("authority-advanced")); return; }
+    if (RoundDeal.StartSeconds < 0)
+    {
+        if (bPresentationBusy || Session->bRequestInFlight) return;
+        RoundDeal.StartSeconds = World->GetTimeSeconds();
+        LastRoundDealOutcome = TEXT("dispatching");
+        UE_LOG(LogTemp, Display, TEXT("HCZS round-start deal started: round=%d actionIndex=%lld cards=%d"),
+            RoundDeal.Round, RoundDeal.ActionIndex, RoundDeal.Instances.Num());
+        PlayUiCue(ECue::DrawCard, TEXT("round-start-draw"));
+        InvalidateLayoutAndVolatility();
+    }
+    if (RoundDealElapsed() >= HczsCardDeal::DispatchSeconds(RoundDeal.Instances.Num()))
+    {
+        PlayUiCue(ECue::FapaiB, TEXT("round-last-dispatch-end"));
+        FinishRoundDeal(TEXT("completed"));
+    }
+    if (IsRoundDealActive()) InvalidateLayoutAndVolatility();
 }
 
 void UHczsSessionWidget::OpenProfileSelection()
@@ -696,7 +813,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         FSlateLayoutTransform(Scale, (Available - DesignSize * Scale) * 0.5f));
     FSessionPainter P(Canvas, Elements, InitialLayer, Brushes, IconDrawAdjustments, CompositeFont,
         &LastPaintedTexts, &LastPaintedSprites);
-    const bool bBusy = !Session || Session->bRequestInFlight || Session->bHasPendingIntent || bPresentationBusy;
+    const bool bBusy = !Session || Session->bRequestInFlight || Session->bHasPendingIntent || bPresentationBusy || IsRoundDealActive();
     auto Button = [&](const FString& Action, const FString& Value, const FString& Label,
         float X, float Y, float W, float H, bool Enabled = true, bool Primary = false)
     {
@@ -849,16 +966,24 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     : FVector3f((Index - (Battle.Hand.Num() - 1) * 0.5f) * 90, 90, 0);
                 FVector2f Center(640 + Placement.X, 720 - Placement.Y - (bHover ? 28 : 0));
                 float Angle = Placement.Z, Tilt = 0;
-                const bool bDispatching = LastOpeningSeconds >= 0 && Battle.Hand.Num() <= 8 &&
-                    LastOpeningSeconds < 3.5 + 1.1 + .01 * Battle.Hand.Num();
-                if (bDispatching && LastOpeningSeconds < 3.5) continue;
+                const bool bOpeningDispatch = LastOpeningSeconds >= 0 && Battle.Hand.Num() <= 8 &&
+                    LastOpeningSeconds < 3.5 + HczsCardDeal::DispatchSeconds(Battle.Hand.Num());
+                const int32 RoundDealIndex = bOpeningDispatch ? INDEX_NONE : RoundDeal.Instances.IndexOfByKey(Card.InstanceId);
+                const bool bDispatching = bOpeningDispatch || RoundDealIndex != INDEX_NONE;
+                const double DealElapsed = bOpeningDispatch ? LastOpeningSeconds - 3.5 : RoundDealElapsed();
+                // Drawn cards stay in the pile until the enemy presentation releases the draw action.
+                if (bDispatching && DealElapsed < 0) continue;
                 if (bDispatching)
                 {
                     HczsCardDeal::FSample Deal; FString Error;
-                    if (HczsCardDeal::Sample(LastOpeningSeconds - 3.5, Index, Battle.Hand.Num(),
+                    if (HczsCardDeal::Sample(DealElapsed, bOpeningDispatch ? Index : RoundDealIndex,
+                        bOpeningDispatch ? Battle.Hand.Num() : RoundDeal.Instances.Num(),
                         FVector2D(1280, 720), 126, FVector2D(640, 720), FVector2D(Center), Angle, Deal, Error))
                     {
                         auto Row = MakeShared<FJsonObject>();
+                        Row->SetStringField(TEXT("route"), bOpeningDispatch ? TEXT("opening") : TEXT("round-start"));
+                        Row->SetStringField(TEXT("instanceId"), Card.InstanceId);
+                        Row->SetNumberField(TEXT("elapsed"), DealElapsed);
                         Row->SetNumberField(TEXT("index"), Index);
                         Row->SetNumberField(TEXT("x"), Deal.Position.X); Row->SetNumberField(TEXT("y"), Deal.Position.Y);
                         Row->SetNumberField(TEXT("angle"), Deal.AngleZ); Row->SetNumberField(TEXT("tilt"), Deal.TiltX);
@@ -1186,7 +1311,7 @@ int32 UHczsSessionWidget::PaintSourceTargetArrow(const FGeometry& Canvas, FSlate
 
 bool UHczsSessionWidget::CanDragCard(const FString& InstanceId) const
 {
-    if (!Session || !bBattleScene || !SceneProblem.IsEmpty() || bPresentationBusy || !Session->CanSubmitBattleIntent()
+    if (!Session || !bBattleScene || !SceneProblem.IsEmpty() || bPresentationBusy || IsRoundDealActive() || !Session->CanSubmitBattleIntent()
         || !HasRecoveredActors(Session->CurrentBattle)) return false;
     const auto* Card = Session->CurrentBattle.Hand.FindByPredicate([&InstanceId](const FHczsHandCard& C) { return C.InstanceId == InstanceId; });
     return Card && Card->Cost <= Session->CurrentBattle.Energy && Brushes.Contains(TEXT("card-") + Card->CardId);
@@ -1563,6 +1688,21 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
     Root->SetBoolField(TEXT("openingTimelineValid"), EliteOpening.bValid);
     Root->SetArrayField(TEXT("dealtCards"), LastDealtCards);
     if (LastHudIn) Root->SetObjectField(TEXT("hudIn"), LastHudIn);
+    {
+        auto Deal = MakeShared<FJsonObject>();
+        Deal->SetBoolField(TEXT("active"), IsRoundDealActive());
+        Deal->SetStringField(TEXT("outcome"), LastRoundDealOutcome);
+        Deal->SetStringField(TEXT("handledReceipt"), HandledDealReceipt);
+        Deal->SetNumberField(TEXT("actionIndex"), RoundDeal.ActionIndex);
+        Deal->SetNumberField(TEXT("round"), RoundDeal.Round);
+        Deal->SetNumberField(TEXT("elapsed"), RoundDealElapsed());
+        Deal->SetNumberField(TEXT("dispatchSeconds"), HczsCardDeal::DispatchSeconds(RoundDeal.Instances.Num()));
+        TArray<TSharedPtr<FJsonValue>> Instances;
+        for (const FString& Id : RoundDeal.Instances) Instances.Add(MakeShared<FJsonValueString>(Id));
+        Deal->SetArrayField(TEXT("instances"), Instances);
+        Root->SetObjectField(TEXT("roundDeal"), Deal);
+        Root->SetArrayField(TEXT("uiAudio"), UiAudioLog);
+    }
     Root->SetNumberField(TEXT("sourceOwnCardOriginY"), 720);
     Root->SetStringField(TEXT("dealClockPolicy"), TEXT("local-BattleBegin3s-plus-original-first-delay0.5s"));
     Root->SetBoolField(TEXT("originalCardPerspectiveRecovered"), false);

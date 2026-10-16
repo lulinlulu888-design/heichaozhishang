@@ -304,7 +304,8 @@ bool FHczsSessionUltimateReceiptTest::RunTest(const FString& Parameters)
     auto Result=UltimateReceipt(TEXT("used")); if(!TestTrue(TEXT("Ultimate receipt fixture available"),Result.IsValid())) return false;
     FHczsBattleView View; FHczsBattleVisualReceipt Visual; TArray<FString> Events;
     TestTrue(TEXT("Dynamic instance can confirm the exact pending play"),ParseReceipt(Result,ProfileId,BattleId,TEXT(""),5,View,Events,TEXT("play-card"),TEXT("ultimate:1"),&Visual));
-    if(TestEqual(TEXT("CardPlayed plus eight real damage visual events"),Visual.Events.Num(),9))
+    if(TestEqual(TEXT("CardPlayed plus eight real damage visual events"),Visual.Events.FilterByPredicate([](const FHczsBattleVisualEvent& E)
+        { return E.Type==TEXT("CardPlayed")||E.Type==TEXT("DamageApplied"); }).Num(),9))
         TestEqual(TEXT("Original skill card identity reaches presentation"),Visual.Events[0].CardId,FString(TEXT("410104")));
     TestEqual(TEXT("Receipt never rewrites enemy identity"),View.EnemyId,FString(TEXT("6605")));
     Result->SetBoolField(TEXT("replayed"),true);
@@ -400,6 +401,20 @@ bool FHczsSessionVisualContractTest::RunTest(const FString& Parameters)
     Skill->SetStringField(TEXT("type"), TEXT("EnemySkillUsed")); Skill->SetStringField(TEXT("skillId"), TEXT("9911")); Skill->SetNumberField(TEXT("round"), 1);
     TestTrue(TEXT("Frozen enemy skill id maps a real raw enemy event"), ParseReceipt(Result, ProfileId, BattleId, TEXT(""), 1, View, Lines, TEXT("end-turn"), TEXT(""), &Visual));
     TestEqual(TEXT("Enemy visual keeps skillId"), Visual.Events[0].SkillId, FString(TEXT("9911")));
+    {
+        auto TurnEvents = Result->GetArrayField(TEXT("events"));
+        const int32 StateIndex = TurnEvents.Num() - 1;
+        TurnEvents.Insert(MakeShared<FJsonValueObject>(Read(TEXT(R"JSON({"type":"TurnStarted","round":2})JSON"))), StateIndex);
+        TurnEvents.Insert(MakeShared<FJsonValueObject>(Read(TEXT(R"JSON({"type":"CardDrawn","instanceId":"card-1"})JSON"))), StateIndex + 1);
+        Result->SetArrayField(TEXT("events"), TurnEvents);
+        TestTrue(TEXT("End-turn receipt with round-start draw accepted"), ParseReceipt(Result, ProfileId, BattleId, TEXT(""), 1, View, Lines, TEXT("end-turn"), TEXT(""), &Visual));
+        if (TestEqual(TEXT("Enemy, turn and draw visuals kept in order"), Visual.Events.Num(), 3))
+        {
+            TestEqual(TEXT("Turn visual keeps round"), Visual.Events[1].Round, 2);
+            TestEqual(TEXT("Draw visual keeps registered instance"), Visual.Events[2].InstanceId, FString(TEXT("card-1")));
+        }
+        TurnEvents.RemoveAt(StateIndex, 2); Result->SetArrayField(TEXT("events"), TurnEvents);
+    }
     Skill->SetStringField(TEXT("skillId"), TEXT("unregistered-skill"));
     TestFalse(TEXT("Unregistered skill cannot trigger a visual"), ParseReceipt(Result, ProfileId, BattleId, TEXT(""), 1, View, Lines, TEXT("end-turn"), TEXT(""), &Visual));
 
