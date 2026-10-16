@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 INPUT = ROOT / 'analysis/unreal/battle-ui/manifest.json'
 DEST = '/Game/Recovered/Battle/UI'
 REPORT = ROOT / 'analysis/unreal/battle-ui/import-result.json'
-PINNED_MANIFEST = '6fcabf017ae11fed4bcd69a0d22f66b99959f81c7636479c456005cf0a34085a'
+PINNED_MANIFEST = 'fec6c68c621f5936b1ea0d7fc6de641d0c581b79e20518232a224f263d74af4c'
 
 
 def verified(filename, digest):

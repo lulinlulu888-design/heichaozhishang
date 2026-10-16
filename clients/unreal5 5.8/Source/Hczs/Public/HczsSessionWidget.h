@@ -142,6 +142,13 @@ private:
     UPROPERTY() TObjectPtr<UHczsWorldlineWidget> WorldlineWidget;
     UPROPERTY() TArray<TObjectPtr<UObject>> TargetingResources;
     TSharedPtr<const FCompositeFont> CompositeFont;
+    /** CommonRes/title.ttf, imported with the hall UI; NameLabelArea Txt uses it. */
+    UPROPERTY() TObjectPtr<UFontFace> TitleFontFace;
+    TSharedPtr<const FCompositeFont> TitleFont;
+    /** FightCardEffects._showOperateUsableEffect fade start per hand card instance. */
+    mutable TMap<FString, double> UsableOutlineSince;
+    /** NameLabelArea._fadeIn start; negative while the label is hidden. */
+    mutable double NameLabelSince = -1;
     TMap<FString, FSlateBrush> Brushes;
     /** ScaleXY/offsetXY maps full generated canvases onto original content bounds. */
     TMap<FString, FVector4f> IconDrawAdjustments;

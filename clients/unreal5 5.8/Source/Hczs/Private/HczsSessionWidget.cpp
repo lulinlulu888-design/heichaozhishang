@@ -85,12 +85,25 @@ bool Contains(const FHczsSessionControl& Control, const FVector2f& Point)
     return Control.Rect.ContainsPoint(Local);
 }
 
-FString TrimScalar(const FHczsScalar& Value)
+// UsefulFunctions.getSimpleNum with its default table, as CommonText.setSimpleNumTxt uses for
+// head txt_hp: int() truncation, then one K/M/B step at or above 100000.
+FString SimpleNum(double Value)
 {
-    // Decimal display is the parsed server value. No client damage/HP rounding.
-    FString Text = Value.Decimal;
-    if (Text.Len() > 14) Text = FString::Printf(TEXT("%.6g"), Value.Approximate);
-    return Text;
+    struct FStep { double Need, Divide; int32 Digits; const TCHAR* Suffix; };
+    static const FStep Steps[] = {{1, 1, 0, TEXT("")}, {1e5, 1e3, 1, TEXT("K")}, {1e6, 1e3, 0, TEXT("K")},
+        {1e7, 1e6, 1, TEXT("M")}, {1e8, 1e6, 0, TEXT("M")}, {1e9, 1e6, 0, TEXT("M")}, {1e10, 1e9, 0, TEXT("B")}};
+    const double Number = FMath::TruncToDouble(Value);
+    const double Absolute = FMath::Abs(Number);
+    int32 Index = INDEX_NONE;
+    for (int32 Step = 0; Step < UE_ARRAY_COUNT(Steps); ++Step)
+        if (Absolute >= Steps[Step].Need) Index = Step;
+    if (Index == INDEX_NONE) return FString::Printf(TEXT("%.0f"), Number);
+    const FStep& Step = Steps[Index];
+    const double Scale = FMath::Pow(10.0, Step.Digits);
+    const double Shown = FMath::TruncToDouble(Absolute * Scale / Step.Divide * (Number < 0 ? -1 : 1)) / Scale;
+    if (Step.Digits == 0 || FMath::RoundToDouble(Shown * Scale) / Scale == FMath::TruncToDouble(Shown))
+        return FString::Printf(TEXT("%.0f%s"), FMath::TruncToDouble(Shown), Step.Suffix);
+    return FString::Printf(TEXT("%.*f%s"), Step.Digits, Shown, Step.Suffix);
 }
 
 struct FHudGroup
@@ -205,7 +218,7 @@ public:
         if (bSmoothCard && SmoothQuad(*Brush, X, Y, W, H, Tint)) return true;
         const FGeometry Geometry = bFlipX
             ? Canvas.MakeChild(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y)),
-                FSlateRenderTransform(FScale2D(-1.f, 1.f)), FVector2f(1.f, 0.f))
+                FSlateRenderTransform(FScale2D(-1.f, 1.f)), FVector2f(0.5f, 0.5f))
             : Canvas.MakeChild(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y)));
         FSlateDrawElement::MakeBox(Elements, ++Layer, Geometry.ToPaintGeometry(), Brush, ESlateDrawEffect::None, Tint);
         return true;
@@ -262,7 +275,7 @@ public:
     }
 
     // PlayerHeadArea / MonsterHeadArea rest boxes from tools/audit_head_area_rest.py.
-    // Slot is the project node's rest design origin. flipX mirrors the frame inside that box.
+    // Slot is the project node's rest design origin. Boxes are post-flip; bFlipX mirrors pixels in place.
     void Health(const FString& Name, const FString& Portrait, const FHczsScalar& Hp,
         const FHczsScalar& Maximum, const FHczsScalar& Shield, FVector2D Slot, bool bEnemy)
     {
@@ -291,11 +304,13 @@ public:
             Elements.PopClip();
         }
         // txt_hp is the short number on the bar. The "/ max" string belongs to debug_hp and stays off.
-        Text(TrimScalar(Hp), Number.X, Number.Y, 54, 20, 16, Light, true);
+        Text(SimpleNum(Hp.Approximate), Number.X, Number.Y, 54, 20, 16, Light, true);
         // PlayerHeadArea.setShieldPercent fills the track when shield > 0 and there is no
         // prognosis. MonsterBaseArea.refreshShield uses ceil(shield * 100 / maxHp). Direction 0
         // grows from the left. The preview bar and break icon stay off without those states.
-        const FVector2D ShieldBar = bEnemy ? At(-222, 92) : At(-62, 92);
+        // Widget flipX negates scaleX around the anchor: the monster shield_bg anchored (1, .5)
+        // at x -78 spans -78..66, and its LoadingBar children fill from the right.
+        const FVector2D ShieldBar = bEnemy ? At(-78, 92) : At(-62, 92);
         const FVector2D ShieldSize = bEnemy ? FVector2D(144, 16) : FVector2D(140, 16);
         Image(TEXT("shield-bg"), ShieldBar.X, ShieldBar.Y, ShieldSize.X, ShieldSize.Y, FLinearColor::White, bEnemy, true);
         float ShieldFill = 0;
@@ -308,10 +323,11 @@ public:
             ShieldFill = 1;
         if (ShieldFill > 0)
         {
-            const FVector2f ClipTL = Canvas.LocalToAbsolute(FVector2f(ShieldBar.X, ShieldBar.Y));
-            const FVector2f ClipBR = Canvas.LocalToAbsolute(FVector2f(ShieldBar.X + ShieldSize.X * ShieldFill, ShieldBar.Y + ShieldSize.Y));
+            const double FillStart = bEnemy ? ShieldBar.X + ShieldSize.X * (1 - ShieldFill) : ShieldBar.X;
+            const FVector2f ClipTL = Canvas.LocalToAbsolute(FVector2f(FillStart, ShieldBar.Y));
+            const FVector2f ClipBR = Canvas.LocalToAbsolute(FVector2f(FillStart + ShieldSize.X * ShieldFill, ShieldBar.Y + ShieldSize.Y));
             Elements.PushClip(FSlateClippingZone(FSlateRect(ClipTL.X, ClipTL.Y, ClipBR.X, ClipBR.Y)));
-            Image(TEXT("shield-fill"), ShieldBar.X, ShieldBar.Y, ShieldSize.X, ShieldSize.Y, FLinearColor::White, false, true);
+            Image(TEXT("shield-fill"), ShieldBar.X, ShieldBar.Y, ShieldSize.X, ShieldSize.Y, FLinearColor::White, bEnemy, true);
             Elements.PopClip();
         }
         if (Shield.Approximate > 0)
@@ -441,6 +457,17 @@ void UHczsSessionWidget::NativeConstruct()
             Entry.Font = FFontData(Presentation->ChineseFont);
             Composite->DefaultTypeface.Fonts.Add(Entry);
             CompositeFont = Composite;
+        }
+        TitleFontFace = LoadObject<UFontFace>(nullptr,
+            TEXT("/Game/Recovered/Hall/UI/Fonts/FF_fe2867052dcb457b4a2c8a56.FF_fe2867052dcb457b4a2c8a56"));
+        if (TitleFontFace)
+        {
+            TSharedPtr<FCompositeFont> Composite = MakeShared<FCompositeFont>();
+            FTypefaceEntry Entry;
+            Entry.Name = TEXT("Regular");
+            Entry.Font = FFontData(TitleFontFace);
+            Composite->DefaultTypeface.Fonts.Add(Entry);
+            TitleFont = Composite;
         }
         TSharedPtr<FJsonObject> Layout;
         if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Presentation->LayoutJson), Layout) && Layout)
@@ -1051,6 +1078,10 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 const int32 Index = Battle.Hand.IndexOfByPredicate([&Focused](const FHczsHandCard& Card) { return Card.InstanceId == Focused; });
                 if (Index >= 0 && Index < 10) CardDrawOrder.AddUnique(Index);
             }
+            for (auto It = UsableOutlineSince.CreateIterator(); It; ++It)
+                if (!Battle.Hand.ContainsByPredicate([&It](const FHczsHandCard& Card) { return Card.InstanceId == It.Key(); }))
+                    It.RemoveCurrent();
+            const double PaintSeconds = FSlateApplication::Get().GetCurrentTime();
             for (int32 Index : CardDrawOrder)
             {
                 const FHczsHandCard& Card = Battle.Hand[Index];
@@ -1098,27 +1129,66 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 C.bSmoothCard = true;
                 const bool bCardEnabled = !bBusy && CanDragCard(Card.InstanceId);
                 const FLinearColor Tint(1, 1, 1, (bDispatching || bCardEnabled) ? 1.0f : 0.56f);
-                if (bHover) C.Box(-3, -3, 132, 172, FLinearColor(Accent.R, Accent.G, Accent.B, 0.85f));
-                C.Box(2, 2, 122, 162, FLinearColor(0.94f, 0.95f, 0.97f, 1));
+                // FightSmallCard nodes are centred on the 126x166 card at scale 1. Usable,
+                // CharImage_NL_S and Face_NL_S therefore sit at (-28, -34) 182x234 and (2, 4) 120x120.
+                // The local Cost <= Energy check stands in for the server cardInfo.canUse flag.
+                if (Index == 0)
+                {
+                    // CardBaseArea._updateNameLabel seeks the first hand card of each CharPos group;
+                    // NameLabelArea hides it while that card is dispatching. Root sits at card
+                    // (-getCardWidth/2 - 4, getCardHeight/2 + 3) and follows the card rotation.
+                    if (bDispatching || Battle.PlayerName.IsEmpty()) NameLabelSince = -1;
+                    else
+                    {
+                        if (NameLabelSince < 0) NameLabelSince = PaintSeconds;
+                        FSessionPainter Label(CardGeometry, Elements, C.Layer, Brushes, IconDrawAdjustments,
+                            TitleFont ? TitleFont : CompositeFont, &LastPaintedTexts, &LastPaintedSprites);
+                        Label.bSmoothCard = true;
+                        Label.Opacity = FMath::Clamp(float(PaintSeconds - NameLabelSince) / 0.2f, 0.0f, 1.0f);
+                        // getPlayerNameForFightCard stacks CharName vertically; names over five glyphs use 18px.
+                        // The 19x46 two-line Txt sets a 23px line at 22px, and taller text stretches bg.
+                        const int32 Glyphs = Battle.PlayerName.Len();
+                        const float FontPixels = Glyphs > 5 ? 18 : 22;
+                        const float LineHeight = 23 * FontPixels / 22;
+                        const float BgHeight = 100 + FMath::Max(0.0f, Glyphs * LineHeight - 46);
+                        Label.Image(TEXT("card-owner-bg"), -36, -3, 32, BgHeight);
+                        // Mark (-16, -17) at 0.75 holds Power_water_*Area's 150px drop at 0.59.
+                        // The reference battle shows the purple MID mark; CharPos is not sent to this client.
+                        const float Mark = 150 * 0.59f * 0.75f;
+                        Label.Image(TEXT("card-owner-mark-1"), -20 - Mark * 0.5f, 14 - Mark * 0.5f, Mark, Mark);
+                        for (int32 Glyph = 0; Glyph < Glyphs; ++Glyph)
+                            Label.Text(Battle.PlayerName.Mid(Glyph, 1), -36, 33 + Glyph * LineHeight, 30, LineHeight,
+                                FontPixels, FLinearColor::White, true, false);
+                        C.Layer = Label.Layer;
+                    }
+                }
                 const FString CardArt = TEXT("card-") + Card.CardId;
-                const bool bHasArt = C.Image(CardArt, 8, 8, 110, 106, Tint);
+                const bool bHasArt = Brushes.Contains(CardArt);
+                if (bHasArt && !bDispatching && bCardEnabled && SelectedCardInstance != Card.InstanceId)
+                {
+                    const double Since = UsableOutlineSince.FindOrAdd(Card.InstanceId, PaintSeconds);
+                    const float Fade = FMath::Clamp(float(PaintSeconds - Since) / 0.1f, 0.0f, 1.0f);
+                    C.Image(TEXT("card-usable-light"), -28, -34, 182, 234, FLinearColor(1, 1, 1, Fade));
+                }
+                else UsableOutlineSince.Remove(Card.InstanceId);
+                if (bHover) C.Box(-3, -3, 132, 172, FLinearColor(Accent.R, Accent.G, Accent.B, 0.85f));
+                if (!bHasArt) C.Box(2, 2, 122, 162, FLinearColor(0.94f, 0.95f, 0.97f, 1));
                 if (bHasArt)
                 {
+                    C.Image(CardArt, 2, 4, 120, 120, Tint);
                     const FSlateBrush* Frame = Brushes.Find(TEXT("card-frame-attack"));
                     if (Frame)
                     {
                         LastPaintedSprites.Add(TEXT("card-frame-attack"));
-                        const FSlateRenderTransform FrameTransform(FQuat2D(PI * 0.5f), FVector2f(126, 0));
-                        FSessionPainter FramePainter(CardGeometry.MakeChild(FVector2f(166, 126),
+                        const FSlateRenderTransform FrameTransform(FQuat2D(PI * 0.5f), FVector2f(154, -34));
+                        FSessionPainter FramePainter(CardGeometry.MakeChild(FVector2f(234, 182),
                             FSlateLayoutTransform(), FrameTransform, FVector2f::ZeroVector),
                             Elements, C.Layer, Brushes, IconDrawAdjustments, CompositeFont);
-                        FramePainter.SmoothQuad(*Frame, 0, 0, 166, 126, Tint);
+                        FramePainter.SmoothQuad(*Frame, 0, 0, 234, 182, Tint);
                         C.Layer = FramePainter.Layer;
                     }
                 }
-                // Original frame's right-hand white description area becomes the
-                // lower panel after rotation. Keep readable opacity even when unaffordable.
-                C.Box(7, 113, 112, 51, FLinearColor(0.94f, 0.95f, 0.97f, 1));
+                else C.Box(7, 113, 112, 51, FLinearColor(0.94f, 0.95f, 0.97f, 1));
                 C.Image(TEXT("card-cost"), -5, -9, 32, 38, Tint);
                 C.Text(FString::FromInt(Card.Cost), -5, -7, 32, 32, 23, Light, true);
                 // APK FightSmallCard: Name_S center (0,-40), 16px; Descr top

@@ -79,7 +79,11 @@ def tree_nodes(name):
 
 
 def visual_box(nodes, design_origin_y, name):
-    """Unflipped top-left and scaled size. flip_x mirrors pixels inside that box."""
+    """Top-left and scaled size after the node's own flip_x.
+
+    Cocos Widget.setFlippedX negates scaleX, so the box mirrors around the anchor
+    and the pixels mirror inside the resulting box. Flips on ancestors are not applied.
+    """
     mats = []
     for node in nodes:
         stored = dict(node)
@@ -94,6 +98,8 @@ def visual_box(nodes, design_origin_y, name):
     origin = apply(compose(source_to_design, compose(mats[index], quad)), 0, 0)
     width = abs(node['scale'][0]) * node['size'][0]
     height = abs(node['scale'][1]) * node['size'][1]
+    if node.get('flip_x'):
+        origin = (origin[0] + (2 * node['anchor'][0] - 1) * width, origin[1])
     return origin, (width, height), bool(node.get('flip_x')), bool(node.get('visible', True))
 
 
@@ -146,7 +152,7 @@ def main():
     print('Energy slot', [round(v, 2) for v in visual_box(hud, 720, 'Energy')[0]])
     for title, nodes in (('player', player), ('monster', monster)):
         print('-- visual', title)
-        for name in ('bg2', 'bg1', 'icon', 'txt_name', 'hp_bg', 'hp', 'txt_hp', 'icon_shield', 'debug_hp'):
+        for name in ('bg2', 'bg1', 'icon', 'txt_name', 'hp_bg', 'hp', 'txt_hp', 'shield_bg', 'icon_shield', 'debug_hp'):
             origin, size, flip, visible = visual_box(nodes, 0, name)
             print(f'{name:12} visible={visible} flip={flip} origin=({origin[0]:7.2f},{origin[1]:7.2f}) size=({size[0]:6.2f},{size[1]:6.2f})')
     number = load_csb(ROOT / 'analysis/battle-ui/EnergyNumArea.csb')
