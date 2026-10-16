@@ -142,7 +142,7 @@ test('Authoritative win settlement is atomic, concurrent/retry safe, profile sco
   await assert.rejects(()=>original.get(id),{code:'SAVE_CORRUPT'});
   const forgedResult=structuredClone(receipt);
   forgedResult.campaign.completed.push(forgedDone);forgedResult.campaign.revision=2;
-  forgedResult.campaign.challenges[1].status='passed';forgedResult.campaign.challenges[1].successCount=1;
+  forgedResult.campaign.challenges[1].status='passed';forgedResult.campaign.challenges[1].recordPresent=true;forgedResult.campaign.challenges[1].successTime=1;
   forgedResult.settlement=forgedDone;
   const forgedText=JSON.stringify(forgedResult),forgedInput={...input,requestId:'forged',expectedRevision:1,battleId:forgedDone.battleId};
   await requests.insertOne({...requestRow,_id:JSON.stringify([id,'forged']),requestId:'forged',

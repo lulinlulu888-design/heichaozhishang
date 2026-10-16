@@ -1127,7 +1127,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         P.Text(Session->bHasMainlineProgression ? TEXT("本地选关与主线进度") : TEXT("本地战斗预览"), 220, 114, 620, 45, 32, Light);
         const FString ProgressMessage = !Session->bHasMainlineProgression ? TEXT("选择恢复样例或继续本地战斗") :
             !Session->bMainlineStateCurrent ? TEXT("主线进度未同步 · 请读取最新进度") :
-            Session->MainlineProgress.bFirstChallengePassed ? TEXT("序章首战已通过 · 下一挑战 3998 的战斗待恢复") : TEXT("序章首战尚未通关 · 胜利后确认可保存主线进度");
+            Session->MainlineProgress.bFirstChallengePassed ? TEXT("3997 的 successTime 为 1 · 3998 尚无记录") : TEXT("序章尚无 activityDatas 记录 · 不预填 successTime 0");
         P.Text(ProgressMessage, 223, 163, 800, 24, 17, Muted);
         if (Session->bHasMainlineProgression)
             Button(TEXT("refresh-mainline"), TEXT(""), TEXT("读取最新进度"), 878, 120, 177, 35);
@@ -1830,6 +1830,9 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
         {
             auto Row = MakeShared<FJsonObject>(); Row->SetNumberField(TEXT("id"), Challenge.Id);
             Row->SetStringField(TEXT("status"), Challenge.Status); Row->SetBoolField(TEXT("executable"), Challenge.bExecutable);
+            Row->SetBoolField(TEXT("recordPresent"), Challenge.bRecordPresent);
+            if (Challenge.bRecordPresent) Row->SetNumberField(TEXT("successTime"), Challenge.SuccessTime);
+            else Row->SetField(TEXT("successTime"), MakeShared<FJsonValueNull>());
             Challenges.Add(MakeShared<FJsonValueObject>(Row));
         }
         Mainline->SetArrayField(TEXT("challenges"), Challenges); Root->SetObjectField(TEXT("mainline"), Mainline);

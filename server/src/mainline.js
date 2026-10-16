@@ -30,16 +30,28 @@ export async function loadMainline(directory, encounters) {
     initialStateAuthority: 'local-fresh-profile-policy; not recovered original account state' });
 }
 
+/** Source activityDatas gate. A missing key is not successTime 0, and key presence is not the same as success. */
+export function sourceChallengeGate(node, records) {
+  const own = Object.hasOwn(records, String(node.id)) ? records[String(node.id)] : undefined;
+  const recordPresent = own !== undefined;
+  const successTime = recordPresent ? own.successTime : null;
+  const succeeded = recordPresent && typeof successTime === 'number' && successTime > 0;
+  const predecessorsPresent = node.predecessors.every(id => Object.hasOwn(records, String(id)));
+  return { recordPresent, successTime, status: succeeded ? 'passed' : predecessorsPresent ? 'available' : 'locked' };
+}
+
 /** Account-independent source directory + separate local completion state. */
 export function projectMainline(definition, state) {
-  const passed = new Set(state.completed.map(row => row.challengeId));
+  const records = {};
+  for (const row of state.completed) records[String(row.challengeId)] = { successTime: 1 };
+  const activityKey = String(definition.activityId);
   return { profileId: state.profileId, activityId: definition.activityId, contentId: definition.contentId,
     policy: definition.policy, revision: state.revision, updatedAt: state.updatedAt,
     initialStateAuthority: definition.initialStateAuthority,
+    activityDatas: Object.keys(records).length ? { [activityKey]: records } : null,
     challenges: definition.nodes.map(node => ({ id: node.id, name: node.name, subtitle: node.subtitle,
       battleId: node.battleId, predecessors: node.predecessors, hasLoot: node.hasLoot,
-      status: passed.has(node.id) ? 'passed' : node.predecessors.every(id => passed.has(id)) ? 'available' : 'locked',
-      successCount: passed.has(node.id) ? 1 : 0, encounterId: node.encounterId,
+      ...sourceChallengeGate(node, records), encounterId: node.encounterId,
       executable: node.encounterId !== null,
       ...(node.encounterId === null ? { unavailableReason: 'original-boss-mechanics-and-client-not-restored' } : {}) })),
     completed: state.completed };

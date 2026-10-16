@@ -143,6 +143,10 @@ struct HCZS_API FHczsMainlineChallenge
     UPROPERTY(BlueprintReadOnly) FString Status;
     UPROPERTY(BlueprintReadOnly) FString EncounterId;
     UPROPERTY(BlueprintReadOnly) bool bExecutable = false;
+    /** False means activityDatas has no key. That is not a stored successTime of 0. */
+    UPROPERTY(BlueprintReadOnly) bool bRecordPresent = false;
+    /** -1 means the source key is absent. */
+    UPROPERTY(BlueprintReadOnly) int32 SuccessTime = -1;
 };
 
 USTRUCT(BlueprintType)
@@ -155,6 +159,7 @@ struct HCZS_API FHczsMainlineProgress
     UPROPERTY(BlueprintReadOnly) int64 Revision = 0;
     UPROPERTY(BlueprintReadOnly) int64 UpdatedAt = -1;
     UPROPERTY(BlueprintReadOnly) bool bFirstChallengePassed = false;
+    UPROPERTY(BlueprintReadOnly) bool bActivityRecordPresent = false;
     UPROPERTY(BlueprintReadOnly) FString CompletedBattleId;
     UPROPERTY(BlueprintReadOnly) int64 CompletedBattleRevision = 0;
     UPROPERTY(BlueprintReadOnly) int64 CompletedAt = -1;

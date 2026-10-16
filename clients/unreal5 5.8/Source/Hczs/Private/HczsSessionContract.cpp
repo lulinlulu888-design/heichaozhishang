@@ -273,7 +273,7 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
 {
     FHczsMainlineProgress P; int64 Activity = 0; FString Policy, Authority;
     if (!Exact(O, {TEXT("profileId"), TEXT("activityId"), TEXT("contentId"), TEXT("policy"), TEXT("revision"), TEXT("updatedAt"),
-            TEXT("initialStateAuthority"), TEXT("challenges"), TEXT("completed")}) ||
+            TEXT("initialStateAuthority"), TEXT("activityDatas"), TEXT("challenges"), TEXT("completed")}) ||
         !Text(O, TEXT("profileId"), P.ProfileId, 36) || P.ProfileId != ProfileId || !IsUuid(P.ProfileId) ||
         !Text(O, TEXT("contentId"), P.ContentId, 64) || P.ContentId != ContentId || !ContentHash(P.ContentId) ||
         !Integer(O, TEXT("activityId"), Activity, 2, 2) || !Integer(O, TEXT("revision"), P.Revision, 0, 1) ||
@@ -285,9 +285,16 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
     if (P.Revision == 0)
     {
         const auto Updated = O->TryGetField(TEXT("updatedAt")); if (!Updated.IsValid() || !Updated->IsNull()) return false;
+        const auto Records = O->TryGetField(TEXT("activityDatas")); if (!Records.IsValid() || !Records->IsNull()) return false;
     }
     else
     {
+        const auto Records = Child(O, TEXT("activityDatas"));
+        const auto ActivityRecord = Child(Records, TEXT("2"));
+        int64 SuccessTime = 0;
+        if (!Records.IsValid() || Records->Values.Num() != 1 || !ActivityRecord.IsValid() || ActivityRecord->Values.Num() != 1 ||
+            !Integer(Child(ActivityRecord, TEXT("3997")), TEXT("successTime"), SuccessTime, 1, 1)) return false;
+        P.bActivityRecordPresent = true;
         const auto Done = ObjectValue((*Completed)[0]); int64 Challenge = 0;
         if (!Integer(O, TEXT("updatedAt"), P.UpdatedAt) || !Exact(Done, {TEXT("challengeId"), TEXT("battleId"), TEXT("battleRevision"), TEXT("completedAt")}) ||
             !Integer(Done, TEXT("challengeId"), Challenge, 3997, 3997) || !Text(Done, TEXT("battleId"), P.CompletedBattleId, 36) || !IsUuid(P.CompletedBattleId) ||
@@ -300,16 +307,24 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
         int64 Battle = 0, Count = 0; bool bLoot = true;
         const bool bFirst = Index == 0;
         const bool bFields = bFirst ? Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"), TEXT("predecessors"), TEXT("hasLoot"),
-            TEXT("status"), TEXT("successCount"), TEXT("encounterId"), TEXT("executable")}) : Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"),
-            TEXT("predecessors"), TEXT("hasLoot"), TEXT("status"), TEXT("successCount"), TEXT("encounterId"), TEXT("executable"), TEXT("unavailableReason")});
+            TEXT("status"), TEXT("recordPresent"), TEXT("successTime"), TEXT("encounterId"), TEXT("executable")}) : Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"),
+            TEXT("predecessors"), TEXT("hasLoot"), TEXT("status"), TEXT("recordPresent"), TEXT("successTime"), TEXT("encounterId"), TEXT("executable"), TEXT("unavailableReason")});
         if (!bFields || !Counter(C, TEXT("id"), Challenge.Id, bFirst ? 3997 : 3998, bFirst ? 3997 : 3998) ||
             !Text(C, TEXT("name"), Challenge.Name, 128) || !Text(C, TEXT("subtitle"), Challenge.Subtitle, 128) ||
             !Integer(C, TEXT("battleId"), Battle, bFirst ? 5000 : 1703, bFirst ? 5000 : 1703) ||
             !Bool(C, TEXT("hasLoot"), bLoot) || bLoot || !Bool(C, TEXT("executable"), Challenge.bExecutable) || Challenge.bExecutable != bFirst ||
-            !Text(C, TEXT("status"), Challenge.Status, 16) || !Integer(C, TEXT("successCount"), Count, 0, 1)) return false;
+            !Text(C, TEXT("status"), Challenge.Status, 16) || !Bool(C, TEXT("recordPresent"), Challenge.bRecordPresent)) return false;
+        const auto Success = C->TryGetField(TEXT("successTime"));
+        if (Challenge.bRecordPresent)
+        {
+            if (!Integer(C, TEXT("successTime"), Count, 1, 1)) return false;
+            Challenge.SuccessTime = static_cast<int32>(Count);
+        }
+        else if (!Success.IsValid() || !Success->IsNull() || Count != 0) return false;
         const FString ExpectedStatus = bFirst ? (P.bFirstChallengePassed ? TEXT("passed") : TEXT("available")) :
             (P.bFirstChallengePassed ? TEXT("available") : TEXT("locked"));
-        if (Challenge.Status != ExpectedStatus || Count != (bFirst && P.bFirstChallengePassed ? 1 : 0)) return false;
+        if (Challenge.Status != ExpectedStatus || Challenge.bRecordPresent != (bFirst && P.bFirstChallengePassed) ||
+            Challenge.SuccessTime != (bFirst && P.bFirstChallengePassed ? 1 : -1)) return false;
         const auto* Predecessors = Array(C, TEXT("predecessors"), 1);
         if (!Predecessors || Predecessors->Num() != (bFirst ? 0 : 1)) return false;
         if (bFirst)

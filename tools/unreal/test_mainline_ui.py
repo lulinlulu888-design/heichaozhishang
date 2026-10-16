@@ -85,10 +85,16 @@ def validate_campaign(campaign, profile_id, content_id, passed, battle_id=None):
     first, second = nodes
     check(first.get('id') == 3997 and first.get('battleId') == 5000 and first.get('encounterId') == 'tutorial-5000'
           and first.get('executable') is True and first.get('hasLoot') is False
-          and first.get('status') == ('passed' if passed else 'available') and first.get('successCount') == int(passed), 'First challenge projection differs')
+          and first.get('status') == ('passed' if passed else 'available')
+          and first.get('recordPresent') is passed and first.get('successTime') == (1 if passed else None)
+          and 'successCount' not in first, 'First challenge projection differs')
+    records = campaign.get('activityDatas')
+    check(records == ({'2': {'3997': {'successTime': 1}}} if passed else None), 'activityDatas invented a zero-success record')
     check(second.get('id') == 3998 and second.get('battleId') == 1703 and second.get('encounterId') is None
           and second.get('executable') is False and second.get('hasLoot') is False
-          and second.get('status') == ('available' if passed else 'locked') and second.get('successCount') == 0,
+          and second.get('status') == ('available' if passed else 'locked')
+          and second.get('recordPresent') is False and second.get('successTime') is None
+          and 'successCount' not in second,
           'Unrestored boss was opened or next challenge status differs')
     if passed:
         done = campaign['completed'][0]

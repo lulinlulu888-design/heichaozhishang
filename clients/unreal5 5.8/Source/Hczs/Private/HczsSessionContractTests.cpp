@@ -76,18 +76,22 @@ namespace
           "contentId":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "policy":"local-prologue-progress-v1","revision":0,"updatedAt":null,
           "initialStateAuthority":"local-fresh-profile-policy; not recovered original account state",
+          "activityDatas":null,
           "challenges":[
             {"id":3997,"name":"终局","subtitle":"序章","battleId":5000,"predecessors":[],"hasLoot":false,
-             "status":"available","successCount":0,"encounterId":"tutorial-5000","executable":true},
+             "status":"available","recordPresent":false,"successTime":null,"encounterId":"tutorial-5000","executable":true},
             {"id":3998,"name":"终局","subtitle":"序章","battleId":1703,"predecessors":[3997],"hasLoot":false,
-             "status":"locked","successCount":0,"encounterId":null,"executable":false,
+             "status":"locked","recordPresent":false,"successTime":null,"encounterId":null,"executable":false,
              "unavailableReason":"original-boss-mechanics-and-client-not-restored"}],"completed":[]
         })JSON"));
         if (bPassed)
         {
             C->SetNumberField(TEXT("revision"), 1); C->SetNumberField(TEXT("updatedAt"), 200);
             auto First = C->GetArrayField(TEXT("challenges"))[0]->AsObject();
-            First->SetStringField(TEXT("status"), TEXT("passed")); First->SetNumberField(TEXT("successCount"), 1);
+            First->SetStringField(TEXT("status"), TEXT("passed")); First->SetBoolField(TEXT("recordPresent"), true); First->SetNumberField(TEXT("successTime"), 1);
+            auto Records = MakeShared<FJsonObject>(); auto Activity = MakeShared<FJsonObject>(); auto Row = MakeShared<FJsonObject>();
+            Row->SetNumberField(TEXT("successTime"), 1); Activity->SetObjectField(TEXT("3997"), Row); Records->SetObjectField(TEXT("2"), Activity);
+            C->SetObjectField(TEXT("activityDatas"), Records);
             C->GetArrayField(TEXT("challenges"))[1]->AsObject()->SetStringField(TEXT("status"), TEXT("available"));
             auto Done = Read(TEXT(R"JSON({"challengeId":3997,"battleId":"22222222-2222-2222-2222-222222222222","battleRevision":9,"completedAt":200})JSON"));
             C->SetArrayField(TEXT("completed"), {MakeShared<FJsonValueObject>(Done)});
@@ -130,6 +134,8 @@ bool FHczsSessionMainlineContractTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Completion cannot postdate the authoritative state"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
     Bad = MainlineFixture(); Bad->SetStringField(TEXT("policy"), TEXT("original-account-restored"));
     TestFalse(TEXT("Local progress does not claim recovered original account state"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
+    Bad = MainlineFixture(); Bad->GetArrayField(TEXT("challenges"))[0]->AsObject()->SetNumberField(TEXT("successTime"), 0);
+    TestFalse(TEXT("A missing challenge is not stored as successTime zero"), ParseMainline(Bad, ProfileId, MainlineId, Rejected));
     TestTrue(TEXT("Latest progress advances monotonically"), CanApplyMainlineProgress(Fresh, Passed, 1));
     TestFalse(TEXT("Stale GET cannot undo confirmation"), CanApplyMainlineProgress(Passed, Fresh, 1));
     auto Changed = Passed; Changed.ContentId = FString::ChrN(64, 'f');

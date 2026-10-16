@@ -47,8 +47,9 @@ class MainlineUiGuardTests(unittest.TestCase):
     def test_completed_progress_cannot_open_boss_or_substitute_city(self):
         campaign = dict(profileId='profile', contentId='content', activityId=2, policy='local-prologue-progress-v1', revision=1,
                         completed=[dict(challengeId=3997, battleId='won-battle', battleRevision=9)],
-                        challenges=[dict(id=3997, battleId=5000, encounterId='tutorial-5000', executable=True, hasLoot=False, status='passed', successCount=1),
-                                    dict(id=3998, battleId=1703, encounterId=None, executable=False, hasLoot=False, status='available', successCount=0)])
+                        activityDatas={'2': {'3997': {'successTime': 1}}},
+                        challenges=[dict(id=3997, battleId=5000, encounterId='tutorial-5000', executable=True, hasLoot=False, status='passed', recordPresent=True, successTime=1),
+                                    dict(id=3998, battleId=1703, encounterId=None, executable=False, hasLoot=False, status='available', recordPresent=False, successTime=None)])
         UI.validate_campaign(campaign, 'profile', 'content', True, 'won-battle')
         for index, key, value in [(0, 'encounterId', 'city-preview-10405'), (1, 'executable', True), (1, 'status', 'locked'), (0, 'hasLoot', True)]:
             modified = copy.deepcopy(campaign)
