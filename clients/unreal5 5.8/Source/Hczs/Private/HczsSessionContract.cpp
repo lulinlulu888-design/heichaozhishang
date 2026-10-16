@@ -15,6 +15,14 @@ namespace
         for (const TCHAR* Field : Fields) if (!O->HasField(Field)) return false;
         return true;
     }
+    // FJsonValueString::TryGetBool accepts "true"; contract flags must be JSON booleans.
+    bool Bool(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, bool& Out)
+    {
+        const TSharedPtr<FJsonValue> Value = O.IsValid() ? O->TryGetField(Field) : nullptr;
+        if (!Value.IsValid() || Value->Type != EJson::Boolean) return false;
+        Out = Value->AsBool();
+        return true;
+    }
     bool Text(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, FString& Out, int32 Limit, bool bEmpty = false)
     {
         if (!O.IsValid() || !O->TryGetStringField(Field, Out) || Out.Len() > Limit || (!bEmpty && Out.IsEmpty())) return false;
@@ -238,12 +246,12 @@ bool ParseBootstrap(const TSharedPtr<FJsonObject>& O, TArray<FHczsLocalProfile>&
     if (!Text(O, TEXT("service"), Service, 40) || Service != TEXT("hczs-rebuild") ||
         !Integer(O, TEXT("apiVersion"), Version, 1, 1) || !Integer(O, TEXT("saveSchemaVersion"), SaveVersion, 1, 1) ||
         !Text(O, TEXT("storage"), Storage, 32) || (Storage != TEXT("mongodb") && Storage != TEXT("sqlite")) ||
-        !O->TryGetBoolField(TEXT("gameplayReady"), bReady) || !ParseProfiles(O, Out)) return false;
+        !Bool(O, TEXT("gameplayReady"), bReady) || !ParseProfiles(O, Out)) return false;
     const auto* Capabilities = Array(O, TEXT("capabilities"), 64); TArray<FString> Names;
     if (!StringIds(Capabilities, Names) || !Names.Contains(TEXT("local-profiles")) || !Names.Contains(TEXT("encounter-selection"))) return false;
     auto Settings = Child(Child(O, TEXT("operational")), TEXT("settings"));
-    if (!Settings.IsValid() || !Settings->TryGetBoolField(TEXT("allowNewProfiles"), bAllowProfiles) ||
-        !Settings->TryGetBoolField(TEXT("allowNewBattles"), bAllowBattles)) return false;
+    if (!Settings.IsValid() || !Bool(Settings, TEXT("allowNewProfiles"), bAllowProfiles) ||
+        !Bool(Settings, TEXT("allowNewBattles"), bAllowBattles)) return false;
     const auto Endpoints = Child(O, TEXT("endpoints")); FString ProfilesEndpoint, EncountersEndpoint, BattlesEndpoint;
     return Text(Endpoints, TEXT("profiles"), ProfilesEndpoint, 100) && ProfilesEndpoint == TEXT("/api/rebuild/v1/profiles") &&
         Text(Endpoints, TEXT("encounters"), EncountersEndpoint, 100) && EncountersEndpoint == TEXT("/api/rebuild/v1/encounters") &&
@@ -297,7 +305,7 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
         if (!bFields || !Counter(C, TEXT("id"), Challenge.Id, bFirst ? 3997 : 3998, bFirst ? 3997 : 3998) ||
             !Text(C, TEXT("name"), Challenge.Name, 128) || !Text(C, TEXT("subtitle"), Challenge.Subtitle, 128) ||
             !Integer(C, TEXT("battleId"), Battle, bFirst ? 5000 : 1703, bFirst ? 5000 : 1703) ||
-            !C->TryGetBoolField(TEXT("hasLoot"), bLoot) || bLoot || !C->TryGetBoolField(TEXT("executable"), Challenge.bExecutable) || Challenge.bExecutable != bFirst ||
+            !Bool(C, TEXT("hasLoot"), bLoot) || bLoot || !Bool(C, TEXT("executable"), Challenge.bExecutable) || Challenge.bExecutable != bFirst ||
             !Text(C, TEXT("status"), Challenge.Status, 16) || !Integer(C, TEXT("successCount"), Count, 0, 1)) return false;
         const FString ExpectedStatus = bFirst ? (P.bFirstChallengePassed ? TEXT("passed") : TEXT("available")) :
             (P.bFirstChallengePassed ? TEXT("available") : TEXT("locked"));
@@ -322,7 +330,7 @@ bool ParseMainlineReceipt(const TSharedPtr<FJsonObject>& O, const FString& Profi
     const FString& BattleId, int64 BattleRevision, int64 ExpectedRevision, FHczsMainlineProgress& Out)
 {
     bool bReplayed = false; FHczsMainlineProgress P;
-    if (!Exact(O, {TEXT("campaign"), TEXT("settlement"), TEXT("rewards"), TEXT("replayed")}) || !O->TryGetBoolField(TEXT("replayed"), bReplayed) ||
+    if (!Exact(O, {TEXT("campaign"), TEXT("settlement"), TEXT("rewards"), TEXT("replayed")}) || !Bool(O, TEXT("replayed"), bReplayed) ||
         !Array(O, TEXT("rewards"), 0) || !ParseMainline(Child(O, TEXT("campaign")), ProfileId, ContentId, P) ||
         P.Revision != ExpectedRevision + 1 || !P.bFirstChallengePassed || P.CompletedBattleId != BattleId || P.CompletedBattleRevision != BattleRevision) return false;
     const auto* Completed = Array(Child(O, TEXT("campaign")), TEXT("completed"), 1);
@@ -359,8 +367,8 @@ bool ParseEncounters(const TSharedPtr<FJsonObject>& O, TArray<FHczsEncounterSumm
 {
     int64 Schema = 0; bool bUnlock = false, bRewards = false; FString Policy, Default;
     if (!Integer(O, TEXT("schemaVersion"), Schema, 1, 1) || !Text(O, TEXT("selectionPolicy"), Policy, 80) ||
-        Policy != TEXT("explicit-local-selection") || !O->TryGetBoolField(TEXT("originalUnlockBehaviorVerified"), bUnlock) ||
-        !O->TryGetBoolField(TEXT("rewardsImplemented"), bRewards) || !Text(O, TEXT("defaultEncounterId"), Default, 80) || !IsId(Default, 80)) return false;
+        Policy != TEXT("explicit-local-selection") || !Bool(O, TEXT("originalUnlockBehaviorVerified"), bUnlock) ||
+        !Bool(O, TEXT("rewardsImplemented"), bRewards) || !Text(O, TEXT("defaultEncounterId"), Default, 80) || !IsId(Default, 80)) return false;
     const auto* Values = Array(O, TEXT("encounters"), 1000); if (!Values) return false;
     TArray<FHczsEncounterSummary> Parsed; TSet<FString> Ids;
     for (const auto& V : *Values)
@@ -428,7 +436,7 @@ bool ParseScenario(const TSharedPtr<FJsonObject>& O, FScenario& Out)
             if (!Text(C, TEXT("ownerId"), Owner, 128) || Owner != S.UltimateOwnerId ||
                 !Counter(C, TEXT("cardType"), Type, 0, 7) || Type == 4 || Type == 5 || (Type == 7) != bUltimate ||
                 !Counter(C, TEXT("specialPoints"), Points, 0, 1) || Points != (bUltimate ? 0 : 1) ||
-                !C->TryGetBoolField(TEXT("removeOnLeaveHand"), bRemove) || bRemove != bUltimate ||
+                !Bool(C, TEXT("removeOnLeaveHand"), bRemove) || bRemove != bUltimate ||
                 (bUltimate && Card.Cost != 0)) return false;
         }
         S.Cards.Add(Key, MoveTemp(Card));
@@ -586,7 +594,7 @@ bool ParseReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, co
 {
     if (VisualReceipt) *VisualReceipt = FHczsBattleVisualReceipt();
     bool bReplayed = false;
-    if (!Exact(O, {TEXT("battle"), TEXT("events"), TEXT("replayed")}) || !O->TryGetBoolField(TEXT("replayed"), bReplayed) ||
+    if (!Exact(O, {TEXT("battle"), TEXT("events"), TEXT("replayed")}) || !Bool(O, TEXT("replayed"), bReplayed) ||
         !ParseBattle(Child(O, TEXT("battle")), ProfileId, BattleId, Out) || Out.Revision != ExpectedRevision + 1 ||
         (!EncounterId.IsEmpty() && Out.EncounterId != EncounterId)) return false;
     const auto* Values = Array(O, TEXT("events"), 100000); if (!Values || Values->IsEmpty()) return false;
@@ -647,7 +655,7 @@ bool ParseReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, co
                 {
                     bool bGenerated = false;
                     if (!Exact(E, {TEXT("type"), TEXT("instanceId"), TEXT("generated")}) ||
-                        !E->TryGetBoolField(TEXT("generated"), bGenerated) || !bGenerated || !bUltimate) return false;
+                        !Bool(E, TEXT("generated"), bGenerated) || !bGenerated || !bUltimate) return false;
                 }
                 else if (!Exact(E, {TEXT("type"), TEXT("instanceId")}) || bUltimate) return false;
             }

@@ -2,7 +2,10 @@
 #include "HczsGameInstance.h"
 #include "HczsSessionWidget.h"
 #include "HczsBattlePresentation.h"
+#include "HczsBattleCamera.h"
 #include "Camera/CameraActor.h"
+#include "Engine/GameViewportClient.h"
+#include "UnrealClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -151,3 +154,35 @@ void AHczsSessionMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 AHczsBattleMode::AHczsBattleMode() { bBattleScene = true; }
 FName AHczsBattleMode::SceneCameraTag() const { return TEXT("HCZSBattleCamera"); }
+
+void AHczsBattleMode::BeginPlay()
+{
+    Super::BeginPlay();
+    ViewportResizedHandle = FViewport::ViewportResizedEvent.AddUObject(this, &AHczsBattleMode::ViewportResized);
+    ApplySourceProjection();
+    GetWorldTimerManager().SetTimerForNextTick(this, &AHczsBattleMode::ApplySourceProjection);
+}
+
+void AHczsBattleMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    FViewport::ViewportResizedEvent.Remove(ViewportResizedHandle);
+    Super::EndPlay(EndPlayReason);
+}
+
+void AHczsBattleMode::ViewportResized(FViewport* Viewport, uint32)
+{
+    const UGameViewportClient* Client = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+    if (Client && Viewport == Client->Viewport) ApplySourceProjection();
+}
+
+void AHczsBattleMode::ApplySourceProjection()
+{
+    const UGameViewportClient* Client = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+    if (!Client || !Client->Viewport) return;
+    for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
+        if (It->ActorHasTag(SceneCameraTag()))
+        {
+            HczsBattleCamera::Apply(*It, Client->Viewport->GetSizeXY());
+            break;
+        }
+}

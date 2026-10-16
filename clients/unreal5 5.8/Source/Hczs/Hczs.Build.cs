@@ -7,5 +7,6 @@ public class Hczs : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "InputCore", "HTTP", "UMG", "SlateCore", "MediaAssets" });
         PrivateDependencyModuleNames.AddRange(new[] { "Json", "Slate", "RHI", "MediaUtils", "AudioMixer" });
+        if (Target.bBuildEditor) PrivateDependencyModuleNames.Add("UnrealEd");
     }
 }

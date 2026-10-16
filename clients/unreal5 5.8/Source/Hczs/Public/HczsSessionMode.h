@@ -41,6 +41,12 @@ class HCZS_API AHczsBattleMode : public AHczsSessionMode
     GENERATED_BODY()
 public:
     AHczsBattleMode();
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 protected:
     virtual FName SceneCameraTag() const override;
+private:
+    void ApplySourceProjection();
+    void ViewportResized(FViewport* Viewport, uint32 Unused);
+    FDelegateHandle ViewportResizedHandle;
 };

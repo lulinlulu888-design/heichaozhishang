@@ -22,6 +22,22 @@ def verified(filename, digest):
     return path
 
 
+def apply_card_sampling(row, obj):
+    """Hand cards are drawn at ~0.3-0.7x their source size and rotated; without
+    mips Slate's bilinear sampling skips texels and the edges stair-step."""
+    if not row['id'].startswith('card-'):
+        return False
+    changed = False
+    for key, value in [('mip_gen_settings', unreal.TextureMipGenSettings.TMGS_SIMPLE_AVERAGE),
+                       ('never_stream', True)]:
+        if obj.get_editor_property(key) != value:
+            obj.set_editor_property(key, value)
+            changed = True
+    if changed and not unreal.EditorAssetLibrary.save_loaded_asset(obj, only_if_is_dirty=False):
+        raise RuntimeError('Cannot save card texture sampling policy')
+    return changed
+
+
 def import_one(row, kind):
     field, sha_field = ('png', 'pngSha256') if kind == 'Texture2D' else ('ttf', 'sha256')
     filename = verified(row[field], row[sha_field])
@@ -32,6 +48,8 @@ def import_one(row, kind):
     if old:
         if old.get_class().get_name() != kind or unreal.EditorAssetLibrary.get_metadata_tag(old, 'HczsSourceSHA256') != row[sha_field]:
             raise RuntimeError('Existing asset retained: source differs at ' + package)
+        if kind == 'Texture2D':
+            apply_card_sampling(row, old)
         return old
     task = unreal.AssetImportTask()
     for key, value in [('filename', str(filename)), ('destination_path', folder),
@@ -56,6 +74,7 @@ def import_one(row, kind):
             obj.set_editor_property(key, value)
         if [obj.blueprint_get_size_x(), obj.blueprint_get_size_y()] != row['size']:
             raise RuntimeError('Source sprite dimensions changed in import')
+        apply_card_sampling(row, obj)
     unreal.EditorAssetLibrary.set_metadata_tag(obj, 'HczsSourceSHA256', row[sha_field])
     if not unreal.EditorAssetLibrary.save_loaded_asset(obj, only_if_is_dirty=False):
         raise RuntimeError('Cannot save imported battle presentation asset')

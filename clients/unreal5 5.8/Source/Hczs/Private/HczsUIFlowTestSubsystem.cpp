@@ -27,6 +27,8 @@
 #include "Animation/AnimSequence.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "HczsBattleCamera.h"
 #include "Widgets/SWindow.h"
 #include "UnrealClient.h"
 #include "RHIResources.h"
@@ -444,6 +446,22 @@ TSharedPtr<FJsonObject> UHczsUIFlowTestSubsystem::SceneProjection() const
     AActor* Target = Controller ? Controller->GetViewTarget() : nullptr;
     Scene->SetStringField(TEXT("cameraTag"), TEXT("HCZSBattleCamera"));
     Scene->SetBoolField(TEXT("cameraReady"), Target && Target->ActorHasTag(TEXT("HCZSBattleCamera")));
+    if (const auto* CameraActor = Cast<ACameraActor>(Target))
+        if (const UCameraComponent* Camera = CameraActor->GetCameraComponent())
+        {
+            Scene->SetNumberField(TEXT("cameraHorizontalFov"), Camera->FieldOfView);
+            Scene->SetNumberField(TEXT("cameraAspectRatio"), Camera->AspectRatio);
+            Scene->SetBoolField(TEXT("cameraConstrainAspect"), Camera->bConstrainAspectRatio);
+            if (const UGameViewportClient* Client = World->GetGameViewport())
+                if (Client->Viewport)
+                {
+                    const FIntPoint Size = Client->Viewport->GetSizeXY();
+                    Scene->SetNumberField(TEXT("viewportWidth"), Size.X);
+                    Scene->SetNumberField(TEXT("viewportHeight"), Size.Y);
+                    if (Size.Y > 0)
+                        Scene->SetNumberField(TEXT("sourceVerticalFov"), HczsBattleCamera::SourceVerticalFov(double(Size.X) / Size.Y));
+                }
+        }
     FVector2D PlayerPoint = FVector2D::ZeroVector, EnemyPoint = FVector2D::ZeroVector;
     bool bPlayerProjected = false, bEnemyProjected = false;
     for (TActorIterator<AActor> It(World); It; ++It)

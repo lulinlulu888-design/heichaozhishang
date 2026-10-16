@@ -24,6 +24,19 @@ ROOT = TOOLS.parents[1]
 BATTLE = 'L_TutorialSource2133'
 HALL = 'L_ElsaHallFxPreview'
 SHOW = '/Game/Recovered/Battle/Entrance/elsa_entrance.elsa_entrance'
+# GameStartup.initGlobals aspect classes -> ResolutionConst.BATTLE_CAMERA_FOV.
+SOURCE_ASPECT_CLASSES = ((2.58333, 30.0), (2.1653, 35.65), (1.777, 35.985), (1.333, 46.75))
+
+
+def source_horizontal_fov(aspect):
+    """CameraBattle.__init__ vertical FOV rule, converted for UE's horizontal FOV."""
+    if 1.77777 - aspect > .01 and aspect - 1.33333 > .01:
+        vertical = 35.985 + (46.75 - 35.985) / .44444 * (1.77777 - aspect)
+    elif aspect < 1.33333 and abs(1.33333 - aspect) > abs(aspect - 1):
+        vertical = 55.0
+    else:
+        vertical = min(SOURCE_ASPECT_CLASSES, key=lambda row: abs(row[0] - aspect))[1]
+    return math.degrees(2 * math.atan(math.tan(math.radians(vertical) / 2) * aspect))
 
 
 def run():
@@ -129,7 +142,9 @@ def run():
                 actorHidden=bool(player_actor.get_editor_property('hidden')), clip=clip,
                 actualClipPosition=float(mesh.get_position()), bones=bones, camera=dict(path=camera.get_path_name(),
                     location=[camera.get_actor_location().x,camera.get_actor_location().y,camera.get_actor_location().z],
-                    fov=float(cc.get_editor_property('field_of_view')), aspect=float(cc.get_editor_property('aspect_ratio'))))
+                    fov=float(cc.get_editor_property('field_of_view')), aspect=float(cc.get_editor_property('aspect_ratio')),
+                    constrainAspect=bool(cc.get_editor_property('constrain_aspect_ratio')),
+                    viewport=[float(v) for v in (u.WidgetLayoutLibrary.get_viewport_size(world).x, u.WidgetLayoutLibrary.get_viewport_size(world).y)]))
             guard.check(sample['revision']==1 and sample['actionIndex']==0, 'Entrance unexpectedly changed authoritative state')
             if sample['playing']:
                 guard.check(sample['locked'] and not sample['canSubmit'] and sample['busy'], 'Playing entrance did not lock intents')
@@ -259,6 +274,16 @@ def run():
                     guard.check(state.get('dealShot') and state['dealShot'].exists() and state.get('dropShot') and state['dropShot'].exists(), 'Native card flight screenshots missing')
                     report['dealScreenshots'] = [str(state['dealShot']), str(state['dropShot'])]
                     passed('source-first-deal-stagger-centre-bezier-tilt-and-input-lock')
+                    view=sample['camera']; width,height=view['viewport']
+                    guard.check(width>0 and height>0, 'Battle viewport size unavailable')
+                    requested=report.get('requestedWindow')
+                    # Floating PIE windows can add a few pixels of client area for borders.
+                    guard.check(not requested or (abs(width-requested[0])<=4 and abs(height-requested[1])<=4), 'PIE viewport differs from requested window')
+                    expected=source_horizontal_fov(width/height)
+                    guard.check(not view['constrainAspect'] and abs(view['aspect']-width/height)<.001 and abs(view['fov']-expected)<.01,
+                                'Battle camera FOV differs from source CameraBattle rule')
+                    report['sourceCamera']=dict(viewport=view['viewport'],aspect=width/height,horizontalFov=view['fov'],expectedHorizontalFov=expected)
+                    passed('source-camera-battle-fov-by-aspect')
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
                     capture('complete-source2133'); stage('capture-first')
                 else: guard.check(sample.get('playing'), 'Fresh GI creation did not start the source entrance')
@@ -310,7 +335,14 @@ def run():
         except Exception: finish(traceback.format_exc())
         finally: state['busy']=False
 
-    save(); u.get_editor_subsystem(u.LevelEditorSubsystem).editor_request_begin_play()
+    window = guard.argument(command, 'HczsPIEWindow')
+    if window:
+        size = re.fullmatch(r'(\d{3,4})x(\d{3,4})', window)
+        guard.check(size, 'HczsPIEWindow must be <width>x<height>')
+        report['requestedWindow'] = [int(size[1]), int(size[2])]
+        save(); guard.check(u.HczsDevelopmentLibrary.request_floating_play_session(*report['requestedWindow']), 'Floating PIE request refused')
+    else:
+        save(); u.get_editor_subsystem(u.LevelEditorSubsystem).editor_request_begin_play()
     handle=u.register_slate_post_tick_callback(tick)
     u.log('HCZS fresh entrance report: '+str(output))
 
