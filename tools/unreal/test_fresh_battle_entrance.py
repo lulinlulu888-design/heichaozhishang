@@ -145,9 +145,9 @@ def run():
                     fov=float(cc.get_editor_property('field_of_view')), aspect=float(cc.get_editor_property('aspect_ratio')),
                     constrainAspect=bool(cc.get_editor_property('constrain_aspect_ratio')),
                     viewport=[float(v) for v in (u.WidgetLayoutLibrary.get_viewport_size(world).x, u.WidgetLayoutLibrary.get_viewport_size(world).y)]))
-            if report.get('roundStartDeal'):
+            if report.get('roundStartDeal') or report.get('dragRetest'):
                 guard.check(sample['actionIndex'] in (0, 1) and sample['revision'] == sample['actionIndex'] + 1,
-                            'Round-start deal changed more than the one end-turn action')
+                            'Acceptance changed more than one authoritative action')
             else:
                 guard.check(sample['revision']==1 and sample['actionIndex']==0, 'Entrance unexpectedly changed authoritative state')
             if sample['playing']:
@@ -313,6 +313,21 @@ def run():
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
                     if report.get('roundStartDeal'):
                         game.end_turn(); stage('round-deal')
+                    elif report.get('dragRetest'):
+                        state['steps'] = [
+                            ('mouse', 'tap', 'tap', 'below-drag-threshold'),
+                            ('mouse', 'player', 'rejected', 'invalid-target'),
+                            ('mouse', 'outside', 'rejected', 'outside'),
+                            ('mouse', 'cancel', 'cancelled', 'capture-lost'),
+                            ('mouse', 'focus', 'cancelled', 'focus-lost'),
+                            ('mouse', 'enemy', 'submitted', ''),
+                            ('touch', 'tap', 'tap', 'below-drag-threshold'),
+                            ('touch', 'player', 'rejected', 'invalid-target'),
+                            ('touch', 'cancel', 'cancelled', 'capture-lost'),
+                        ]
+                        state['step'] = 0
+                        state['dragPhase'] = 'act'
+                        stage('drag-matrix')
                     else:
                         capture('complete-source2133'); stage('capture-first')
                 else: guard.check(sample.get('playing'), 'Fresh GI creation did not start the source entrance')
@@ -355,6 +370,73 @@ def run():
                 guard.check(drawn and drawn <= set(battle['state']['piles']['hand']),
                             'Animated instances are not the authoritative new hand')
                 passed('round-start-draw-uses-source-flight-and-ui-cues')
+                finish()
+            elif current=='drag-matrix':
+                widget = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)[0]
+                ui = json.loads(widget.development_describe_ui())
+                gesture = ui.get('lastGesture') or {}
+                if state['dragPhase'] == 'check':
+                    kind, target, outcome, reason = state['steps'][state['step']]
+                    guard.check(not gesture.get('active') and gesture.get('outcome') == outcome and gesture.get('reason') == reason
+                                and gesture.get('isTouch') == (kind == 'touch'),
+                                'Gesture %s/%s ended as %s/%s' % (kind, target, gesture.get('outcome'), gesture.get('reason')))
+                    guard.check(sample['actionIndex'] == state.get('actions', 0), 'Rejected gesture changed authoritative state')
+                    report.setdefault('drag', []).append(dict(input=kind, target=target, outcome=gesture.get('outcome'), reason=gesture.get('reason')))
+                    state['step'] += 1
+                    state['dragPhase'] = 'act'
+                    if state['step'] >= len(state['steps']):
+                        stage('drag-hall')
+                    return
+                kind, target, outcome, reason = state['steps'][state['step']]
+                touch = kind == 'touch'
+                enabled = [c['value'] for c in ui['controls'] if c['action'] == 'play-card' and c['enabled']]
+                guard.check(enabled, 'No draggable card for %s %s' % (kind, target))
+                card = enabled[0]
+                move_target = 'enemy' if target in ('cancel', 'focus', 'enemy') else target
+                guard.check(widget.development_drag_card(card, move_target, touch, 'begin'), 'Pointer down failed for %s %s' % (kind, target))
+                if target != 'tap':
+                    guard.check(widget.development_drag_card(card, move_target, touch, 'move'), 'Pointer move failed for %s %s' % (kind, target))
+                if target == 'focus':
+                    guard.check(widget.development_drag_card(card, 'enemy', touch, 'focus-lost'), 'Real focus loss did not cancel the drag')
+                else:
+                    release_target = 'cancel' if target == 'cancel' else move_target
+                    guard.check(widget.development_drag_card(card, release_target, touch, 'release'), 'Pointer up failed for %s %s' % (kind, target))
+                if outcome == 'submitted':
+                    other = next((value for value in enabled if value != card), None)
+                    guard.check(other and not widget.development_drag_card(other, 'enemy', touch, 'begin'),
+                                'A second card was accepted while the play request was in flight')
+                    state['actions'] = 1
+                    state['playedCard'] = card
+                    report.setdefault('drag', []).append(dict(input=kind, target=target, outcome='submitted', duplicateBlocked=True))
+                    state['step'] += 1
+                    stage('drag-confirm')
+                else:
+                    state['dragPhase'] = 'check'
+            elif current=='drag-confirm' and sample.get('actionIndex') == 1 and sample.get('canSubmit') and not sample.get('busy'):
+                guard.check(sample['revision'] == 2, 'Play did not advance exactly one authoritative revision')
+                passed('mouse-play-touch-paths-and-duplicate-blocked')
+                stage('drag-matrix')
+            elif current=='drag-hall':
+                widget = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)[0]
+                ui = json.loads(widget.development_describe_ui())
+                enabled = [c['value'] for c in ui['controls'] if c['action'] == 'play-card' and c['enabled']]
+                guard.check(enabled, 'No card left for the return-to-hall cancel')
+                guard.check(widget.development_drag_card(enabled[0], 'enemy', False, 'begin'), 'Pointer down failed before returning to hall')
+                game.return_to_hall()
+                ui = json.loads(widget.development_describe_ui())
+                gesture = ui.get('lastGesture') or {}
+                guard.check(not gesture.get('active') and gesture.get('outcome') == 'cancelled' and gesture.get('reason') == 'state-refreshed',
+                            'Returning to hall left the drag active or submitted it')
+                state['read'] = pool.submit(read_battle, sample['battleId'])
+                stage('drag-hall-read')
+            elif current=='drag-hall-read' and sample['map'] == HALL and state['read'].done():
+                battle = state['read'].result()
+                guard.check(battle['state']['actionIndex'] == 1 and battle['revision'] == 2, 'Hall return changed the saved battle')
+                rows = [json.loads(line) for line in Path(manifest['tracePath']).read_text('utf8').splitlines() if line.strip()]
+                plays = [r for r in rows if r.get('phase') == 'ue-request' and r.get('method') == 'POST' and str(r.get('path', '')).endswith('/actions')]
+                guard.check(len(plays) == 1 and plays[0].get('status') in (200, 201), 'Play was missing or sent more than once')
+                report['dragWire'] = dict(actions=len(plays), status=plays[0].get('status'))
+                passed('drag-retest-play-tap-invalid-cancel-focus-duplicate-and-hall')
                 finish()
             elif current=='capture-first' and shot_done():
                 widget = u.WidgetLibrary.get_all_widgets_of_class(world,u.load_class(None,'/Script/Hczs.HczsSessionWidget'),True)[0]
@@ -405,6 +487,7 @@ def run():
         finally: state['busy']=False
 
     report['roundStartDeal'] = guard.flag(command, 'HczsRoundStartDeal')
+    report['dragRetest'] = guard.flag(command, 'HczsDragRetest')
     window = guard.argument(command, 'HczsPIEWindow')
     if window:
         size = re.fullmatch(r'(\d{3,4})x(\d{3,4})', window)

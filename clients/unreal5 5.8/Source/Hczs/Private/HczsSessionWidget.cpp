@@ -1662,6 +1662,12 @@ bool UHczsSessionWidget::DevelopmentDragCard(const FString& InstanceId, const FS
         DevelopmentDragAbsolute = Next;
         return CardGestureEvents.Num() > Before;
     }
+    if (Phase == TEXT("focus-lost"))
+    {
+        if (!bCardGestureActive) return false;
+        Slate.ClearAllUserFocus(EFocusCause::Cleared);
+        return !bCardGestureActive && LastGestureOutcome == TEXT("cancelled") && LastGestureReason == TEXT("focus-lost");
+    }
     if (Phase != TEXT("release")) return false;
     if (ReleaseTarget == TEXT("cancel"))
         if (const auto User = Slate.GetUser(CardGestureUser)) User->ReleaseCapture(static_cast<uint32>(CardGesturePointer)); // emits actual native capture loss
