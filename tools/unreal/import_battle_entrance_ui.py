@@ -18,6 +18,8 @@ DEST = '/Game/Recovered/Battle/Entrance/UI'
 REPORT = ROOT / 'analysis/unreal/battle-entrance-ui/import-report.json'
 APK_SHA = 'aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4'
 OWNER = 'hczs-source-battle-entrance-ui-v1'
+OWN_CARD_IN = ROOT / 'analysis/battle-ui/hud-in/own-card-area-in.json'
+OWN_CARD_SHA = '81273767f5d227e90ca1d8bdc07a0bf08100485c35833898afe24efbd51536f9'
 
 
 def sha(data):
@@ -160,9 +162,14 @@ def run(*, apply=False):
         row['objectPath'] = obj.get_path_name()
     # Separate presentation asset: never overwrite the existing battle HUD.
     recipe = json.loads(SOURCE.read_text('utf8'))
+    clips = {name: runtime_clip(recipe, name, animation) for name, animation in
+             [('elite', 'In'), ('boss', 'in'), ('hud', 'In')]}
+    own_card = json.loads(OWN_CARD_IN.read_text('utf8'))
+    if own_card['sourceSha256'] != OWN_CARD_SHA or own_card['clip']['schema'] != 'hczs-source-ui-timeline-v1':
+        raise RuntimeError('Prepared OwnCardArea In clip changed; rerun tools/prepare_battle_hud_in.py')
+    clips['ownCardAreaIn'] = own_card['clip']
     payload = dict(schema='hczs-source-battle-opening-v1', sourceRecipeSha256=result['recipeSha256'],
-                   clips={name: runtime_clip(recipe, name, animation) for name, animation in
-                          [('elite', 'In'), ('boss', 'in'), ('hud', 'In')]},
+                   clips=clips, hudInTrigger=own_card['trigger'],
                    selection=dict(encounterId='tutorial-5000', enemyId='991', difficultyType=1,
                                   branch='elite', source='monster_table991 + CMonster.IsElite + MonsterType.Elite=1'),
                    limitations=recipe['limitations'])

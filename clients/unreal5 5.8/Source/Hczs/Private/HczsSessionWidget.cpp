@@ -82,6 +82,30 @@ FString TrimScalar(const FHczsScalar& Value)
     return Text;
 }
 
+struct FHudGroup
+{
+    FVector2f Offset = FVector2f::ZeroVector;
+    float Opacity = 1;
+    bool bFound = false;
+};
+
+// A source group node's displacement from its rest pose and cascaded opacity.
+FHudGroup SampleHudGroup(const HczsSourceUiTimeline::FSample& Now, const HczsSourceUiTimeline::FSample& Rest, const TCHAR* Name)
+{
+    FHudGroup Group;
+    for (int32 Index = 0; Index < Now.Nodes.Num() && Index < Rest.Nodes.Num(); ++Index)
+        if (Now.Nodes[Index].Name == Name)
+        {
+            const auto& Node = Now.Nodes[Index];
+            Group.Offset = FVector2f(Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector)
+                - Rest.Nodes[Index].LocalToDesign.TransformPoint(FVector2D::ZeroVector));
+            Group.Opacity = Node.bVisible ? Node.Tint.A : 0;
+            Group.bFound = true;
+            break;
+        }
+    return Group;
+}
+
 class FSessionPainter
 {
 public:
@@ -94,6 +118,7 @@ public:
     TArray<FString>* PaintedTexts;
     TSet<FString>* PaintedSprites;
     bool bSmoothCard = false;
+    float Opacity = 1;
     FSessionPainter(const FGeometry& InGeometry, FSlateWindowElementList& InElements, int32 InLayer,
         const TMap<FString, FSlateBrush>& InBrushes, const TMap<FString, FVector4f>& InAdjustments,
         TSharedPtr<const FCompositeFont> InFont, TArray<FString>* InPaintedTexts = nullptr,
@@ -103,6 +128,7 @@ public:
 
     void Box(float X, float Y, float W, float H, FLinearColor Color)
     {
+        Color.A *= Opacity;
         if (bSmoothCard && SmoothQuad(*FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")), X, Y, W, H, Color)) return;
         FSlateDrawElement::MakeBox(Elements, ++Layer,
             Canvas.MakeChild(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))).ToPaintGeometry(),
@@ -155,6 +181,7 @@ public:
     {
         const FSlateBrush* Brush = Brushes.Find(Key);
         if (!Brush) return false;
+        Tint.A *= Opacity;
         if (PaintedSprites) PaintedSprites->Add(Key);
         if (const FVector4f* Adjust = IconAdjustments.Find(Key))
         {
@@ -175,9 +202,10 @@ public:
     {
         if (Text.IsEmpty()) return;
         if (PaintedTexts) PaintedTexts->Add(Text);
+        Color.A *= Opacity;
         FFontOutlineSettings Outline;
         Outline.OutlineSize = bShadow ? 1 : 0;
-        Outline.OutlineColor = FLinearColor(0, 0, 0, 0.72f);
+        Outline.OutlineColor = FLinearColor(0, 0, 0, 0.72f * Opacity);
         FSlateFontInfo Info = Font ? FSlateFontInfo(Font, Pixels * 72.0f / FontConstants::RenderDPI,
             TEXT("Regular"), Outline) : FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), FMath::RoundToInt(Pixels * 0.75f));
         const FVector2f Measured(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, Info));
@@ -268,6 +296,21 @@ void UHczsSessionWidget::NativeConstruct()
             FJsonSerializer::Serialize(EliteOpeningJson.ToSharedRef(), TJsonWriterFactory<>::Create(&Json));
             if (!HczsSourceUiTimeline::Parse(Json, EliteOpening, Error))
                 UE_LOG(LogTemp, Error, TEXT("HCZS original opening timeline rejected: %s"), *Error);
+            const auto LoadHudClip = [&Root](const TCHAR* Name, HczsSourceUiTimeline::FClip& Clip, HczsSourceUiTimeline::FSample& Rest)
+            {
+                const TSharedPtr<FJsonObject>* Object = nullptr;
+                FString ClipJson, ClipError;
+                if (!Root->GetObjectField(TEXT("clips"))->TryGetObjectField(Name, Object)) { UE_LOG(LogTemp, Error, TEXT("HCZS HUD In clip missing: %s"), Name); return; }
+                FJsonSerializer::Serialize(Object->ToSharedRef(), TJsonWriterFactory<>::Create(&ClipJson));
+                if (!HczsSourceUiTimeline::Parse(ClipJson, Clip, ClipError) ||
+                    !HczsSourceUiTimeline::Evaluate(Clip, Clip.DurationSeconds(), FVector2D(0, 720), Rest, ClipError))
+                {
+                    Clip.bValid = false;
+                    UE_LOG(LogTemp, Error, TEXT("HCZS HUD In clip %s rejected: %s"), Name, *ClipError);
+                }
+            };
+            LoadHudClip(TEXT("hud"), HudIn, HudInRest);
+            LoadHudClip(TEXT("ownCardAreaIn"), OwnCardIn, OwnCardInRest);
             for (const auto& Pair : EntrancePresentation->Sprites)
             {
                 if (!Pair.Value) continue;
@@ -641,6 +684,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     LastPaintedTexts.Reset();
     LastOpeningNodes.Reset();
     LastDealtCards.Reset();
+    LastHudIn.Reset();
     LastOpeningSeconds = FreshOpeningSeconds();
     bLastPaintedDragCue = false;
     LastPaintedSprites.Reset();
@@ -706,16 +750,79 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         if (LastOpeningSeconds >= 0 && LastOpeningSeconds < 2)
             return PaintFreshOpening(Canvas, Elements, P.Layer, LastOpeningSeconds);
         const bool bPlaying = Battle.Status == TEXT("player-turn");
-        P.Health(Battle.PlayerName, Battle.PlayerId == TEXT("1") ? TEXT("player-1") : TEXT(""),
-            Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, 28, false);
-        P.Health(Battle.EnemyName, Battle.EnemyId == TEXT("991") ? TEXT("monster-991") : TEXT(""),
-            Battle.EnemyHp, Battle.EnemyMaxHp, Battle.EnemyShield, 930, true);
-        P.Text(FString::Printf(TEXT("第 %d 回合"), Battle.Round), 490, 55, 300, 38, 29, Accent, true);
+        // FightPanel.onBattleStart opens the HUD (+2 s on the local opening clock) and plays
+        // FightMainPanel `In`, which starts OwnCardArea `In` on the same frame.
+        const double HudSeconds = LastOpeningSeconds >= 2 ? LastOpeningSeconds - 2 : -1;
+        HczsSourceUiTimeline::FSample HudNow = HudInRest, CardNow = OwnCardInRest;
+        FString HudError;
+        if (HudSeconds >= 0 && HudIn.bValid && !HczsSourceUiTimeline::Evaluate(HudIn, HudSeconds, FVector2D(0, 720), HudNow, HudError))
+            HudNow = HudInRest;
+        if (HudSeconds >= 0 && OwnCardIn.bValid && !HczsSourceUiTimeline::Evaluate(OwnCardIn, HudSeconds, FVector2D(0, 720), CardNow, HudError))
+            CardNow = OwnCardInRest;
+        LastHudIn = MakeShared<FJsonObject>();
+        LastHudIn->SetNumberField(TEXT("seconds"), HudSeconds);
+        LastHudIn->SetBoolField(TEXT("valid"), HudIn.bValid && OwnCardIn.bValid);
+        LastHudIn->SetBoolField(TEXT("finished"), HudSeconds < 0 || HudSeconds >= HudIn.DurationSeconds());
+        auto HudGroups = MakeShared<FJsonObject>();
+        const auto Group = [&](const HczsSourceUiTimeline::FSample& Now, const HczsSourceUiTimeline::FSample& Rest, const TCHAR* Name)
+        {
+            const FHudGroup Value = SampleHudGroup(Now, Rest, Name);
+            auto Row = MakeShared<FJsonObject>();
+            Row->SetBoolField(TEXT("found"), Value.bFound);
+            Row->SetNumberField(TEXT("dx"), Value.Offset.X); Row->SetNumberField(TEXT("dy"), Value.Offset.Y);
+            Row->SetNumberField(TEXT("opacity"), Value.Opacity);
+            HudGroups->SetObjectField(Name, Row);
+            FSessionPainter Q(Canvas.MakeChild(DesignSize, FSlateLayoutTransform(Value.Offset)), Elements, P.Layer,
+                Brushes, IconDrawAdjustments, CompositeFont, &LastPaintedTexts, &LastPaintedSprites);
+            Q.Opacity = Value.Opacity;
+            return Q;
+        };
+        int32 MasksPainted = 0;
+        for (const TCHAR* Mask : {TEXT("bg_mask_top2"), TEXT("bg_mask_top1"), TEXT("bg_mask_buttom")})
+            for (const auto& Node : HudNow.Nodes)
+                if (Node.Name == Mask && Node.bVisible && Node.Tint.A > 0 && !Node.SpriteId.IsEmpty())
+                {
+                    const auto& M = Node.LocalToDesign;
+                    const FGeometry Child = Canvas.MakeChild(FVector2f(Node.Size), FSlateLayoutTransform(),
+                        FSlateRenderTransform(FMatrix2x2(float(M.M00), float(M.M10), float(M.M01), float(M.M11)), FVector2f(M.TX, M.TY)),
+                        FVector2f::ZeroVector);
+                    FSessionPainter MaskPainter(Child, Elements, P.Layer, Brushes, IconDrawAdjustments, CompositeFont, nullptr, &LastPaintedSprites);
+                    if (MaskPainter.Image(TEXT("entrance-") + Node.SpriteId, 0, 0, Node.Size.X, Node.Size.Y, Node.Tint)) ++MasksPainted;
+                    P.Layer = MaskPainter.Layer;
+                }
+        LastHudIn->SetNumberField(TEXT("masksPainted"), MasksPainted);
+        LastHudIn->SetObjectField(TEXT("groups"), HudGroups);
+        {
+            FSessionPainter Heads = Group(HudNow, HudInRest, TEXT("EnterancePlayerHeads"));
+            Heads.Health(Battle.PlayerName, Battle.PlayerId == TEXT("1") ? TEXT("player-1") : TEXT(""),
+                Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, 28, false);
+            P.Layer = Heads.Layer;
+        }
+        {
+            FSessionPainter Heads = Group(HudNow, HudInRest, TEXT("EnteranceMonsterHeads"));
+            Heads.Health(Battle.EnemyName, Battle.EnemyId == TEXT("991") ? TEXT("monster-991") : TEXT(""),
+                Battle.EnemyHp, Battle.EnemyMaxHp, Battle.EnemyShield, 930, true);
+            P.Layer = Heads.Layer;
+        }
+        {
+            FSessionPainter Round = Group(HudNow, HudInRest, TEXT("RoundNode"));
+            Round.Text(FString::Printf(TEXT("第 %d 回合"), Battle.Round), 490, 55, 300, 38, 29, Accent, true);
+            P.Layer = Round.Layer;
+        }
+        // Intention text belongs to IntentionTop, which HUD In does not animate.
         P.Wrapped(Battle.EnemyIntentText, 946, 139, 300, 16, 3, Warm);
-        P.Image(TEXT("energy-bg"), 23, 535, 155, 62);
-        P.Image(TEXT("energy-icon"), 27, 542, 47, 47);
-        P.Text(FString::FromInt(Battle.Energy), 78, 547, 75, 42, 30, Accent, true);
-        P.Image(TEXT("deck-icon"), 26, 606, 39, 43);
+        {
+            FSessionPainter Energy = Group(CardNow, OwnCardInRest, TEXT("Energy"));
+            Energy.Image(TEXT("energy-bg"), 23, 535, 155, 62);
+            Energy.Image(TEXT("energy-icon"), 27, 542, 47, 47);
+            Energy.Text(FString::FromInt(Battle.Energy), 78, 547, 75, 42, 30, Accent, true);
+            P.Layer = Energy.Layer;
+        }
+        {
+            FSessionPainter Deck = Group(CardNow, OwnCardInRest, TEXT("Panel_LeftDown"));
+            Deck.Image(TEXT("deck-icon"), 26, 606, 39, 43);
+            P.Layer = Deck.Layer;
+        }
         P.Text(FString::Printf(TEXT("抽牌 %d  /  弃牌 %d"), Battle.DrawCount, Battle.DiscardCount),
             77, 612, 202, 28, 16, Light);
         Button(TEXT("hall"), TEXT(""), TEXT("返回大厅"), 28, 666, 143, 32);
@@ -813,10 +920,14 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 Controls.Add(Control);
             }
             const bool bEnd = !bBusy && Session->CanSubmitBattleIntent();
-            P.Image(TEXT("end-bg"), 1090, 581, 170, 68, FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
-            P.Image(bEnd ? TEXT("end-icon-active") : TEXT("end-icon-normal"), 1146, 571, 58, 58,
-                FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
-            P.Text(TEXT("回合结束"), 1090, 628, 170, 31, 21, bEnd ? Light : Muted, true);
+            {
+                FSessionPainter EndArea = Group(CardNow, OwnCardInRest, TEXT("EndTurnArea"));
+                EndArea.Image(TEXT("end-bg"), 1090, 581, 170, 68, FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
+                EndArea.Image(bEnd ? TEXT("end-icon-active") : TEXT("end-icon-normal"), 1146, 571, 58, 58,
+                    FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
+                EndArea.Text(TEXT("回合结束"), 1090, 628, 170, 31, 21, bEnd ? Light : Muted, true);
+                P.Layer = EndArea.Layer;
+            }
             FHczsSessionControl End;
             End.Action = TEXT("end-turn");
             End.Rect = FSlateRect(1090, 571, 1260, 666);
@@ -1451,6 +1562,7 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
     Root->SetNumberField(TEXT("openingPaintedNodes"), LastOpeningNodes.Num());
     Root->SetBoolField(TEXT("openingTimelineValid"), EliteOpening.bValid);
     Root->SetArrayField(TEXT("dealtCards"), LastDealtCards);
+    if (LastHudIn) Root->SetObjectField(TEXT("hudIn"), LastHudIn);
     Root->SetNumberField(TEXT("sourceOwnCardOriginY"), 720);
     Root->SetStringField(TEXT("dealClockPolicy"), TEXT("local-BattleBegin3s-plus-original-first-delay0.5s"));
     Root->SetBoolField(TEXT("originalCardPerspectiveRecovered"), false);

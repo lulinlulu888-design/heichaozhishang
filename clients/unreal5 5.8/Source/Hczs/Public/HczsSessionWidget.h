@@ -113,6 +113,10 @@ private:
     mutable TArray<FString> LastOpeningNodes;
     mutable double LastOpeningSeconds = -1;
     mutable TArray<TSharedPtr<class FJsonValue>> LastDealtCards;
+    /** FightMainPanel `In` and the nested OwnCardArea `In` it starts (FightPanel.onBattleStart). */
+    HczsSourceUiTimeline::FClip HudIn, OwnCardIn;
+    HczsSourceUiTimeline::FSample HudInRest, OwnCardInRest;
+    mutable TSharedPtr<class FJsonObject> LastHudIn;
     UPROPERTY() TObjectPtr<UHczsWorldlineWidget> WorldlineWidget;
     UPROPERTY() TArray<TObjectPtr<UObject>> TargetingResources;
     TSharedPtr<const FCompositeFont> CompositeFont;

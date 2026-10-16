@@ -157,8 +157,13 @@ def run():
             widgets = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)
             guard.check(len(widgets) == 1, 'Battle session widget missing/duplicated')
             ui = json.loads(widgets[0].development_describe_ui())
-            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid', 'dealtCards', 'sourceOwnCardOriginY')}
+            sample['opening'] = {k: ui.get(k) for k in ('openingSeconds', 'openingPaintedNodes', 'openingTimelineValid', 'dealtCards', 'sourceOwnCardOriginY', 'hudIn')}
             opening = sample['opening']
+            hud = opening.get('hudIn') or {}
+            if 0.15 < hud.get('seconds', -1) < 0.3 and 'hudInShot' not in state:
+                target = path.parent/(prefix+'-hud-in-mid.png')
+                state['hudInShot'] = target
+                u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
             if opening['openingSeconds'] is not None and 1.85 < opening['openingSeconds'] < 2.4:
                 guard.check(opening['openingTimelineValid'] and opening['openingPaintedNodes'] > 0,
                             'Original elite opening timeline did not paint')
@@ -274,6 +279,21 @@ def run():
                     guard.check(state.get('dealShot') and state['dealShot'].exists() and state.get('dropShot') and state['dropShot'].exists(), 'Native card flight screenshots missing')
                     report['dealScreenshots'] = [str(state['dealShot']), str(state['dropShot'])]
                     passed('source-first-deal-stagger-centre-bezier-tilt-and-input-lock')
+                    huds=[r['opening']['hudIn'] for r in history if (r.get('opening') or {}).get('hudIn')]
+                    moving=[h for h in huds if 0 < h['seconds'] < .5]
+                    groups=('EnterancePlayerHeads','EnteranceMonsterHeads','RoundNode','Energy','Panel_LeftDown','EndTurnArea')
+                    guard.check(huds and all(h['valid'] for h in huds) and moving, 'Source HUD In clips were not sampled during the 0.5 s In')
+                    guard.check(all(all(h['groups'][g]['found'] for g in groups) for h in huds), 'Source HUD In group missing')
+                    guard.check(any(h['groups']['EnterancePlayerHeads']['dy']<-1 and 0<h['groups']['EnterancePlayerHeads']['opacity']<1
+                                    and h['groups']['EndTurnArea']['dx']>1 and h['groups']['Energy']['dx']<-1 for h in moving),
+                                'HUD In did not move/fade the source groups')
+                    rest=sample['opening']['hudIn']
+                    guard.check(rest['finished'] and rest['masksPainted']==3 and all(abs(rest['groups'][g]['dx'])<.01 and abs(rest['groups'][g]['dy'])<.01
+                                and abs(rest['groups'][g]['opacity']-1)<.001 for g in groups), 'HUD did not settle at the source rest pose')
+                    guard.check(state.get('hudInShot') and state['hudInShot'].exists(), 'HUD In screenshot missing')
+                    report['hudIn']=dict(samplesDuringIn=len(moving), screenshot=str(state['hudInShot']), rest=rest,
+                                         firstMoving=moving[0])
+                    passed('source-hud-in-groups-move-fade-and-settle')
                     view=sample['camera']; width,height=view['viewport']
                     guard.check(width>0 and height>0, 'Battle viewport size unavailable')
                     requested=report.get('requestedWindow')
