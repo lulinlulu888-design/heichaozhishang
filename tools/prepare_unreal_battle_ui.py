@@ -25,6 +25,7 @@ PINS = {
     'analysis/battle-ui/menu-icon/report.json': 'a1cc2b656954cc4844c675dedd758142d49f39b36d136f8a9887d2f1176e4e98',
     'analysis/battle-ui/shield-bars/report.json': '82a226d8fbb8da7f9eec860626e42d4be5011f8cd2d3970d653ee04628b6a895',
     'analysis/battle-ui/side-icons/report.json': '2f43a007a85041ca83cb2970711c9587e670bcd29c530dc766fb961a3923e1f8',
+    'analysis/battle-ui/auto-speed-icons/report.json': 'dda53f482c935277d6e34245a6f789651109bc8de35d5de4d0a56cf2fd70517b',
 }
 
 
@@ -81,6 +82,12 @@ def main():
     for row in side_icons['frames']:
         sprite(row['name'], row['png'], row['png_sha256'],
                'analysis/battle-ui/side-icons/report.json', row['logical'])
+    auto_speed = sources['analysis/battle-ui/auto-speed-icons/report.json']
+    if auto_speed['apk_sha256'] != APK_SHA or [row['size'] for row in auto_speed['frames']] != [[56, 56], [56, 56]]:
+        raise ValueError('Auto and speed icon provenance changed')
+    for row in auto_speed['frames']:
+        sprite(row['name'], row['png'], row['png_sha256'],
+               'analysis/battle-ui/auto-speed-icons/report.json', row['logical'])
     frames = sources['analysis/battle-ui/card-frames/provenance.json']
     for row in frames['frames']:
         if row['key'] in ('card/bg_atk_s.png', 'card/cost_s1.png'):
@@ -155,7 +162,7 @@ def main():
         'deck-icon': '左下抽牌/弃牌计数旁图标；绘制 39×43 设计像素',
         'card-cost': '每张手牌左上费用宝石；绘制 32×38 设计像素',
     }
-    inventory = {'schemaVersion': 1, 'scope': 'all 32 source assets imported by the new UE playable session HUD',
+    inventory = {'schemaVersion': 1, 'scope': 'all 34 source assets imported by the new UE playable session HUD',
                  'consumer': 'clients/unreal5 5.8/Source/Hczs/Private/HczsSessionWidget.cpp',
                  'sourceAsset': '/Game/Recovered/Battle/UI/BattlePresentation.BattlePresentation',
                  'variantAsset': '/Game/Recovered/Battle/UI/AI/BattlePresentationHD.BattlePresentationHD',

@@ -1017,6 +1017,11 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             // FightSideBtnArea on LeftDown: Chat (44, 400) and Record (44, 330). Icons only; clicks do not open chat or history.
             P.Image(TEXT("chat-icon"), 16, 292, 56, 56, FLinearColor::White, false, true);
             P.Image(TEXT("record-icon"), 16, 362, 56, 56, FLinearColor::White, false, true);
+            // Battle 5000 leaves Auto_Battle_Ban and Speed_Battle_Ban unset, so both buttons show after battle start.
+            // Clicks do not change speed or start auto fight. The reconstructed end button sits above this row.
+            P.Image(TEXT("speed-icon"), 1136, 622, 56, 56, FLinearColor::White, false, true);
+            P.Image(TEXT("auto-icon"), 1208, 622, 56, 56, FLinearColor::White, false, true);
+            P.Text(TEXT("自动"), 1215, 670, 42, 20, 20, Light, true);
             Deck.Text(TEXT("菜单"), MenuSlot.X - 21.5, MenuSlot.Y + 20, 43, 20, 20, Light, true);
             P.Layer = Deck.Layer;
         }
@@ -1125,15 +1130,15 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             const bool bEnd = !bBusy && Session->CanSubmitBattleIntent();
             {
                 FSessionPainter EndArea = Group(CardNow, OwnCardInRest, TEXT("EndTurnArea"));
-                EndArea.Image(TEXT("end-bg"), 1090, 581, 170, 68, FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
-                EndArea.Image(bEnd ? TEXT("end-icon-active") : TEXT("end-icon-normal"), 1146, 571, 58, 58,
+                EndArea.Image(TEXT("end-bg"), 1090, 530, 170, 68, FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
+                EndArea.Image(bEnd ? TEXT("end-icon-active") : TEXT("end-icon-normal"), 1146, 520, 58, 58,
                     FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
-                EndArea.Text(TEXT("回合结束"), 1090, 628, 170, 31, 21, bEnd ? Light : Muted, true);
+                EndArea.Text(TEXT("回合结束"), 1090, 577, 170, 31, 21, bEnd ? Light : Muted, true);
                 P.Layer = EndArea.Layer;
             }
             FHczsSessionControl End;
             End.Action = TEXT("end-turn");
-            End.Rect = FSlateRect(1090, 571, 1260, 666);
+            End.Rect = FSlateRect(1090, 520, 1260, 615);
             End.bEnabled = bEnd;
             Controls.Add(End);
             if (Battle.Hand.IsEmpty()) P.Text(TEXT("本回合已无手牌"), 385, 584, 510, 50, 23, Muted, true);
