@@ -52,7 +52,27 @@ FUNCTIONS = {
            'validEnterChallenge','_checkPreChallenge','_checkChallengeOpen',
            'checkMaxTimes','isChallengeSuccessed'),
     9613: ('getMLActivityCurChallenge','getMLPreChallengeData'),
+    2471: ('getMazeBattleSceneId','dynamicDungeonUnitSceneId','dynamicBattleSceneId',
+           'getSceneIdFromMazeJson','getMazeBattleStaticData','getAllFightScenePath'),
+    4774: ('getBattleSceneIdByMazeIDAndBattle',),
+    2697: ('__init__','BattleConf','onBattleInit','start'),
+    9038: ('MazeID',), 9560: ('getSceneNames',),
 }
+SCENE_CHAIN = (
+    (2697,'__init__',[12,0],('getMazeBattleStaticData','_battleID','MazeID','_battleConf')),
+    (2471,'getMazeBattleStaticData',[36],('MazeDungeonId','AttackTarget','VM_MAZEBATTLE_STATIC_FORMULAS')),
+    (2471,'getMazeBattleSceneId',[7],('BattleScene','dynamicDungeonUnitSceneId','dynamicBattleSceneId',
+                                      'getBattleSceneIdByMazeIDAndBattle')),
+    (2471,'dynamicBattleSceneId',[9],('targetPos','getSceneIdFromMazeJson')),
+    (2471,'getSceneIdFromMazeJson',[10],('getMapDataDict','sceneId','scene_table')),
+    (7214,'getMapDataDict',[4,6],('_allMazeDict','MapData')),
+    (7214,'loadMazeJson',[4,2],('assets/editor/maze.json','_allMazeDict')),
+    (4774,'getBattleSceneIdByMazeIDAndBattle',[44],('getMazeDungeonStaticData','LoadingBattleScene')),
+    (2697,'onBattleInit',[12,12],('BattleConf','BattleScene','SceneType','onEnterBattle','ReplaceSceneID')),
+    (2697,'start',[12,13],('BattleConf','BattleScene','onEnterBattle','ReplaceSceneID')),
+    (9038,'MazeID',[17,10],('_mazeID',)),
+    (9560,'getSceneNames',[14,39],('getAllFightScenePath',)),
+)
 
 
 def sha(raw):
@@ -83,6 +103,51 @@ def code_anchor(modules, idx, function, path):
     return dict(module=idx, function=function, constant_path=path,
                 bytecode_sha256=sha(code['bytecode']), first_source_line=code['firstlineno'],
                 unknown_opcode_count=sum(o['opname']=='UNKNOWN' for o in ops))
+
+
+def operands(code):
+    return [o['operand'].decode('utf8','replace') if isinstance(o.get('operand'),bytes) else o.get('operand')
+            for o in instructions(code)]
+
+
+def chain_anchor(modules, idx, function, path, required):
+    anchor = code_anchor(modules, idx, function, path)
+    seen = operands(dict(walk_codes(modules[idx]))[tuple(path)])
+    missing = [r for r in required if r not in seen]
+    if missing:
+        raise ValueError('Scene chain operand missing: %s.%s %s' % (idx, function, missing))
+    return dict(anchor, required_operands=list(required))
+
+
+def battle_scene_formula(module):
+    ops = [(o['opname'], o['operand'].decode() if isinstance(o.get('operand'),bytes) else o.get('operand'))
+           for o in instructions(module)]
+    window = [('LOAD_NAME','getMazeBattleSceneId'),('LOAD_CONST','BattleData'),('LOAD_CONST','MazeDungeonId'),
+              ('LOAD_CONST','BattleId'),('LOAD_CONST','AttackTarget'),('BUILD_TUPLE',None),
+              ('LOAD_CONST','BattleScene'),('STORE_MAP',None)]
+    for i in range(len(ops)-len(window)+1):
+        if all(ops[i+j][0]==name and (value is None or ops[i+j][1]==value) for j,(name,value) in enumerate(window)):
+            return dict(lazy_key='BattleScene',function='getMazeBattleSceneId',
+                        argument_keys=['BattleData','MazeDungeonId','BattleId','AttackTarget'],
+                        container='VM_MAZEBATTLE_STATIC_FORMULAS module-level map')
+    raise ValueError('BattleScene lazy formula changed')
+
+
+def loading_scene_literal(module, maze):
+    span = maze['field_sources']['LoadingBattleScene']
+    ops = [o for o in instructions(module) if span['bytecode_start'] <= o['offset'] < span['bytecode_end_exclusive']]
+    name = ops[0]['operand']
+    if isinstance(name, bytes):
+        name = name.decode()
+    if [ops[0]['opname'],name] != ['LOAD_NAME','taggeddict'] or ops[1]['opname']!='BUILD_MAP':
+        raise ValueError('LoadingBattleScene constructor changed')
+    pairs = []
+    for i in range(2, len(ops)-1, 3):
+        value, key, store = ops[i:i+3]
+        if store['opname']!='STORE_MAP' or key['opname']!='LOAD_CONST' or value['opname']!='LOAD_CONST':
+            raise ValueError('LoadingBattleScene pair changed')
+        pairs.append(dict(key=key['operand'],key_type=type(key['operand']).__name__,scene_id=value['operand']))
+    return dict(maze_id=maze['id'],constructor='taggeddict',pairs=pairs,bytecode=span)
 
 
 def references(module):
@@ -159,7 +224,7 @@ def main():
         'uires/MainLlineDungeonPanel/InfoPopArea_ext.csb')]
     activity=export_table(4931,[2])
     challenge=literal_table(5921,{3997,3998})
-    scenes=literal_table(9650,{239,2081,2133})
+    scenes=literal_table(9650,{239,2004,2081,2133})
     tiles=export_table(8161,[1,50,51])
     data_refs=dict(activity=write('data/activity2.json',activity),
                    challenges=write('data/challenges.json',challenge),
@@ -198,6 +263,42 @@ def main():
                 matches=matches,status='present-in-catalogue' if len(matches)==1 else 'missing-or-ambiguous',
                 bytecode_source=record['field_sources'][field],
                 limit='Availability only; dynamic tile model/shader/effect not newly converted'))
+    maze_rows={r['id']:r for r in export_table(1303,[3997,3998])['rows']}
+    maze_module=read_module(rows[1303])
+    battle_rows={5000:literal_table(4664,{5000})['rows'][0]['fields'],
+                 1703:literal_table(5766,{1703})['rows'][0]['fields']}
+    scene_paths={r['id']:r['fields']['ScenePath'] for r in scenes['rows']}
+    editor_mazes=json.loads(maze_path.read_text('utf8'))
+    resolutions=[]
+    for challenge,maze_id,battle_id in ((3997,3997,5000),(3998,3998,1703)):
+        literal=loading_scene_literal(maze_module,maze_rows[maze_id])
+        override=next((p['scene_id'] for p in literal['pairs'] if p['key']==battle_id and p['key_type']=='int'),None)
+        base=battle_rows[battle_id]['BattleScene']
+        effective=override or base
+        resolutions.append(dict(challenge_id=challenge,maze_id_candidate=maze_id,battle_id=battle_id,
+            maze_json_entry_present=str(maze_id) in editor_mazes,loading_battle_scene=literal,
+            battle_table_scene=base,battle_scene_type=battle_rows[battle_id]['SceneType'],
+            static_override_scene=override,effective_scene_id=effective,effective_scene=scene_paths[effective]))
+    if [r['effective_scene_id'] for r in resolutions]!=[2133,2004] or any(r['maze_json_entry_present'] for r in resolutions):
+        raise ValueError('Reviewed prologue scene resolution changed')
+    scene_selection=dict(
+        call_chain=[chain_anchor(modules,*entry) for entry in SCENE_CHAIN],
+        lazy_formula=battle_scene_formula(modules[2471]),
+        order=['CBattle.__init__: _battleConf = DataSource.getMazeBattleStaticData(battleID, BattlePlayer.MazeID)',
+               'LazyDict key BattleScene -> getMazeBattleSceneId(BattleData, MazeDungeonId, BattleId, AttackTarget)',
+               'MazeDungeonId None -> BattleData.BattleScene',
+               'AttackTarget not None -> dynamicDungeonUnitSceneId; nonzero result wins',
+               'Globals.BattlePlayer not None -> dynamicBattleSceneId(targetPos) via assets/editor/maze.json MapData["x,y"].sceneId present in scene_table; nonzero result wins',
+               'Else LoadingBattleScene[battleId] when maze row has it, or BattleData.BattleScene',
+               'CBattle.onBattleInit/start -> UIOutput.onEnterBattle(Forced=True, ReplaceSceneID=BattleConf["BattleScene"])'],
+        prologue=resolutions,
+        attack_target='CBattle passes only (battleID, MazeID); AttackTarget is the default argument',
+        dynamic_branch='Prologue mazes have no maze.json entry; getMapDataDict returns {} so sceneId 0 -> None',
+        preload_only='BattleScene.getSceneNames/getAllFightScenePath preloads scene_table.extra_data.BattleSceneIds; not selection',
+        unverified=['BattlePlayer.MazeID comes from server-set _mazeID; challenge MazeIDList is the static candidate only',
+                    'battleID transport type is not observed; table key is int',
+                    'taggeddict lookup semantics are assumed dict-like',
+                    'Opcode 130 treated as JUMP_IF_TRUE_OR_POP (proven against shipped posixpath.normpath)'])
     registry_ops=list(instructions(modules[1009]))
     bindings={}
     for key in ('ServerData','serverInfo','IfAllChallengePassed','SuccessTime','UnLockNeedChallenge'):
@@ -275,8 +376,9 @@ def main():
             actual_original_account_state_available=False),
         battle_scene_boundary=dict(base_scene_id=2081,base_scene='scene/city_battle_3/city_battle_3.scn',
             maze_override_scene_id=2133,maze_override_scene='scene/pszdu_battle_1/pszdu_battle_1.scn',
+            static_selection_chain_resolved=True,
             effective_original_loading_priority_executed=False,
-            map_scene239_is_separate=True),
+            map_scene239_is_separate=True,selection=scene_selection),
         next_handoff=['Import existing source239 GLB with exact source camera, retain original shading/effect limits',
             'Render parsed original MainLineDungeonPanel CSB; data marker position is projected from scene, not a fabricated chapter tile',
             'Recover dynamic map piece models from pinned settings1/50/51, then verify source cell coordinates in native frame',
