@@ -977,6 +977,16 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             const FVector2D RoundText = RoundOrigin + FVector2D(-48.5, -10.5);
             Round.Image(TEXT("round-bg"), RoundOrigin.X - 62.5, RoundOrigin.Y - 14, 125, 28, FLinearColor::White, false, true);
             Round.Text(FString::Printf(TEXT("第%d回合"), Battle.Round), RoundText.X, RoundText.Y, 97, 21, 20, Accent, true);
+            // Battle 5000 has MaxRoundFail 30 and no RoundSuccess, so getBattleRoundSuccess returns 30.
+            // The plate shows that limit minus BattleRound. Total damage stays hidden: ShowTotalDamaga defaults false.
+            // The <=3 warning tint is a timeline color, not the static white text, so it stays unwired.
+            if (Battle.EncounterId == TEXT("tutorial-5000"))
+            {
+                const int32 RemainingTurns = 30 - Battle.Round;
+                Round.Image(TEXT("top-info-bg"), 545, 1, 192, 34, FLinearColor::White, false, true);
+                Round.Image(TEXT("top-info-icon"), 595, 9, 20, 18, FLinearColor::White, false, true);
+                Round.Text(FString::FromInt(RemainingTurns), 629.5f, 8, 23, 20, 20, FLinearColor::White, false);
+            }
             P.Layer = Round.Layer;
         }
         // The source row is IntentionArea items on ModelUIArea, following the model head.
