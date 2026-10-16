@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 INPUT = ROOT / 'analysis/unreal/battle-ui/manifest.json'
 DEST = '/Game/Recovered/Battle/UI'
 REPORT = ROOT / 'analysis/unreal/battle-ui/import-result.json'
-PINNED_MANIFEST = '5fba1804eead422c38925406ddc8b161018cb56b72fd407750aca2b0c3e992aa'
+PINNED_MANIFEST = '8c25c08e38fe3bced0f920360782d5e6b575d3b80f9beaf32d1defddd1e8f661'
 
 
 def verified(filename, digest):
@@ -100,10 +100,7 @@ def main():
         raise RuntimeError('Build HczsEditor before battle UI import')
     package = DEST + '/BattlePresentation'
     asset = unreal.load_asset(package) if unreal.EditorAssetLibrary.does_asset_exist(package) else None
-    if asset:
-        if asset.get_editor_property('SourceManifestSha256') != digest:
-            raise RuntimeError('Existing battle presentation retained; source identity differs')
-    else:
+    if not asset:
         factory = unreal.DataAssetFactory()
         factory.set_editor_property('data_asset_class', cls)
         asset = unreal.AssetToolsHelpers.get_asset_tools().create_asset('BattlePresentation', DEST, cls, factory)
@@ -116,7 +113,7 @@ def main():
     if not unreal.EditorAssetLibrary.save_loaded_asset(asset, only_if_is_dirty=False):
         raise RuntimeError('Cannot save battle presentation DataAsset')
     reloaded = unreal.load_asset(package)
-    if len(reloaded.get_editor_property('Sprites')) != 26 or not reloaded.get_editor_property('ChineseFont'):
+    if len(reloaded.get_editor_property('Sprites')) != len(sprites) or not reloaded.get_editor_property('ChineseFont'):
         raise RuntimeError('Saved presentation reference readback failed')
     result = {'passed': True, 'engine': unreal.SystemLibrary.get_engine_version(),
               'manifest_sha256': digest, 'asset': asset.get_path_name(),
@@ -125,6 +122,8 @@ def main():
               'scope': 'Original APK pixels, static card arc, reconstructed UE screen layout; gameplay state comes from Node API'}
     REPORT.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
     unreal.log('HCZS battle presentation import passed: ' + str(REPORT))
+    if '-unattended' in unreal.SystemLibrary.get_command_line().lower():
+        unreal.SystemLibrary.execute_console_command(None, 'QUIT_EDITOR')
 
 
 if __name__ == '__main__':

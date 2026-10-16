@@ -951,7 +951,9 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             for (const auto& Node : HudInRest.Nodes)
                 if (Node.Name == TEXT("RoundNode"))
                     RoundSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
-            const FVector2D RoundText = RoundSlot + FVector2D(0 - 48.5, 148 - 10.5);
+            const FVector2D RoundOrigin = RoundSlot + FVector2D(0, 148);
+            const FVector2D RoundText = RoundOrigin + FVector2D(-48.5, -10.5);
+            Round.Image(TEXT("round-bg"), RoundOrigin.X - 62.5, RoundOrigin.Y - 14, 125, 28, FLinearColor::White, false, true);
             Round.Text(FString::Printf(TEXT("第%d回合"), Battle.Round), RoundText.X, RoundText.Y, 97, 21, 20, Accent, true);
             P.Layer = Round.Layer;
         }
