@@ -29,10 +29,44 @@ LIB_SHA = '2eda877730287d1c0843150eb4050d5b46ab8e910e7d9f3828609b61a98c5b41'
 AGS_SHA = '12702cdbf02201e0637ca1410db6abe9787c29a05ea1514d4c5f5b9a7318e729'
 BATTLE_GLB_SHA = 'd5b95640f8c721721bbbefb7590d97ab10631c32e5770e18b781462f728f7828'
 SFX_SHA = '4be30fddd6c2e6c0d612e33e691ac018ca0bb37699c74a54484cd32cfe2c6f5d'
+GIM_SHA = 'cec24d79e67c9bc86993d0ab4115f484d6e222f0954252d02d8505899d0eccf7'
 
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def source_effect_binding(raw):
+    """Keep the authored socket separate from skin joints and native enums."""
+    if sha(raw) != GIM_SHA:
+        raise ValueError('Original battle GIM identity changed')
+    tree = ET.fromstring(raw.decode('gb18030'))
+    triggers = tree.findall('./Triggers/fight_idle_show/event_1/trigger')
+    if len(triggers) != 1:
+        raise ValueError('Entrance cue must have exactly one source trigger')
+    trigger = triggers[0]
+    if (trigger.get('SocketName'), trigger.get('ObjectFileName')) != (
+            'fx_center', 'effects/player/001/fight_idle_show_chuchang.sfx'):
+        raise ValueError('Source entrance effect socket/binding changed')
+    sockets = [s for s in tree.findall('./Sockets/*') if s.get('Name') == trigger.get('SocketName')]
+    if len(sockets) != 1:
+        raise ValueError('Entrance socket must be uniquely authored in GIM')
+    socket = sockets[0]
+    matrix = [float(v) for v in socket.attrib['MatrixToBone'].split(',')]
+    if len(matrix) != 16 or not np.isfinite(matrix).all():
+        raise ValueError('Invalid source socket matrix')
+    bound = [dict(x.attrib) for x in socket.findall('./BoundObject/Object')]
+    if sum(x.get('Name', '').replace('\\', '/') == trigger.get('ObjectFileName')
+           and x.get('Active') == 'true' for x in bound) != 1:
+        raise ValueError('Entrance SFX must be active on its authored socket')
+    return {'schema': 'hczs-elsa-entrance-binding-v1', 'sourceGimSha256': GIM_SHA,
+            'trigger': dict(trigger.attrib), 'socket': dict(socket.attrib),
+            'socketXmlTag': socket.tag, 'boundObjects': bound, 'matrixLiteralValues': matrix,
+            'boneNameAuthored': socket.get('BoneName'),
+            'identityMatrixLiteral': matrix == [1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.],
+            'runtimeBindingVerified': False,
+            'limitations': ['GIM socket is not a skin joint; missing BoneName must not select an arbitrary bone.',
+                            'BindType=7 is retained literally; identity matrix alone does not establish native attachment semantics.']}
 
 
 def check_battle_skeleton(base):
@@ -106,13 +140,12 @@ def main(out=OUT):
     if len(cue) != 1 or cue[0]['ratioLiteral'] != '0.144595':
         raise ValueError('Reviewed entrance effect cue changed')
     gim = ROOT / 'analysis/battle-visual/scene-export/source/File_26.gim'
-    triggers = ET.fromstring(gim.read_bytes().decode('gb18030')).findall('./Triggers/fight_idle_show/event_1/trigger')
-    if len(triggers) != 1 or triggers[0].get('SocketName') != 'fx_center' or triggers[0].get('ObjectFileName') != 'effects/player/001/fight_idle_show_chuchang.sfx':
-        raise ValueError('Source entrance effect socket/binding changed')
+    binding = source_effect_binding(gim.read_bytes())
     sfx = ROOT / 'analysis/battle-visual/prologue-theatre/source/3c076f28572afe506d4d.sfx'
     if file_sha256(sfx) != SFX_SHA:
         raise ValueError('Source entrance effect changed')
-    cue[0]['trigger'] = dict(triggers[0].attrib)
+    cue[0]['trigger'] = binding['trigger']
+    cue[0]['sourceBinding'] = binding
     cue[0]['sourceSfx'] = {'file': str(sfx.relative_to(ROOT)), 'sha256': SFX_SHA,
                          'playbackImplemented': False}
     target = out / 'elsa_entrance.glb'
@@ -148,4 +181,7 @@ def main(out=OUT):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=OUT)
-    print(json.dumps(main(parser.parse_args().out), ensure_ascii=False))
+    parser.add_argument('--inspect-binding', action='store_true', help='Inspect the pinned GIM socket without resampling or asset mutation')
+    args = parser.parse_args()
+    result = source_effect_binding((ROOT/'analysis/battle-visual/scene-export/source/File_26.gim').read_bytes()) if args.inspect_binding else main(args.out)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
