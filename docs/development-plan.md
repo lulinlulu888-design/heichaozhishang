@@ -204,7 +204,7 @@ SHA-256：`aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4`。
 - 原 `ActivityGroup == 0` 的 19 项包含序章和后续章节目录，不代表已解锁 19 章。
 - 原进度字段 `activityDatas["2"]["3997"]["successTime"]` 在已检查逻辑中是成功次数条件，不能按时间戳处理；部分入口还判断键是否存在，不能预填全 0 后误解锁。
 - 已定位入口链：Activity 2 → challenge 3997 → maze 3997 → battle 5000。Guide 1001 直接教学是另一条入口。
-- `chess_xuzhang` 场景 239 是章节地图，不是战斗场景。地图 50002 已按 `buildMapDetail` 的 `y,x` 拆键读出三格：起点 (x=22,y=21)，挑战 (x=22,y=20) 关卡 3997，终点 (x=22,y=19) 关卡 3998。格子世界坐标由 `iMapScene.calculatePiecePos` 计算：`tempx=y+1`，`tempy=DungeonWidth-x+1`，横向步长 24，纵向步长 27.712，错行再偏 13.856，原点是 `CenterPos`。`CenterPos` 还要场景中心，地图块模型也还没进界面；现有世界线页仍是 14 个静态绘制项，不把这三格画进去。
+- `chess_xuzhang` 场景 239 是章节地图，不是战斗场景。地图 50002 已按 `buildMapDetail` 的 `y,x` 拆键读出三格：起点 (x=22,y=21)，挑战 (x=22,y=20) 关卡 3997，终点 (x=22,y=19) 关卡 3998。格子世界坐标由 `iMapScene.calculatePiecePos` 计算：`tempx=y+1`，`tempy=DungeonWidth-x+1`，横向步长 24，纵向步长 27.712，错行再偏 13.856，原点是 `CenterPos`。场景 239 没有额外中心，`getDungeonCenter` 直接取场景表 `SceneCenter`，所以原点是 `[3, 16.26, 233.7]`。`DungeonWidth` 仍要 `dungeonInfo['width']`，地图 50002 没有这个字段；偶数行偏移还要 `MLShortSide`，场景 239 的提取行里也没有。三格因此仍不放进场景，地图块模型也还没进界面；现有世界线页仍是 14 个静态绘制项，不把这三格画进去。`tools/audit_map_scene_center.py` 复核这条结论。
 - battle 5000 的基础场景 2081（`city_battle_3`）与 maze 3997 的加载覆盖 2133（`pszdu_battle_1`）存在运行优先级待核对；当前 `city_battle_1` 仅为本地展示适配。确认实际加载链后再验收首战场景一致。
 
 ### 4.2 出牌同步与即时反馈
