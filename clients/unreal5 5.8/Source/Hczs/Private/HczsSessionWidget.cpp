@@ -1014,6 +1014,9 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 if (Node.Name == TEXT("MeauNode"))
                     MenuSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
             Deck.Image(TEXT("menu-icon"), MenuSlot.X - 27.28, MenuSlot.Y - 30.88, 56, 56, FLinearColor::White, false, true);
+            // FightSideBtnArea on LeftDown: Chat (44, 400) and Record (44, 330). Icons only; clicks do not open chat or history.
+            P.Image(TEXT("chat-icon"), 16, 292, 56, 56, FLinearColor::White, false, true);
+            P.Image(TEXT("record-icon"), 16, 362, 56, 56, FLinearColor::White, false, true);
             Deck.Text(TEXT("菜单"), MenuSlot.X - 21.5, MenuSlot.Y + 20, 43, 20, 20, Light, true);
             P.Layer = Deck.Layer;
         }
