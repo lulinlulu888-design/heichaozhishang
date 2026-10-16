@@ -979,7 +979,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             Round.Text(FString::Printf(TEXT("第%d回合"), Battle.Round), RoundText.X, RoundText.Y, 97, 21, 20, Accent, true);
             P.Layer = Round.Layer;
         }
-        // Intention text belongs to IntentionTop, which HUD In does not animate.
+        // The source row is IntentionArea items on ModelUIArea, following the model head.
+        // This sentence is the reconstructed skill text until those icons and numbers are wired.
         P.Wrapped(Battle.EnemyIntentText, 946, 139, 300, 16, 3, Warm);
         {
             FSessionPainter Energy = Group(CardNow, OwnCardInRest, TEXT("Energy"));
