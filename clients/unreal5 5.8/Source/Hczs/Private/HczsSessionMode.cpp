@@ -143,7 +143,9 @@ void AHczsSessionMode::TravelWhenReady()
     if (!Session) return;
     FString Desired;
     if (!bBattleScene && Session->IsBattleSceneReady())
+    {
         if (const TCHAR* Map = RecoveredBattleMap(Session)) Desired = Map;
+    }
     else if (bBattleScene && Session->IsHallSceneReady())
         Desired = HallMap;
     if (Desired.IsEmpty() || !FPackageName::DoesPackageExist(Desired)) return;
