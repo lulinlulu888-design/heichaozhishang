@@ -978,12 +978,16 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         }
         {
             FSessionPainter Deck = Group(CardNow, OwnCardInRest, TEXT("Panel_LeftDown"));
-            Deck.Image(TEXT("deck-icon"), 26, 606, 39, 43);
+            // btn_card_ext under DeckNode (118, 70): Img_hand 56x56 and Text_deposit "牌堆".
+            FVector2D DeckSlot(118, 650);
+            for (const auto& Node : OwnCardInRest.Nodes)
+                if (Node.Name == TEXT("DeckNode"))
+                    DeckSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
+            Deck.Image(TEXT("deck-icon"), DeckSlot.X - 28, DeckSlot.Y - 28, 56, 56, FLinearColor::White, false, true);
+            Deck.Text(TEXT("牌堆"), DeckSlot.X - 21.5, DeckSlot.Y + 20, 43, 20, 20, Light, true);
             P.Layer = Deck.Layer;
         }
-        P.Text(FString::Printf(TEXT("抽牌 %d  /  弃牌 %d"), Battle.DrawCount, Battle.DiscardCount),
-            77, 612, 202, 28, 16, Light);
-        Button(TEXT("hall"), TEXT(""), TEXT("返回大厅"), 28, 666, 143, 32);
+        Button(TEXT("hall"), TEXT(""), TEXT("返回大厅"), 180, 666, 143, 32);
         Button(TEXT("refresh-battle"), TEXT(""), TEXT("刷新战斗"), 1105, 138, 143, 32);
         if (bPlaying)
         {
