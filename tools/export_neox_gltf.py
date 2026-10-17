@@ -19,7 +19,8 @@ def flatten_columns(m):
     return [m[r][c] for c in range(4) for r in range(4)]
 
 
-def encode_glb(model, name='NeoX extracted mesh', skin=False):
+def encode_glb(model, name='NeoX extracted mesh', skin=False, joint_locals=None):
+    """joint_locals: optional row-major 4x4 local per bone name, replacing mesh-bind locals."""
     binary = bytearray()
     doc = {'asset': {'version': '2.0', 'generator': 'hczs evidence-based NeoX converter'},
            'buffers': [], 'bufferViews': [], 'accessors': [],
@@ -61,7 +62,10 @@ def encode_glb(model, name='NeoX extracted mesh', skin=False):
         max_orthogonality_error = 0.0
         for i, bone in enumerate(model['bones']):
             parent = bone['parent']
-            local = matrices[i] if parent is None else multiply4(inverses[parent], matrices[i])
+            if joint_locals is not None:
+                local = joint_locals[bone['name']]
+            else:
+                local = matrices[i] if parent is None else multiply4(inverses[parent], matrices[i])
             # glTF node matrices must be decomposable to TRS, i.e. no shear.
             columns = [[local[r][c] for r in range(3)] for c in range(3)]
             norms = [math.sqrt(sum(x*x for x in col)) for col in columns]

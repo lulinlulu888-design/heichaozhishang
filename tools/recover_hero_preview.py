@@ -85,7 +85,9 @@ def recover(character_id, purpose, apk, catalogue):
         raise ValueError('Configured idle is not unique in this model library')
     clip_raw = get(clip_path(library_path, clip_name))
     parsed = parse_clip(clip_raw)
-    mapping = map_bones(library, parsed, [b['name'] for b in model['bones']])
+    mesh_bones = [b['name'] for b in model['bones']]
+    mapping = map_bones(library, parsed, mesh_bones, allow_library_extras=True)
+    selected['libraryOnlyBones'] = sorted(set(library['bone_names']) - set(mesh_bones))
     scale_format = clip_raw[parsed['acl_offset'] + 25]
     if scale_format not in (0,1):
         raise ValueError('Unsupported source ACL scale format')

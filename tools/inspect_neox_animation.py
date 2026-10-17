@@ -153,14 +153,21 @@ def parse_clip(data: bytes) -> dict:
             'source_ranges': r.ranges}
 
 
-def map_bones(library: dict, clip: dict, model_names: list[str]) -> list[dict]:
+def map_bones(library: dict, clip: dict, model_names: list[str], *, allow_library_extras: bool = False) -> list[dict]:
+    """Map clip tracks to mesh joints by library bone identity.
+
+    With allow_library_extras, library/clip bones absent from the mesh (props,
+    attachment chains) are left unmapped. The library stores no hierarchy, so
+    this is only sound because mesh joints are posed through mesh parents.
+    """
     if len(set(model_names)) != len(model_names):
         raise ValueError('duplicate model bone names')
     names = library['bone_names']
     hashes = [bone_id(name) for name in names]
     if len(set(hashes)) != len(hashes):
         raise ValueError('ambiguous bone hash collision')
-    if set(hashes) != set(clip['bone_ids']) or set(names) != set(model_names):
+    mesh_covered = set(names) >= set(model_names) if allow_library_extras else set(names) == set(model_names)
+    if set(hashes) != set(clip['bone_ids']) or not mesh_covered:
         raise ValueError('clip/library/model skeleton identities differ')
     library_by_hash = {value: index for index, value in enumerate(hashes)}
     model_by_name = {name: index for index, name in enumerate(model_names)}
@@ -168,6 +175,8 @@ def map_bones(library: dict, clip: dict, model_names: list[str]) -> list[dict]:
     for index, value in enumerate(clip['bone_ids']):
         library_index = library_by_hash[value]
         name = names[library_index]
+        if name not in model_by_name:
+            continue
         result.append({'clip_index': index, 'bone_id': f'{value:08x}', 'name': name,
                        'library_index': library_index, 'mesh_joint': model_by_name[name]})
     return result

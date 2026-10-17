@@ -11,8 +11,57 @@ from export_elsa_animation import quaternion_matrix
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT/'analysis/characters/lynn/idle'
 
-def verify_reference_skin(library, model):
-    """Compose every source local TRS, including unweighted ancestor scales."""
+def skin_vertices(model, poses_by_name):
+    """Skin source vertices with full local TRS poses and original inverse binds."""
+    worlds = {}
+    def world(index):
+        if index not in worlds:
+            bone = model['bones'][index]
+            pose = poses_by_name[bone['name']]
+            local = np.eye(4)
+            local[:3, :3] = quaternion_matrix(pose[3:7]) * pose[7:10]
+            local[:3, 3] = pose[:3]
+            worlds[index] = local if bone['parent'] is None else world(bone['parent']) @ local
+        return worlds[index]
+    skin = np.asarray([world(i) @ np.linalg.inv(np.asarray(matrix_rows(b['matrix_raw'])))
+        for i, b in enumerate(model['bones'])])
+    vertices = np.column_stack((np.asarray(model['positions']), np.ones(len(model['positions']))))
+    weights = np.asarray(model['weights'])
+    joints = np.where(weights > 0, np.asarray(model['joints'], dtype=int), 0)
+    transformed = np.einsum('nvij,nj->nvi', skin[joints], vertices)
+    return vertices[:, :3], np.sum(transformed * weights[:, :, None], axis=1)[:, :3]
+
+
+def sampled_to_reference_layout(sample):
+    """Sampled poses store quaternion, translation, scale; reference poses store T, Q, S."""
+    return np.concatenate((sample[4:7], sample[:4], sample[7:10]))
+
+
+def frame_skin_stats(model, poses_by_name):
+    """Compare a sampled pose's skinned shape with the bind shape, centroid aligned."""
+    bind, posed = skin_vertices(model, poses_by_name)
+    if not np.all(np.isfinite(posed)):
+        return dict(finite=False)
+    height = float(np.ptp(bind[:, 1]))
+    displacement = np.linalg.norm((posed - posed.mean(0)) - (bind - bind.mean(0)), axis=1)
+    return dict(finite=True, bind_height=height,
+        diagonal_ratio=float(np.linalg.norm(np.ptp(posed, 0)) / np.linalg.norm(np.ptp(bind, 0))),
+        median_displacement_over_height=float(np.median(displacement) / height),
+        p95_displacement_over_height=float(np.percentile(displacement, 95) / height))
+
+
+SAMPLED_SKIN_ENVELOPE = dict(diagonal_ratio=(0.7, 1.2), median_displacement_over_height=(0.0, 0.15),
+    p95_displacement_over_height=(0.0, 0.5))
+
+
+def verify_reference_skin(library, model, sampled_poses=None):
+    """Compose every source local TRS, including unweighted ancestor scales.
+
+    When the library reference pose differs from the mesh bind and every model
+    bone is driven by the sampled clip, accept the export only if the first
+    sampled frame skins inside SAMPLED_SKIN_ENVELOPE (measured on heroes whose
+    reference pose matches their bind exactly).
+    """
     reference = dict(zip(library['bone_names'], library['reference_pose']))
     worlds = {}
     def world(index):
@@ -45,7 +94,19 @@ def verify_reference_skin(library, model):
     vertex_error = float(np.max(np.abs(reconstructed[:,:3]-vertices[:,:3])))
     weighted_error = max(r['max_global_matrix_error'] for r in rows if r['weighted'])
     if weighted_error >= 1e-4 or vertex_error >= 1e-4:
-        raise ValueError('Source reference skin reconstruction exceeds tolerance')
+        if sampled_poses is None or set(sampled_poses) != {b['name'] for b in model['bones']}:
+            raise ValueError('Source reference skin reconstruction exceeds tolerance')
+        stats = frame_skin_stats(model, sampled_poses)
+        if not stats['finite'] or any(not low <= stats[key] <= high
+                for key, (low, high) in SAMPLED_SKIN_ENVELOPE.items()):
+            raise ValueError('Reference pose differs from bind and sampled frame skins outside envelope')
+        return dict(weighted_bones=len(model['used_bones']),
+            max_weighted_global_matrix_error=weighted_error,
+            max_reference_vertex_component_error=vertex_error,
+            reference_pose_mismatch=[r for r in rows if r['max_global_matrix_error'] >= 1e-4],
+            sampled_frame0=stats, envelope=SAMPLED_SKIN_ENVELOPE, correction_applied=False,
+            scope='Library reference pose is not the mesh bind; every bone is clip-driven and '
+                'original inverse binds are kept. GLB rest pose differs from bind; idle playback only.')
     return dict(weighted_bones=len(model['used_bones']),
         max_weighted_global_matrix_error=weighted_error,
         max_reference_vertex_component_error=vertex_error,

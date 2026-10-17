@@ -5,10 +5,11 @@ import numpy as np
 from PIL import Image
 from export_elsa_model import encode_reference, split_glb, pack_glb, write_json, digest
 from export_elsa_animation import encode, validate_roundtrip
-from inspect_neox_model import parse_model
+from inspect_neox_model import parse_model, ModelError, matrix_rows
+from export_elsa_animation import quaternion_matrix
 from inspect_neox_animation import parse_library, file_sha256
 from decode_ktx import convert, DEFAULT_DECODER, DEFAULT_INSPECTOR
-from verify_lynn_idle import verify_reference_skin
+from verify_lynn_idle import verify_reference_skin, sampled_to_reference_layout
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'analysis/characters/lynn/export'
@@ -26,7 +27,14 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
     mesh_path=model_path[:-4]+'.mesh'
     model=parse_model(read(mesh_path))
     library=parse_library(read(library_path),allow_empty_roots=True)
-    bind=verify_reference_skin(library,model)
+    clip_directory=Path(clip_directory) if clip_directory else OUT.parent/'idle'
+    metadata_path=clip_directory/(clip_name+'.json')
+    metadata=json.loads(metadata_path.read_text('utf8'))
+    pose_path=clip_directory/(clip_name+'.poses')
+    if file_sha256(pose_path)!=metadata['poses']['sha256']:raise ValueError('Sample changed')
+    values=np.frombuffer(pose_path.read_bytes(),dtype='<f4',offset=20).reshape(metadata['samples'],metadata['bone_count'],10)
+    frame0={m['name']:sampled_to_reference_layout(values[0,m['clip_index']]) for m in metadata['bone_mappings'][mesh_path]}
+    bind=verify_reference_skin(library,model,frame0)
     import copy
     materials=copy.deepcopy(selected['materials']); sources=[]; colour_adaptations=[]
     for material in materials:
@@ -36,7 +44,8 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
             material['params']['Tex0']=material['params']['TexBaseColor']
             colour_adaptations.append(dict(slot=material['slot'],source_field='TexBaseColor',
                 scope='Colour reference only; fur shells and native shader not reproduced'))
-    for logical in sorted({m['params']['Tex0'] for m in materials}):
+    no_shader=[m['slot'] for m in materials if not m['params']['Tex0']]
+    for logical in sorted({m['params']['Tex0'] for m in materials} - {''}):
         key=str(Path(logical).with_suffix('.ktx')).replace('\\','/')
         read(key)
         sources.append({**audit['sources'][key],'material_logical_path':logical})
@@ -55,24 +64,35 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
             policy='Linear source RGB encoded for glTF sRGB; alpha preserved'
         textures[t['provenance']['material_logical_path']]=dict(source_sha256=t['source_sha256'],
             gltf_png=str(png),gltf_png_sha256=digest(png.read_bytes()),colour_policy=policy)
-    base,doc,_=encode_reference(model,selected['bindings'],materials,textures)
+    reference=dict(zip(library['bone_names'],library['reference_pose']))
+    try:
+        base,doc,_=encode_reference(model,selected['bindings'],materials,textures)
+        joint_local_source='mesh bind locals (replaced by reference TRS below)'
+    except ModelError as error:
+        if 'unsupported shear' not in str(error):raise
+        binds=[np.asarray(matrix_rows(b['matrix_raw'])) for b in model['bones']]
+        for i,b in enumerate(model['bones']):
+            local=binds[i] if b['parent'] is None else np.linalg.inv(binds[b['parent']])@binds[i]
+            axes=local[:3,:3]/np.linalg.norm(local[:3,:3],axis=0)
+            if i in model['used_bones'] and np.max(np.abs(axes.T@axes-np.eye(3)))>1e-4:
+                raise ModelError('weighted bone bind carries shear that TRS skeletons cannot reproduce: '+b['name'])
+        locals_by_name={}
+        for b in model['bones']:
+            p=reference[b['name']];m=np.eye(4);m[:3,:3]=quaternion_matrix(p[3:7])*p[7:10];m[:3,3]=p[:3]
+            locals_by_name[b['name']]=m.tolist()
+        base,doc,_=encode_reference(model,selected['bindings'],materials,textures,locals_by_name)
+        joint_local_source='library reference TRS; only unweighted bones carry bind shear that glTF nodes cannot hold'
     doc,binary=split_glb(base)
     for node in doc['nodes']:
         if 'mesh' in node:node['name']=character_name+'Mesh'
     # Use mesh locals only as the encoder's temporary matrix input; replace the
     # unanimated defaults with full source TRS after animation channels are added.
     base=pack_glb(doc,binary)
-    clip_directory=Path(clip_directory) if clip_directory else OUT.parent/'idle'
-    metadata_path=clip_directory/(clip_name+'.json')
-    metadata=json.loads(metadata_path.read_text('utf8'))
-    pose_path=clip_directory/(clip_name+'.poses')
-    if file_sha256(pose_path)!=metadata['poses']['sha256']:raise ValueError('Sample changed')
-    clip=dict(name=clip_name,values=np.frombuffer(pose_path.read_bytes(),dtype='<f4',offset=20).reshape(metadata['samples'],metadata['bone_count'],10),
+    clip=dict(name=clip_name,values=values,
         frames=metadata['samples'],rate=metadata['sample_rate'],pose_sha256=file_sha256(pose_path),
         metadata_sha256=file_sha256(metadata_path),metadata=metadata,
         mapping=metadata['bone_mappings'][mesh_path])
     animated,reports,_=encode(base,[clip]);doc,binary=split_glb(animated)
-    reference=dict(zip(library['bone_names'],library['reference_pose']))
     for index in doc['skins'][0]['joints']:
         node=doc['nodes'][index];p=reference[node['name']]
         node.pop('matrix',None);node.update(translation=list(p[:3]),rotation=list(p[3:7]),scale=list(p[7:10]))
@@ -84,6 +104,7 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
     output=OUT/(character_name.lower()+'-idle.colour-reference.glb');output.write_bytes(animated)
     report=dict(output=str(output),sha256=digest(animated),bytes=len(animated),reference_skin=bind,
         animations=reports,verification=verified,textures=textures,colour_adaptations=colour_adaptations,
+        unresolved_no_shader_slots=no_shader,joint_local_source=joint_local_source,
         limits=['Unlit Tex0 reference only; original emission/toon/lighting not reproduced.',
             'Source LOD model chosen for inspection, not verified runtime selection.',
             'No browser or native engine playback verified.'])

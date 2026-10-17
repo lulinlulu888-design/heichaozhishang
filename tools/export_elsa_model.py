@@ -186,9 +186,10 @@ def pack_glb(doc, binary):
     return struct.pack('<IIIII', 0x46546c67, 2, 28+len(j)+len(b), len(j), 0x4e4f534a)+j+struct.pack('<II', len(b), 0x004e4942)+b
 
 
-def encode_reference(model, bindings, materials, textures):
+def encode_reference(model, bindings, materials, textures, joint_locals=None):
     """Embed only proven colour maps; never connect normal/mask images as colour."""
-    raw, _, bind = encode_glb(model, 'Elsa / ailisha_yangcheng / source bind pose', skin=True)
+    raw, _, bind = encode_glb(model, 'Elsa / ailisha_yangcheng / source bind pose', skin=True,
+                              joint_locals=joint_locals)
     doc, binary = split_glb(raw)
     doc.update(images=[], textures=[], materials=[],
                samplers=[{'magFilter': 9729, 'minFilter': 9987, 'wrapS': 10497, 'wrapT': 10497}],
@@ -196,6 +197,13 @@ def encode_reference(model, bindings, materials, textures):
     texture_indices = {}
     for material in materials:
         logical = material['params']['Tex0']
+        if not logical and material['technique'].get('TechName', '').endswith('::TNoShader'):
+            doc['materials'].append({'name': f"{material['slot']}: {material['name']} (unresolved TNoShader)",
+                'pbrMetallicRoughness': {'baseColorFactor': [0.5, 0.5, 0.5, 1.0], 'metallicFactor': 0, 'roughnessFactor': 1},
+                'extensions': {'KHR_materials_unlit': {}}, 'alphaMode': 'OPAQUE', 'doubleSided': True,
+                'extras': {'sourceMaterial': material, 'scope': 'Source has no texture and a TNoShader technique; '
+                    'whether the original draws this submesh is unverified. Grey marks it as unresolved.'}})
+            continue
         if logical not in texture_indices:
             record = textures[logical]
             blob = Path(record['gltf_png']).read_bytes()
