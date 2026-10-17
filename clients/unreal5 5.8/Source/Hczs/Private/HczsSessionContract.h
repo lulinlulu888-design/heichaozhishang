@@ -41,7 +41,8 @@ namespace HczsSessionContract
     int64 PartyDamagePreview(double Attack, int32 Factor, int32 Stacks, int32 PercentPerStack);
     /** calcBlock with neutral inputs: trunc(attack * factor / 100.0). */
     int64 PartyShieldPreview(double Attack, int32 Factor);
-    FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int32 Stacks, int32 PercentPerStack, FString* FirstDamage = nullptr);
+    FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int32 Stacks, int32 PercentPerStack, FString* FirstDamage = nullptr,
+        FString* FirstShield = nullptr);
     bool IsUuid(const FString& Id);
     bool IsId(const FString& Id, int32 MaximumLength = 128);
     bool ParseProfile(const TSharedPtr<FJsonObject>& Object, FHczsLocalProfile& Out);

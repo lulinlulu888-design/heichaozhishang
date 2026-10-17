@@ -65,6 +65,7 @@ struct HCZS_API FHczsHandCard
     UPROPERTY(BlueprintReadOnly) FString FirstDamage;
     /** Sum of all opponent damage amounts; the multi-hit ultimate's RPG_DEFAULT_FORMULA total. */
     UPROPERTY(BlueprintReadOnly) FString TotalDamage;
+    UPROPERTY(BlueprintReadOnly) FString FirstShield;
     /** Party battles only: the deck entry's owner. Empty for single-character battles. */
     UPROPERTY(BlueprintReadOnly) FString OwnerId;
     UPROPERTY(BlueprintReadOnly) FString OwnerName;

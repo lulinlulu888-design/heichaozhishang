@@ -32,6 +32,9 @@ PINS = {
     'analysis/battle-ui/intention/report.json': 'f5d616c2d8bd2fbaeeb85ec93aabd0415b160a5625e2df20a089d289257c0baa',
     'analysis/battle-ui/card-face/report.json': '92dbbb96fef481c9632cc0c09ff8294fa00feaefc7fafc810b2f17849dd85701',
     'analysis/battle-ui/ultimate-card/report.json': 'cc0fc2309c72bac8fab779f93b32e3134da3df5494a655e05fabc7dcf332170c',
+    'analysis/battle-ui/health/player-3-portrait/report.json': '59efd25c662bac647bd0902aabebb4b4a3199f3ce45129dc9d4f355603b5a19a',
+    'analysis/battle-ui/health/monster-2013-portrait/report.json': 'fe0886c83e63480419a0a46ac2b1b5c651a34ffc0daf8008cb85cb3877ff36de',
+    'analysis/battle-ui/party-cards/report.json': 'f1c64506b776595e51b9bba23e6bc55ca4078b9f7f1eabd5935b43d22cf3322c',
 }
 
 
@@ -136,6 +139,14 @@ def main():
     for cid, row in ultimate['cards'].items():
         card_faces[cid] = {'rarity': row['rarity'], 'cardType': row['cardType'], 'description': row['description'],
                            'frame': row['frame'], 'descriptionValue': row['descriptionValue']}
+    party = sources['analysis/battle-ui/party-cards/report.json']
+    if party['apk_sha256'] != APK_SHA or set(party['cards']) != {'140002', '140004', '240008', '440302', '440303'}:
+        raise ValueError('Party card face provenance changed')
+    for row in party['frames']:
+        sprite(row['name'], row['png'], row['png_sha256'], 'analysis/battle-ui/party-cards/report.json', row['logical'])
+    for cid, row in party['cards'].items():
+        card_faces[cid] = {key: row[key] for key in ('rarity', 'cardType', 'description', 'frame', 'typeBar', 'typeIcon',
+                                                    'descriptionValue')}
     frames = sources['analysis/battle-ui/card-frames/provenance.json']
     for row in frames['frames']:
         if row['key'] in ('card/bg_atk_s.png', 'card/cost_s1.png'):
@@ -149,7 +160,9 @@ def main():
         sprite('card-' + str(row['card_id']), row['sprite'], row['sprite_sha256'],
                'analysis/card-art/tile-probe/manifest.json', row['mapping']['key'])
     for actor, relative in [('player-1', 'analysis/battle-ui/health/player-portrait/report.json'),
-                            ('monster-991', 'analysis/battle-ui/health/monster-portrait/report.json')]:
+                            ('monster-991', 'analysis/battle-ui/health/monster-portrait/report.json'),
+                            ('player-3', 'analysis/battle-ui/health/player-3-portrait/report.json'),
+                            ('monster-2013', 'analysis/battle-ui/health/monster-2013-portrait/report.json')]:
         row = sources[relative]
         if row['apk_sha256'] != APK_SHA:
             raise ValueError('Portrait source APK changed')
@@ -221,7 +234,7 @@ def main():
                             'currentlyPainted': True}
                            for row in sprites if row['id'] in icon_uses],
                  'excludedAssets': [{**row, 'category': 'card-illustration' if row['id'].startswith('card-') and row['id'] not in ('card-frame-attack', 'card-cost')
-                                     else 'character-portrait' if row['id'] in ('player-1', 'monster-991')
+                                     else 'character-portrait' if row['id'] in ('player-1', 'monster-991', 'player-3', 'monster-2013')
                                      else 'title-art' if row['id'].startswith('victory-') else 'hud-bar-or-frame',
                                      'aiVariantAllowed': False}
                                     for row in sprites if row['id'] not in icon_uses]}

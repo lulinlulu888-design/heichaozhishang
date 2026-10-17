@@ -505,12 +505,19 @@ void UHczsSessionWidget::NativeConstruct()
                     const auto Object = Pair.Value->AsObject();
                     FHczsCardFace Face; double Type = -1;
                     if (!Object || !Object->TryGetNumberField(TEXT("rarity"), Face.Rarity) ||
-                        !Object->TryGetNumberField(TEXT("cardType"), Type) || (Type != 0 && Type != 7) ||
+                        !Object->TryGetNumberField(TEXT("cardType"), Type) || (Type != 0 && Type != 1 && Type != 2 && Type != 6 && Type != 7) ||
                         !Object->TryGetStringField(TEXT("description"), Face.Description)) continue;
-                    FString Value;
                     if (Type == 7 && (!Object->TryGetStringField(TEXT("frame"), Face.Frame) ||
-                        !Object->TryGetStringField(TEXT("descriptionValue"), Value) || Value != TEXT("total-damage"))) continue;
-                    Face.bTotalDamage = Type == 7;
+                        !Object->TryGetStringField(TEXT("descriptionValue"), Face.DescriptionValue) ||
+                        Face.DescriptionValue != TEXT("total-damage"))) continue;
+                    // card_img_table rows 1/2/6 carry their own small frame, type bar and type icon.
+                    if ((Type == 1 || Type == 2 || Type == 6) && (!Object->TryGetStringField(TEXT("frame"), Face.Frame) ||
+                        !Object->TryGetStringField(TEXT("typeBar"), Face.TypeBar) || !Object->TryGetStringField(TEXT("typeIcon"), Face.TypeIcon) ||
+                        !Object->TryGetStringField(TEXT("descriptionValue"), Face.DescriptionValue) ||
+                        (Face.DescriptionValue != TEXT("first-damage") && Face.DescriptionValue != TEXT("first-shield") &&
+                         Face.DescriptionValue != TEXT("none")))) continue;
+                    // #R...#l marks a red keyword in the source rich text; the colour run is not rendered.
+                    Face.Description.ReplaceInline(TEXT("#R"), TEXT("")); Face.Description.ReplaceInline(TEXT("#l"), TEXT(""));
                     CardFaces.Add(FString(*Pair.Key), MoveTemp(Face));
                 }
         }
@@ -1035,7 +1042,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             for (const auto& Node : HudInRest.Nodes)
                 if (Node.Name == TEXT("HPArea_right_1"))
                     EnemySlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
-            Heads.Health(Battle.EnemyName, Battle.EnemyId == TEXT("991") ? TEXT("monster-991") : TEXT(""),
+            const FString EnemyPortrait = TEXT("monster-") + Battle.EnemyId;
+            Heads.Health(Battle.EnemyName, Brushes.Contains(EnemyPortrait) ? EnemyPortrait : FString(),
                 Battle.EnemyHp, Battle.EnemyMaxHp, Battle.EnemyShield, EnemySlot, true);
             if (Battle.bIsParty && Battle.EnemyAttackBuff > 0)
                 Heads.Text(FString::Printf(TEXT("攻击强化 %d层"), Battle.EnemyAttackBuff), EnemySlot.X - 77, EnemySlot.Y + 110, 154, 20, 15, Warm, true);
@@ -1285,8 +1293,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     // at (-46, 62) 48x94 at 0.6 holds img_type at (24, 52). Card-centre Cocos coordinates.
                     C.Image(TEXT("card-rarity-bg"), 33, 73, 60, 60, Tint, false, true);
                     C.Image(FString::Printf(TEXT("card-rarity-%d"), Face->Rarity), 33, 73, 60, 60, Tint, false, true);
-                    C.Image(TEXT("card-type-bar-attack"), 2.6f, 21, 28.8f, 56.4f, Tint, false, true);
-                    C.Image(TEXT("card-type-icon-attack"), 5, 34.2f, 24, 24, Tint, false, true);
+                    C.Image(Face->TypeBar, 2.6f, 21, 28.8f, 56.4f, Tint, false, true);
+                    C.Image(Face->TypeIcon, 5, 34.2f, 24, 24, Tint, false, true);
                 }
                 C.Image(TEXT("card-cost"), -5, -9, 32, 38, Tint);
                 C.Text(FString::FromInt(Card.Cost), -5, -7, 32, 32, 23, Light, true);
@@ -1294,12 +1302,20 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 // (0,-50), 102x24 at 12px, relative to the 126x166 card center.
                 C.Text(Card.Name, 7, 115, 112, 16, 16, FLinearColor(67 / 255.0f, 53 / 255.0f, 85 / 255.0f, 1), true, false);
                 const FLinearColor DescrColor(54 / 255.0f, 52 / 255.0f, 85 / 255.0f, 1);
-                const FString& DescriptionValue = Face && Face->bTotalDamage ? Card.TotalDamage : Card.FirstDamage;
-                if (Face && !DescriptionValue.IsEmpty())
+                const bool bNoValue = Face && Face->DescriptionValue == TEXT("none");
+                const FString& DescriptionValue = !Face ? Card.FirstDamage
+                    : Face->DescriptionValue == TEXT("total-damage") ? Card.TotalDamage
+                    : Face->DescriptionValue == TEXT("first-shield") ? Card.FirstShield : Card.FirstDamage;
+                if (Face && (bNoValue || !DescriptionValue.IsEmpty()))
                 {
-                    const TArray<FString> Lines = C.WrapLines(Face->Description.Replace(TEXT("%s"), *DescriptionValue), 102, 12);
+                    const FString Description = bNoValue ? Face->Description : Face->Description.Replace(TEXT("%s"), *DescriptionValue);
+                    // The source Descr overflow mode is unrecorded; shrink (reconstruction) so the value stays inside 102x24.
+                    int32 Pixels = 12;
+                    TArray<FString> Lines = C.WrapLines(Description, 102, Pixels);
+                    while (Lines.Num() > 2 && Pixels > 9) Lines = C.WrapLines(Description, 102, --Pixels);
+                    const float Top = 133 + (12 - Pixels);
                     for (int32 Line = 0; Line < FMath::Min(2, Lines.Num()); ++Line)
-                        C.Text(Lines[Line], 12, 133 + Line * 12, 102, 12, 12, DescrColor, true, false);
+                        C.Text(Lines[Line], 12, Top + Line * Pixels, 102, Pixels, Pixels, DescrColor, true, false);
                 }
                 else C.Wrapped(Card.EffectsText.Replace(TEXT(" · "), TEXT("\n")), 12, 133, 102, 12, 2, DescrColor, false, 0);
                 P.Layer = C.Layer;
@@ -2224,6 +2240,7 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
             Row->SetNumberField(TEXT("cost"), Card.Cost); Row->SetStringField(TEXT("ownerId"), Card.OwnerId);
             Row->SetStringField(TEXT("effects"), Card.EffectsText); Row->SetStringField(TEXT("firstDamage"), Card.FirstDamage);
             Row->SetStringField(TEXT("totalDamage"), Card.TotalDamage);
+            Row->SetStringField(TEXT("firstShield"), Card.FirstShield);
             HandRows.Add(MakeShared<FJsonValueObject>(Row));
         }
         Root->SetArrayField(TEXT("partyMembers"), Members);

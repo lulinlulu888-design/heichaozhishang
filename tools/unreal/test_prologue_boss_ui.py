@@ -25,6 +25,24 @@ BOSS = 'prologue-boss-1703'
 FUTURE_ACTIONS = TOOLS.parents[1] / 'analysis/prologue-boss/future-actions/report.json'
 
 
+PARTY_CARD_TYPES = {'140002': 'skill', '440302': 'skill', '440303': 'ability', '140004': 'def', '240008': 'def'}
+
+
+def validate_party_faces(sprites, texts, hand_cards, shields):
+    guard.check({'player-1', 'player-3', 'monster-2013'} <= sprites, 'Party/boss portraits were not painted')
+    seen = sorted(set(PARTY_CARD_TYPES) & hand_cards)
+    guard.check(seen, 'No Future card reached the hand')
+    for cid in seen:
+        kind = PARTY_CARD_TYPES[cid]
+        required = {'card-' + cid, 'card-frame-' + kind, 'card-type-bar-' + kind, 'card-type-icon-' + kind}
+        guard.check(required <= sprites, 'Card %s face parts not painted: %s' % (cid, sorted(required - sprites)))
+    shield_lines = sorted(t for t in texts if '获得' in t and any(value in t for value in shields))
+    guard.check(not {'140004', '240008', '440302'} & hand_cards or (shields and all(any(v in t for t in shield_lines) for v in shields)),
+                'Shield card description lacks its value: %s in %s' % (sorted(shields), sorted(t for t in texts if '获得' in t or '护' in t)))
+    guard.check(not any('#R' in t or '#l' in t for t in texts), 'Rich-text markup leaked into painted text')
+    return dict(cards=seen, shieldLines=shield_lines[:4])
+
+
 def validate_ally_actions(log, steps, card_clips):
     rows = [line.split('side=ally member=1 clip=', 1)[1].split(' ', 1)[0]
             for line in log.splitlines() if 'HCZS source animation playing: side=ally member=1 clip=' in line]
@@ -219,6 +237,13 @@ def run():
                 energy = int(battle.get_editor_property('energy'))
                 hand = [(c.get_editor_property('instance_id'), c.get_editor_property('card_id'), int(c.get_editor_property('cost')),
                          c.get_editor_property('owner_index')) for c in battle.get_editor_property('hand')]
+                widget = session_widget(game)
+                if widget:
+                    ui = json.loads(widget.development_describe_ui())
+                    state.setdefault('sprites', set()).update(ui.get('actualPaintedSprites', []))
+                    state.setdefault('texts', set()).update(ui.get('renderedTexts', []))
+                    state.setdefault('handCards', set()).update(card[1] for card in hand)
+                    state.setdefault('shields', set()).update(row['firstShield'] for row in ui.get('hand', []) if row.get('firstShield'))
                 choice = None if lose else next((card for card in hand if card[2] <= energy), None)
                 guard.check(state['plays'] + state['ends'] < 80, 'Boss battle did not finish within bounds')
                 if choice:
@@ -288,6 +313,9 @@ def run():
                 report['futureActions'] = validate_ally_actions(log, report['steps'], card_clips)
                 guard.check(report['futureActions']['entranceShow'], 'Future SHOW did not start with the Elsa entrance')
                 passed('future-source-battle-actions', **report['futureActions'])
+                report['partyFaces'] = validate_party_faces(state.get('sprites', set()), state.get('texts', set()),
+                                                            state.get('handCards', set()), state.get('shields', set()))
+                passed('party-portraits-and-card-faces-painted', **report['partyFaces'])
                 state['shot'] = path.parent / ('prologue-boss-native-' + str(time.time_ns()) + '.png')
                 u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="' + state['shot'].as_posix() + '" -nosuffix')
                 stage('capture-wait')

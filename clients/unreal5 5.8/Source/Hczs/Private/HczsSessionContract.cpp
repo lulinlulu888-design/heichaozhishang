@@ -449,7 +449,7 @@ int64 PartyShieldPreview(double Attack, int32 Factor)
     const double Value = Attack * static_cast<double>(Factor) / 100.0;
     return Value <= 0.0 ? 0 : static_cast<int64>(FMath::FloorToDouble(Value));
 }
-FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int32 Stacks, int32 PercentPerStack, FString* FirstDamage)
+FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int32 Stacks, int32 PercentPerStack, FString* FirstDamage, FString* FirstShield)
 {
     TArray<FString> Lines;
     for (const FPartyEffect& E : Effects)
@@ -462,7 +462,11 @@ FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int
             else Lines.Add(E.Times > 1 ? FString::Printf(TEXT("首位伤害 %s ×%d"), *Amount, E.Times) : TEXT("首位伤害 ") + Amount);
         }
         else if (E.Type == TEXT("shield"))
-            Lines.Add(FString::Printf(TEXT("%s护盾 %lld"), E.Target == TEXT("party") ? TEXT("全队") : TEXT("自身"), PartyShieldPreview(Attack, E.Factor)));
+        {
+            const FString Amount = FString::Printf(TEXT("%lld"), PartyShieldPreview(Attack, E.Factor));
+            if (FirstShield && FirstShield->IsEmpty()) *FirstShield = Amount;
+            Lines.Add(FString::Printf(TEXT("%s护盾 %s"), E.Target == TEXT("party") ? TEXT("全队") : TEXT("自身"), *Amount));
+        }
         else if (E.Type == TEXT("attackBuff"))
             Lines.Add(FString::Printf(TEXT("%s攻击强化 +%d层"), E.Target == TEXT("party") ? TEXT("全队") : TEXT("自身"), E.Stacks));
         else if (E.Type == TEXT("draw")) Lines.Add(FString::Printf(TEXT("抽牌 %d"), E.Count));
@@ -780,7 +784,7 @@ namespace
                     FHczsHandCard Card = Scenario.Cards[*CardId]; Card.InstanceId = Instance;
                     Card.OwnerId = Owner.Id; Card.OwnerName = Owner.Name; Card.OwnerIndex = OwnerIndex;
                     Card.EffectsText = PartyEffectsText(Scenario.PartyCardEffects[*CardId], Owner.Attack.Approximate, Owner.AttackBuff,
-                        Scenario.AttackPercentPerStack, &Card.FirstDamage);
+                        Scenario.AttackPercentPerStack, &Card.FirstDamage, &Card.FirstShield);
                     B.Hand.Add(MoveTemp(Card));
                 }
             }

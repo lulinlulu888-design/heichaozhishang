@@ -21,21 +21,24 @@ from trace_first_encounter import literal_table
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main(actor='monster'):
+def main(actor='monster', entity=None):
     if actor == 'breakdown':
         table_index, entity_id, field, stem, asset = 391, 66051, 'BUFF_ICON', 'buff-66051', 'breakdown-icon'
     elif actor == 'player':
-        table_index, entity_id, field, stem, asset = 8185, 1, 'BattleIcon', 'player-1', 'player-head'
+        table_index, entity_id, field, stem, asset = 8185, entity or 1, 'BattleIcon', f'player-{entity or 1}', 'player-head'
     else:
-        table_index, entity_id, field, stem, asset = 2363, 991, 'MonsterHead', 'monster-991', 'monster-head'
-    OUT = ROOT / f'analysis/battle-ui/health/{actor}-portrait'
+        table_index, entity_id, field, stem, asset = 2363, entity or 991, 'MonsterHead', f'monster-{entity or 991}', 'monster-head'
+    # The first-encounter pair keeps its original directories; other IDs get their own.
+    OUT = ROOT / (f'analysis/battle-ui/health/{actor}-portrait' if entity in (None, 1, 991)
+                  else f'analysis/battle-ui/health/{stem}-portrait')
     table = literal_table(table_index, {entity_id}) if actor == 'breakdown' else export_table(table_index, [entity_id])
     logical = table['rows'][0]['fields'][field]
     report = recover_virtual_sprite(logical, OUT, stem, provenance=dict(
         actor=actor, source_table=table, source_field=field))
-    destination = ROOT/f'legacy/cocos-poc/assets/resources/recovered/battle-ui/{asset}.png'
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(ROOT/report['output'], destination)
+    if entity in (None, 1, 991):
+        destination = ROOT/f'legacy/cocos-poc/assets/resources/recovered/battle-ui/{asset}.png'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT/report['output'], destination)
     print(json.dumps(dict(output=report['output'], size=report['size'], tiles=len(report['tiles']),
                           scanned=report['scanned_metadata_candidates'])))
 
@@ -144,4 +147,6 @@ def recover_virtual_sprite(logical, output_directory, stem='sprite', provenance=
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--actor', choices=('monster', 'player', 'breakdown'), default='monster')
-    main(parser.parse_args().actor)
+    parser.add_argument('--id', type=int, help='character/monster table id (default 1 / 991)')
+    args = parser.parse_args()
+    main(args.actor, args.id)
