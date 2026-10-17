@@ -154,6 +154,11 @@ private:
     FHczsCardVisualGate UltimateIntent;
     bool bUltimateIntentAborted = false;
     void UltimateFinished(const FString& Id, bool bSuccess, const FString& Error);
+    void UltimateCue(const FString& Id, const FString& Cue, float Position);
+    void ReleaseUltimateReactions(const FString& Cue);
+    /** Reconstruction: each attack-prefix cue advances one confirmed enemy damage (SkillUseAction.casterAnimEvent -> playNextAction). */
+    int32 UltimateAttackCues = 0, UltimateDamageCount = -1, UltimateReactionsReleased = 0;
+    TArray<FString> UltimateCueLog;
     UPROPERTY() TObjectPtr<USkeletalMeshComponent> PlayerComponent;
     UPROPERTY() TObjectPtr<USkeletalMeshComponent> EnemyComponent;
     UPROPERTY() TObjectPtr<AActor> WeaponActor;

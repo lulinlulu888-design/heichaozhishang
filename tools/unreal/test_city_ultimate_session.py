@@ -206,10 +206,24 @@ def run():
                 if state.get('startedSequence') and state.get('sawPause') and state.get('receipt') and not busy and not u.GameplayStatics.is_game_paused(world):
                     battle, cards = hand(game)
                     guard.check(all(card[1] != '410104' for card in cards), 'Played ultimate remained in hand')
-                    guard.check('nine attack cues stay unmapped' in log, 'Receipt log dropped the mapping boundary')
+                    tail = log[log.index('HCZS ultimate battle sequence started:'):]
+                    steps = [line for line in tail.splitlines() if 'HCZS ultimate reaction step:' in line]
+                    summary = [line for line in tail.splitlines() if 'HCZS ultimate reaction steps complete:' in line]
+                    if not summary:
+                        state.setdefault('summaryWait', time.monotonic())
+                        guard.check(time.monotonic() - state['summaryWait'] < 10, 'Ultimate end cue summary was not logged')
+                        return
+                    guard.check(len(steps) == 8 and all(f'damage={i + 1}/8' in line for i, line in enumerate(steps)),
+                                'Attack cues did not release the eight confirmed damages in order')
+                    guard.check(len(summary) == 1 and 'attackCues=9 damages=8 released=8' in summary[0]
+                                and tail.count('HCZS ultimate attack cue without damage:') == 1,
+                                'Ultimate cue/damage stepping summary is wrong')
+                    guard.check('side=enemy clip=hit_1' not in tail, 'Enemy hits were still serialized after the sequence')
                     report.update(playsBeforeUltimate=state['plays'], ultimateInstance=state['ultimate'],
-                                  videoPauseObserved=True, damageEvents=8, map=level)
-                    passed('formal-city-battle-starts-source-ultimate-and-keeps-eight-damages-unmapped')
+                                  videoPauseObserved=True, damageEvents=8, map=level,
+                                  reactionSteps=[line.split('HCZS ultimate reaction step: ', 1)[1] for line in steps],
+                                  stepSummary=summary[0].split('complete: ', 1)[1])
+                    passed('formal-city-battle-ultimate-steps-eight-damages-on-attack-cues')
                     finish()
         except Exception:
             finish(traceback.format_exc())

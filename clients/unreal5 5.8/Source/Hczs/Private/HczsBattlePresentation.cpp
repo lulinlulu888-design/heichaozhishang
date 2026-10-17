@@ -102,6 +102,7 @@ void AHczsBattlePresentation::BeginPlay()
 {
     Super::BeginPlay();
     UltimateSequence->OnFinishedNative.AddUObject(this, &AHczsBattlePresentation::UltimateFinished);
+    UltimateSequence->OnCueNative.AddUObject(this, &AHczsBattlePresentation::UltimateCue);
     EnsureSceneReady();
     Session = Cast<UHczsGameInstance>(GetGameInstance());
     if (Session)
@@ -137,6 +138,7 @@ void AHczsBattlePresentation::IntentDispatched(const FHczsCardIntentVisual& Inte
         if (!UltimateIntent.Begin(Session->CurrentBattle, Intent, 1)) return;
         DesiredSnapshot = Session->CurrentBattle;
         bUltimatePlaying = true; bUltimateIntentAborted = false; SetBusy(true);
+        UltimateAttackCues = 0; UltimateDamageCount = -1; UltimateReactionsReleased = 0; UltimateCueLog.Reset();
         if (!UltimateSequence->PlayElsa(PlayerComponent, Intent.RequestId))
         { bUltimatePlaying = false; bUltimateIntentAborted = true; }
         else UE_LOG(LogTemp, Display, TEXT("HCZS ultimate battle sequence started: request=%s encounter=%s atUnixMs=%lld"),
@@ -653,11 +655,11 @@ void AHczsBattlePresentation::ApplySnapshot(const FHczsBattleView& View, const F
         int32 DamageEvents = 0;
         for (const auto& Event : Receipt.Events)
             if (Event.Type == TEXT("DamageApplied") && Event.Target == TEXT("enemy")) ++DamageEvents;
-        UE_LOG(LogTemp, Display, TEXT("HCZS ultimate receipt during source sequence: damageEvents=%d; nine attack cues stay unmapped"), DamageEvents);
+        UE_LOG(LogTemp, Display, TEXT("HCZS ultimate receipt during source sequence: damageEvents=%d; attack cues step them in order (reconstruction)"), DamageEvents);
         if (bUltimateIntentAborted) { CancelPresentation(); ApplyStablePose(View); return; }
-        // Reactions still use the confirmed receipt queue. Do not invent an
-        // eight-damage/nine-cue correspondence until that mapping is recovered.
         BuildQueue(View, Receipt.Events); QueueIndex = 0;
+        UltimateDamageCount = DamageEvents;
+        if (bUltimatePlaying) ReleaseUltimateReactions(TEXT("receipt"));
         SetBusy(bUltimatePlaying || !Queue.IsEmpty());
         if (!bUltimatePlaying) FinishVisualsIfIdle();
         return;
@@ -708,6 +710,14 @@ void AHczsBattlePresentation::QueueClip(bool bEnemy, const FString& Clip, bool b
 void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArray<FHczsBattleVisualEvent>& Events)
 {
     Queue.Reset();
+    const bool bUltimateStepped = SceneAssets->SupportedEncounterId == TEXT("city-preview-10405") &&
+        Events.ContainsByPredicate([](const FHczsBattleVisualEvent& E) { return E.Type == TEXT("CardPlayed") && E.CardId == TEXT("410104"); });
+    if (bUltimateStepped && !UltimateIntent.bConfirmed)
+    {
+        UltimateAttackCues = 0; UltimateReactionsReleased = 0; UltimateCueLog.Reset();
+        UltimateDamageCount = Events.FilterByPredicate([](const FHczsBattleVisualEvent& E)
+            { return E.Type == TEXT("DamageApplied") && E.Target == TEXT("enemy"); }).Num();
+    }
     for (const auto& Event : Events)
     {
         if (Event.Type == TEXT("CardPlayed"))
@@ -731,7 +741,7 @@ void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArr
         }
         else if (Event.Type == TEXT("DamageApplied"))
         {
-            if (LocalCard.bConfirmed && Event.Target == TEXT("enemy")) continue;
+            if ((LocalCard.bConfirmed || bUltimateStepped) && Event.Target == TEXT("enemy")) continue;
             if (Event.Target == TEXT("player")) QueueClip(false, TEXT("hit_2"));
             else if (Event.Target == TEXT("enemy")) QueueClip(true, TEXT("hit_1"));
         }
@@ -832,6 +842,50 @@ void AHczsBattlePresentation::UltimateFinished(const FString& Id, bool bSuccess,
     { CancelPresentation(); ApplyStablePose(DesiredSnapshot); return; }
     ++QueueIndex;
     PlayNextStep();
+}
+
+void AHczsBattlePresentation::UltimateCue(const FString& Id, const FString& Cue, float Position)
+{
+    if (!bUltimatePlaying) return;
+    if (Cue.StartsWith(TEXT("attack")))
+    {
+        ++UltimateAttackCues;
+        ReleaseUltimateReactions(Cue);
+    }
+    else if (Cue == TEXT("end"))
+    {
+        UE_LOG(LogTemp, Display, TEXT("HCZS ultimate reaction steps complete: attackCues=%d damages=%d released=%d steps=%s"),
+            UltimateAttackCues, UltimateDamageCount, UltimateReactionsReleased, *FString::Join(UltimateCueLog, TEXT(",")));
+    }
+}
+
+void AHczsBattlePresentation::ReleaseUltimateReactions(const FString& Cue)
+{
+    if (UltimateDamageCount < 0) return;
+    const int32 Target = FMath::Min(UltimateAttackCues, UltimateDamageCount);
+    if (Target <= UltimateReactionsReleased)
+    {
+        if (Cue.StartsWith(TEXT("attack")) && UltimateAttackCues > UltimateDamageCount)
+        {
+            UltimateCueLog.Add(Cue + TEXT("=none"));
+            UE_LOG(LogTemp, Display, TEXT("HCZS ultimate attack cue without damage: cue=%s attackCues=%d damages=%d"), *Cue, UltimateAttackCues, UltimateDamageCount);
+        }
+        return;
+    }
+    while (UltimateReactionsReleased < Target)
+    {
+        ++UltimateReactionsReleased;
+        UltimateCueLog.Add(FString::Printf(TEXT("%s=%d"), *Cue, UltimateReactionsReleased));
+    }
+    UAnimSequence* Hit = FindAnimation(true, TEXT("hit_1"));
+    if (Hit && EnemyComponent && !bEnemyDeathPresented)
+    {
+        SetSideVisible(true, true);
+        EnemyComponent->PlayAnimation(Hit, false);
+        EnemyComponent->SetPosition(0, false);
+    }
+    UE_LOG(LogTemp, Display, TEXT("HCZS ultimate reaction step: cue=%s damage=%d/%d clip=%s"),
+        *Cue, UltimateReactionsReleased, UltimateDamageCount, Hit ? TEXT("hit_1") : TEXT("none"));
 }
 
 void AHczsBattlePresentation::SetSideVisible(bool bEnemy, bool bVisible)
