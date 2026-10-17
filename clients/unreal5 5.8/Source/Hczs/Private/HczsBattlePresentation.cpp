@@ -768,6 +768,7 @@ void AHczsBattlePresentation::QueueClip(bool bEnemy, const FString& Clip, bool b
 void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArray<FHczsBattleVisualEvent>& Events)
 {
     Queue.Reset();
+    bool bPlayerDeathQueued = false, bAllyDeathQueued = false;
     const bool bUltimateStepped = SceneAssets->SupportedEncounterId == TEXT("city-preview-10405") &&
         Events.ContainsByPredicate([](const FHczsBattleVisualEvent& E) { return E.Type == TEXT("CardPlayed") && E.CardId == TEXT("410104"); });
     if (bUltimateStepped && !UltimateIntent.bConfirmed)
@@ -806,14 +807,20 @@ void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArr
             else if (Event.Target == TEXT("enemy")) QueueClip(true, TEXT("hit_1"));
             else if (Event.MemberIndex >= 0 && Event.MemberIndex == SceneAssets->AllyMemberIndex) QueueAllyClip(TEXT("hit_1"));
         }
+        else if (Event.Type == TEXT("MemberDefeated"))
+        {
+            if (Event.MemberIndex == 0 && !bPlayerDeathPresented && !bPlayerDeathQueued)
+            { QueueClip(false, TEXT("death"), true); bPlayerDeathQueued = true; }
+            else if (Event.MemberIndex == SceneAssets->AllyMemberIndex && !bAllyDeathPresented && !bAllyDeathQueued)
+            { QueueAllyClip(TEXT("death"), true); bAllyDeathQueued = true; }
+        }
     }
     // Confirmed local card reactions are released separately at each clip's
     // authored attack event, not serialized by the hit animation's duration.
-    if (IsDead(View.PlayerHp)) QueueClip(false, TEXT("death"), true);
-    const bool bAllyNewlyDead = IsAllyDead(View) && !bAllyDeathPresented;
-    if (bAllyNewlyDead) QueueAllyClip(TEXT("death"), true);
-    if (IsDead(View.EnemyHp)) QueueClip(true, TEXT("death"), true);
-    bPlayerDeathPresented = false; bEnemyDeathPresented = false;
+    // A party battle continues after a member falls; each death plays once.
+    if (IsDead(View.PlayerHp) && !bPlayerDeathPresented && !bPlayerDeathQueued) QueueClip(false, TEXT("death"), true);
+    if (IsAllyDead(View) && !bAllyDeathPresented && !bAllyDeathQueued) QueueAllyClip(TEXT("death"), true);
+    if (IsDead(View.EnemyHp) && !bEnemyDeathPresented) QueueClip(true, TEXT("death"), true);
 }
 
 void AHczsBattlePresentation::PlayNextStep()

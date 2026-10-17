@@ -59,11 +59,12 @@ def run():
     log_arg = guard.argument(command, 'abslog') or guard.argument(command, 'ABSLOG')
     guard.check(log_arg and Path(log_arg).resolve().parent == path.parent, 'Pass -abslog inside this run directory')
     native_log = Path(log_arg).resolve()
+    lose = guard.flag(command, 'HczsPrologueBossLose')
     editor = u.get_editor_subsystem(u.UnrealEditorSubsystem)
     guard.check(not editor.get_game_world(), 'Use a dedicated Editor before PIE')
     output = path.parent / ('prologue-boss-ui-' + str(time.time_ns()) + '.json')
     report = dict(schemaVersion=1, mode='native-prologue-boss-1703', passed=False, checks=[], steps=[],
-                  startedAtUnixMs=int(time.time() * 1000), rules='prologue-party-reconstruction-v1')
+                  startedAtUnixMs=int(time.time() * 1000), rules='prologue-party-reconstruction-v1', lose=lose)
 
     def http(route, body=None, control=False):
         guard.check(route.startswith('/api/rebuild/v1/') or control and route == '/__hczs_test_control/identity', 'Unexpected HTTP route')
@@ -218,7 +219,7 @@ def run():
                 energy = int(battle.get_editor_property('energy'))
                 hand = [(c.get_editor_property('instance_id'), c.get_editor_property('card_id'), int(c.get_editor_property('cost')),
                          c.get_editor_property('owner_index')) for c in battle.get_editor_property('hand')]
-                choice = next((card for card in hand if card[2] <= energy), None)
+                choice = None if lose else next((card for card in hand if card[2] <= energy), None)
                 guard.check(state['plays'] + state['ends'] < 80, 'Boss battle did not finish within bounds')
                 if choice:
                     if choice[3] == 1 and 'allyShotAt' not in state:
@@ -236,10 +237,28 @@ def run():
                 status = battle.get_editor_property('status')
                 if status == 'won':
                     stage('victory')
+                elif status == 'lost' and lose:
+                    stage('defeat')
                 elif status == 'lost':
                     raise RuntimeError('Party lost the boss battle')
                 elif game.can_submit_battle_intent():
                     stage('battle')
+            elif current == 'defeat' and not busy and time.monotonic() - state['entered'] > 1:
+                log = native_log.read_text('utf8', errors='replace')
+                rows = [line.split('clip=', 1)[1].split(' ', 1)[0] + '@' + line.split('side=', 1)[1].split(' ', 1)[0]
+                        for line in log.splitlines() if 'HCZS source animation playing: side=' in line]
+                hits, ally_deaths, elsa_deaths = rows.count('hit_1@ally'), rows.count('death@ally'), rows.count('death@player')
+                guard.check(hits > 0 and ally_deaths == 1 and elsa_deaths == 1,
+                            'Defeat did not present Future hit/death once each: hits=%d allyDeaths=%d elsaDeaths=%d' % (hits, ally_deaths, elsa_deaths))
+                guard.check(rows.index('death@player') < rows.index('hit_1@ally') < rows.index('death@ally'),
+                            'Future was hit before Elsa fell or died before being hit')
+                campaign = http('/api/rebuild/v1/profiles/' + report['preparation']['profileId'] + '/mainline')['campaign']
+                guard.check([row.get('challengeId') for row in campaign.get('completed', [])] == [3997], 'A defeat recorded 3998')
+                report['defeat'] = dict(allyHits=hits, allyDeaths=ally_deaths, elsaDeaths=elsa_deaths, endTurns=state['ends'])
+                passed('future-hit-and-death-after-elsa-falls', **report['defeat'])
+                state['shot'] = path.parent / ('prologue-boss-defeat-' + str(time.time_ns()) + '.png')
+                u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="' + state['shot'].as_posix() + '" -nosuffix')
+                stage('capture-wait')
             elif current == 'victory' and not busy:
                 widget = session_widget(game)
                 if not widget:
