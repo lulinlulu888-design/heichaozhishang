@@ -178,7 +178,8 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     const FHczsHallDrawItem* NoticeItem = Items.FindByPredicate([](const FHczsHallDrawItem& Item) { return Item.bText; });
     if (bBossUnlocked && NoticeItem)
     {
-        const FSlateFontInfo& Font = NoticeItem->Font;
+        FSlateFontInfo Font = NoticeItem->Font;
+        Font.Size = 11;
         const bool bAvgFinished = Avg138Index >= HczsPrologueAvg138().Num();
         const FHczsMainlineProgress& Progress = Session->MainlineProgress;
         const bool bBossBound = Progress.Challenges.Num() == 2 && Progress.Challenges[1].bExecutable;
@@ -186,31 +187,74 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             !bBossBound ? (bAvgFinished ? TEXT("AVG138 已按序播完，1703 仍未开打") : TEXT("3998 已解锁，首领战尚未恢复")) :
             bAvgFinished ? TEXT("AVG138 已播完 · 点击探索进入首领战") : TEXT("3998 已解锁 · 首领战规则为重建");
         const FVector2f TextSize(Measure->Measure(Notice, Font));
-        const FGeometry NoticeGeometry = Geometry.MakeChild(TextSize, FSlateLayoutTransform(Scale, Offset + FVector2f(930, 560)));
+        const FGeometry NoticeGeometry = Geometry.MakeChild(TextSize, FSlateLayoutTransform(Scale, Offset + FVector2f(1240 - TextSize.X, 694) * Scale));
         FSlateDrawElement::MakeText(Elements, ++Layer, NoticeGeometry.ToPaintGeometry(), Notice, Font, ESlateDrawEffect::None, FLinearColor::White);
     }
     const auto Dialogue = HczsPrologueAvg138();
     if (Avg138Index >= 0 && Avg138Index < Dialogue.Num())
     {
-        const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 22);
-        const FString Line = FString::Printf(TEXT("%s：%s"), Dialogue[Avg138Index].Voice, Dialogue[Avg138Index].Text);
-        const FVector2f Band(1100, 72);
-        const FGeometry BandGeometry = Geometry.MakeChild(Band, FSlateLayoutTransform(Scale, Offset + FVector2f(90, 600)));
+        // The band stops short of the explore button (x >= 940); long rows wrap to a second line.
+        const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 18);
+        const FVector2f Band(820, 96);
+        const FGeometry BandGeometry = Geometry.MakeChild(Band, FSlateLayoutTransform(Scale, Offset + FVector2f(90, 594) * Scale));
         FSlateDrawElement::MakeBox(Elements, ++Layer, BandGeometry.ToPaintGeometry(), FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")),
             ESlateDrawEffect::None, FLinearColor(0.02f, 0.02f, 0.03f, 0.88f));
-        FSlateDrawElement::MakeText(Elements, ++Layer, BandGeometry.ToPaintGeometry(FVector2f(1060, 48), FSlateLayoutTransform(FVector2f(20, 18))),
-            Line, Font, ESlateDrawEffect::None, FLinearColor::White);
+        const FSlateFontInfo NameFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 16);
+        FSlateDrawElement::MakeText(Elements, ++Layer, BandGeometry.ToPaintGeometry(FVector2f(780, 22), FSlateLayoutTransform(FVector2f(20, 8))),
+            Dialogue[Avg138Index].Speaker, NameFont, ESlateDrawEffect::None, FLinearColor(0.55f, 0.85f, 1.0f));
+        FString Remaining = Dialogue[Avg138Index].Text;
+        for (float Top = 36; !Remaining.IsEmpty() && Top < 90; Top += 26)
+        {
+            int32 Count = Remaining.Len();
+            while (Count > 1 && Measure->Measure(Remaining.Left(Count), Font).X > 780) --Count;
+            FSlateDrawElement::MakeText(Elements, ++Layer, BandGeometry.ToPaintGeometry(FVector2f(780, 26), FSlateLayoutTransform(FVector2f(20, Top))),
+                Remaining.Left(Count), Font, ESlateDrawEffect::None, FLinearColor::White);
+            Remaining.RightChopInline(Count);
+        }
+    }
+    if (Session && Session->bAvg134Pending)
+    {
+        // Row 93 swaps to the avgBlack background; the narration is centred white text.
+        FSlateDrawElement::MakeBox(Elements, ++Layer, Geometry.ToPaintGeometry(), FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")),
+            ESlateDrawEffect::None, FLinearColor::Black);
+        const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 22);
+        const float LineHeight = Measure->GetMaxCharacterHeight(Font) * 1.5f;
+        TArray<FString> Lines;
+        HczsPrologueAvg134Line(FMath::Max(Avg134Index, 0), PlayerName()).ParseIntoArrayLines(Lines);
+        float Top = 360 - Lines.Num() * LineHeight * 0.5f;
+        for (const FString& Line : Lines)
+        {
+            const FVector2f TextSize(Measure->Measure(Line, Font));
+            const FGeometry LineGeometry = Geometry.MakeChild(TextSize, FSlateLayoutTransform(Scale, Offset + FVector2f(640 - TextSize.X * 0.5f, Top) * Scale));
+            FSlateDrawElement::MakeText(Elements, ++Layer, LineGeometry.ToPaintGeometry(), Line, Font, ESlateDrawEffect::None, FLinearColor::White);
+            Top += LineHeight;
+        }
     }
     return Layer;
 }
 
-FReply UHczsDungeonWidget::PressAt(const FGeometry& Geometry, const FVector2D& AbsolutePosition)
+FString UHczsDungeonWidget::PlayerName() const
 {
     const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
+    const FHczsLocalProfile* Profile = Session ? Session->Profiles.FindByPredicate(
+        [Session](const FHczsLocalProfile& P) { return P.Id == Session->SelectedProfileId; }) : nullptr;
+    return Profile ? Profile->DisplayName : FString();
+}
+
+FReply UHczsDungeonWidget::PressAt(const FGeometry& Geometry, const FVector2D& AbsolutePosition)
+{
+    UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
     if (Session && (Session->bRequestInFlight || Session->bHasPendingIntent)) return FReply::Handled();
     const FVector2f Available(Geometry.GetLocalSize());
     const float Scale = FMath::Min(Available.X / DesignSize.X, Available.Y / DesignSize.Y);
     if (Scale <= 0 || !bSourceReady) return FReply::Handled();
+    if (Session && Session->bAvg134Pending)
+    {
+        ++PressSerial; LastPressAction = TEXT("avg134");
+        Avg134Index = FMath::Max(Avg134Index, 0) + 1;
+        if (Avg134Index >= HczsPrologueAvg134().Num()) { Avg134Index = -1; Session->CompleteAvg134(); }
+        return FReply::Handled();
+    }
     const FVector2f Point = (FVector2f(Geometry.AbsoluteToLocal(AbsolutePosition)) - (Available - DesignSize * Scale) * 0.5f) / Scale;
     for (const auto& Control : Controls)
     {
@@ -240,9 +284,12 @@ bool UHczsDungeonWidget::DevelopmentPressControl(const FString& Action)
     int32 Port = 0;
     if (!FParse::Param(FCommandLine::Get(), TEXT("HczsMainlineUITest")) || !FParse::Value(FCommandLine::Get(), TEXT("HczsServerPort="), Port)
         || Port <= 0 || Port > 65535 || Port == 7460 || !FSlateApplication::IsInitialized() || !bSourceReady || !IsInViewport()) return false;
+    const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
+    const bool bAvg134 = Action == TEXT("avg134");
+    if (bAvg134 && !(Session && Session->bAvg134Pending)) return false;
     const FControl* Control = Controls.FindByPredicate([&Action](const FControl& C) { return C.Action == Action && C.bEnabled; });
     const TSharedPtr<SWidget> SlateWidget = GetCachedWidget();
-    if (!Control || !SlateWidget) return false;
+    if ((!Control && !bAvg134) || !SlateWidget) return false;
     FSlateApplication& Slate = FSlateApplication::Get();
     const TSharedPtr<SWindow> Window = Slate.FindWidgetWindow(SlateWidget.ToSharedRef());
     FWidgetPath DesktopPath;
@@ -253,7 +300,7 @@ bool UHczsDungeonWidget::DevelopmentPressControl(const FString& Action)
     const FVector2f Available(Geometry.GetLocalSize());
     const float Scale = FMath::Min(Available.X / DesignSize.X, Available.Y / DesignSize.Y);
     if (Scale <= 0) return false;
-    const FVector2f Point = TransformPoint(Control->Transform, Control->Size * 0.5f);
+    const FVector2f Point = bAvg134 ? DesignSize * 0.5f : TransformPoint(Control->Transform, Control->Size * 0.5f);
     const FVector2f Absolute = Geometry.LocalToAbsolute((Available - DesignSize * Scale) * 0.5f + Point * Scale);
     TArray<TSharedRef<SWindow>> Windows{Window.ToSharedRef()};
     FWidgetPath Path = Slate.LocateWindowUnderMouse(Absolute, Windows, false, 0);
@@ -280,6 +327,11 @@ FString UHczsDungeonWidget::DevelopmentDescribe() const
     Root->SetBoolField(TEXT("sourceReady"), bSourceReady);
     Root->SetNumberField(TEXT("avg138Index"), Avg138Index);
     Root->SetNumberField(TEXT("avg138Count"), HczsPrologueAvg138().Num());
+    const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
+    Root->SetBoolField(TEXT("avg134Pending"), Session && Session->bAvg134Pending);
+    Root->SetNumberField(TEXT("avg134Index"), Avg134Index);
+    Root->SetNumberField(TEXT("avg134Count"), HczsPrologueAvg134().Num());
+    Root->SetStringField(TEXT("avg134Line"), Session && Session->bAvg134Pending ? HczsPrologueAvg134Line(FMath::Max(Avg134Index, 0), PlayerName()) : FString());
     Root->SetNumberField(TEXT("pressSerial"), static_cast<double>(PressSerial));
     Root->SetStringField(TEXT("lastPressAction"), LastPressAction);
     TArray<TSharedPtr<FJsonValue>> Actions;

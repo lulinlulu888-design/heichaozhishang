@@ -483,6 +483,8 @@ void UHczsGameInstance::ReadMainline(bool bPrepareSettlement, bool bCanRefreshCo
             Fail(Reason, bAfterSettlement ? TEXT("通关已保存，但最新进度读取失败。请重试同步，原通关操作不会再次提交。") : FriendlyError(Code, Reason));
             return;
         }
+        // Storyline 0_1: AVG138 -> EnterBattleNode -> AVG134 runs once after the confirmed 3998 win.
+        if (bAfterSettlement && Next.bBossChallengePassed && !Prior.bBossChallengePassed) bAvg134Pending = true;
         MainlineProgress = MoveTemp(Next); bMainlineStateCurrent = true; ErrorCode.Reset();
         UE_LOG(LogTemp, Display, TEXT("HCZS mainline synchronized: revision=%lld passed=%d confirmed=%d"),
             MainlineProgress.Revision, MainlineProgress.bFirstChallengePassed, bAfterSettlement);
@@ -732,6 +734,12 @@ void UHczsGameInstance::EnterMainlineDungeon()
 {
     if (bShuttingDown || Phase != EHczsSessionPhase::Hall || bRequestInFlight || bHasPendingIntent || SelectedProfileId.IsEmpty()) return;
     bInMainlineDungeon = true;
+    Notify();
+}
+void UHczsGameInstance::CompleteAvg134()
+{
+    if (!bAvg134Pending) return;
+    bAvg134Pending = false;
     Notify();
 }
 void UHczsGameInstance::LeaveMainlineDungeon()

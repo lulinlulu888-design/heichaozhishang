@@ -61,6 +61,7 @@ public:
     /** Stays set across the prologue battle so settlement returns to the chess map. */
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void EnterMainlineDungeon();
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void LeaveMainlineDungeon();
+    UFUNCTION(BlueprintCallable, Category="HCZS|Session") void CompleteAvg134();
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void SaveHallHero(int32 HeroId);
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void RefreshMainline();
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void ConfirmMainlineVictory();
@@ -108,6 +109,8 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") bool bAllowNewProfiles = false;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") bool bAllowNewBattles = false;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") bool bInMainlineDungeon = false;
+    /** Set when this process confirmed the 3998 win; cleared after AVG134 is read. Not persisted. */
+    UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") bool bAvg134Pending = false;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Local") FString LocalStatus = TEXT("尚未连接");
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Local") bool bLocalServiceAvailable = false;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Local") bool bOriginalGameplayReady = false;

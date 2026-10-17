@@ -31,7 +31,9 @@ private:
     struct FControl { FString Action; FVector2f Size = FVector2f::ZeroVector; FSlateRenderTransform Transform; bool bEnabled = false; };
     TArray<FControl> Controls;
     bool bSourceReady = false;
+    FString PlayerName() const;
     int32 Avg138Index = -1;
+    int32 Avg134Index = -1;
     uint64 PressSerial = 0;
     FString LastPressAction;
 };

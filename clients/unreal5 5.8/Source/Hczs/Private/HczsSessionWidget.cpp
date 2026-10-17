@@ -1349,6 +1349,75 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 P.Layer = PaintSourceTargetArrow(Canvas, Elements, P.Layer, ArrowStart, CardGesturePoint);
                 bLastPaintedDragCue = P.Layer > BeforeArrow;
             }
+            // Guide group 1001: CONDITION MazeId 3997 (entered from the dungeon) and expires with the first 5000 win.
+            bGuideShown = false;
+            if (Battle.EncounterId == TEXT("tutorial-5000") && Session->bInMainlineDungeon &&
+                Session->MainlineProgress.bIsValid && !Session->MainlineProgress.bFirstChallengePassed)
+            {
+                const double Now = FSlateApplication::Get().GetCurrentTime();
+                Guide.Observe(Battle.Id, Battle.Status, Battle.Round, Battle.Energy, Battle.ActionIndex, Now);
+                const FHczsGuideStep* Step = Guide.Current();
+                const bool bOpeningDispatch = LastOpeningSeconds >= 0 && LastOpeningSeconds < 3.5 + HczsCardDeal::DispatchSeconds(Battle.Hand.Num());
+                if (Step && Guide.IsVisible(Now) && !bBusy && !bPresentationBusy && !bOpeningDispatch && !bCardGestureActive)
+                {
+                    bGuideShown = true;
+                    // Anchor centres in design pixels; guide_show_table offsets are Cocos y-up.
+                    FVector2f Centre(640, 615), Size(Step->BoxWidth, Step->BoxHeight);
+                    bool bHole = true;
+                    if (Step->Anchor == EHczsGuideAnchor::Card && !Battle.Hand.IsEmpty())
+                    {
+                        const int32 Index = FMath::Clamp(Step->CardIndex, 0, Battle.Hand.Num() - 1);
+                        const FVector3f Placement = Placements && Placements->IsValidIndex(Index) ? (*Placements)[Index]
+                            : FVector3f((Index - (Battle.Hand.Num() - 1) * 0.5f) * 90, 90, 0);
+                        Centre = FVector2f(640 + Placement.X, 720 - Placement.Y);
+                        if (Size.X <= 0) Size = FVector2f(126, 166);
+                    }
+                    else if (Step->Anchor == EHczsGuideAnchor::Energy)
+                    {
+                        FVector2D EnergySlot(0, 555);
+                        for (const auto& Node : OwnCardInRest.Nodes)
+                            if (Node.Name == TEXT("Energy")) EnergySlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
+                        Centre = FVector2f(EnergySlot);
+                    }
+                    else if (Step->Anchor == EHczsGuideAnchor::EndTurn) { Centre = FVector2f(1230, 555); Size = FVector2f(100, 80); }
+                    else if (Step->Anchor != EHczsGuideAnchor::Hand) bHole = false;
+                    Centre += FVector2f(Step->BoxX, -Step->BoxY);
+                    const FSlateRect Hole(Centre - Size * 0.5f, Centre + Size * 0.5f);
+                    const FLinearColor Mask(0, 0, 0, 0.55f);
+                    if (bHole)
+                    {
+                        P.Box(0, 0, 1280, Hole.Top, Mask);
+                        P.Box(0, Hole.Bottom, 1280, 720 - Hole.Bottom, Mask);
+                        P.Box(0, Hole.Top, Hole.Left, Hole.Bottom - Hole.Top, Mask);
+                        P.Box(Hole.Right, Hole.Top, 1280 - Hole.Right, Hole.Bottom - Hole.Top, Mask);
+                        const float Pulse = 0.55f + 0.45f * FMath::Sin(float(Now) * 2 * PI);
+                        const FLinearColor Edge(Accent.R, Accent.G, Accent.B, Pulse);
+                        P.Box(Hole.Left - 3, Hole.Top - 3, Hole.Right - Hole.Left + 6, 3, Edge);
+                        P.Box(Hole.Left - 3, Hole.Bottom, Hole.Right - Hole.Left + 6, 3, Edge);
+                        P.Box(Hole.Left - 3, Hole.Top, 3, Hole.Bottom - Hole.Top, Edge);
+                        P.Box(Hole.Right, Hole.Top, 3, Hole.Bottom - Hole.Top, Edge);
+                    }
+                    else P.Box(0, 0, 1280, 720, Mask);
+                    FVector2f Root, Head;
+                    // GuideGesture_ext.csb is not imported; the swipe reuses the source target arrow toward the enemy.
+                    if (Step->Gesture && FCString::Strcmp(Step->Gesture, TEXT("swipe")) == 0 && ProjectEnemyHead(Root, Head))
+                    {
+                        const float Phase = FMath::Fmod(float(Now), 1.2f) / 1.2f;
+                        P.Layer = PaintSourceTargetArrow(Canvas, Elements, P.Layer, Centre, FMath::Lerp(Centre, FVector2f(Root.X, Head.Y + 60), Phase));
+                    }
+                    // Bubble sits at the _cTouch hand centre plus the source X / Y 170 offset.
+                    const FVector2f Bubble(FMath::Clamp(640 + Step->TextX, 340.0f, 940.0f), 615 - 170);
+                    P.Box(Bubble.X - 300, Bubble.Y - 36, 600, 72, FLinearColor(0.02f, 0.03f, 0.06f, 0.92f));
+                    P.Box(Bubble.X - 300, Bubble.Y - 36, 4, 72, Accent);
+                    if (Step->Talker) P.Text(Step->Talker, Bubble.X - 284, Bubble.Y - 34, 200, 22, 16, Accent);
+                    P.Wrapped(Step->Text, Bubble.X - 284, Bubble.Y - (Step->Talker ? 10 : 22), 568, 20, 2, Light);
+                    FHczsSessionControl Next;
+                    Next.Action = TEXT("guide-next");
+                    Next.Rect = FSlateRect(Bubble.X - 300, Bubble.Y - 36, Bubble.X + 300, Bubble.Y + 36);
+                    Next.bEnabled = Step->Advance == EHczsGuideAdvance::Tap;
+                    Controls.Add(Next);
+                }
+            }
         }
         else
         {
@@ -1707,6 +1776,23 @@ FReply UHczsSessionWidget::PressAt(const FGeometry& Geometry, const FPointerEven
             Point.X, Point.Y, Event.GetScreenSpacePosition().X, Event.GetScreenSpacePosition().Y,
             Geometry.GetLocalSize().X, Geometry.GetLocalSize().Y, Controls.Num(), Event.IsTouchEvent(), *Event.GetEffectingButton().ToString());
 #endif
+    if (const FHczsGuideStep* Step = bGuideShown ? Guide.Current() : nullptr)
+    {
+        const int32 Hit = Controls.FindLastByPredicate([this, &Point](const FHczsSessionControl& C) { return Contains(C, Point); });
+        const FString HitAction = Hit != INDEX_NONE ? Controls[Hit].Action : FString();
+        const bool bAllowed = (Step->Advance == EHczsGuideAdvance::PlayCard && HitAction == TEXT("play-card")) ||
+            (Step->Advance == EHczsGuideAdvance::EndTurn && HitAction == TEXT("end-turn"));
+        if (!bAllowed)
+        {
+            if (Step->Advance == EHczsGuideAdvance::Tap && Guide.Tap(FSlateApplication::Get().GetCurrentTime()))
+            {
+                ++PointerEventSerial;
+                LastPointerAction = TEXT("guide-next"); LastPointerValue.Reset(); LastPointerPoint = Point;
+                InvalidateLayoutAndVolatility();
+            }
+            return FReply::Handled();
+        }
+    }
     for (int32 Index = Controls.Num() - 1; Index >= 0; --Index)
     {
         if (!Contains(Controls[Index], Point)) continue;
@@ -2135,6 +2221,15 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
         }
         Root->SetArrayField(TEXT("partyMembers"), Members);
         Root->SetArrayField(TEXT("hand"), HandRows);
+        auto GuideRow = MakeShared<FJsonObject>();
+        const FHczsGuideStep* GuideStep = Guide.Current();
+        GuideRow->SetNumberField(TEXT("stepId"), GuideStep ? GuideStep->Id : -1);
+        GuideRow->SetBoolField(TEXT("shown"), bGuideShown);
+        GuideRow->SetStringField(TEXT("advance"), !GuideStep ? TEXT("") : GuideStep->Advance == EHczsGuideAdvance::Tap ? TEXT("tap")
+            : GuideStep->Advance == EHczsGuideAdvance::PlayCard ? TEXT("play-card") : TEXT("end-turn"));
+        GuideRow->SetBoolField(TEXT("complete"), Guide.bComplete);
+        GuideRow->SetStringField(TEXT("battleId"), Guide.BattleId);
+        Root->SetObjectField(TEXT("guide"), GuideRow);
         Root->SetBoolField(TEXT("pending"), Session->bRequestInFlight || Session->bHasPendingIntent);
         Root->SetBoolField(TEXT("profileStateCurrent"), Session->bProfileStateCurrent);
         Root->SetBoolField(TEXT("battleStateCurrent"), Session->bBattleStateCurrent);

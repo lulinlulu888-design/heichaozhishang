@@ -6,6 +6,7 @@
 #include "Styling/SlateBrush.h"
 #include "Fonts/SlateFontInfo.h"
 #include "HczsSourceUiTimeline.h"
+#include "HczsGuide1001.h"
 #include "HczsSessionWidget.generated.h"
 
 class UTexture2D;
@@ -121,6 +122,9 @@ private:
     TSharedPtr<class FJsonObject> EliteOpeningJson;
     mutable TArray<FString> LastOpeningNodes;
     mutable double LastOpeningSeconds = -1;
+    /** Guide group 1001 in the maze-3997 tutorial battle; bGuideShown is the last painted visibility. */
+    mutable FHczsGuide1001 Guide;
+    mutable bool bGuideShown = false;
     mutable TArray<TSharedPtr<class FJsonValue>> LastDealtCards;
     /** FightMainPanel `In` and the nested OwnCardArea `In` it starts (FightPanel.onBattleStart). */
     HczsSourceUiTimeline::FClip HudIn, OwnCardIn;
