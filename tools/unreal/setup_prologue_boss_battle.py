@@ -28,6 +28,8 @@ TARGET = '/Game/Recovered/Battle/Maps/L_PrologueBoss1703'
 SCENE_ASSETS = '/Game/Recovered/Battle/PrologueBoss1703SceneAssets'
 MECHANISMS = ROOT / 'analysis/prologue-boss/mechanism-audit/report.json'
 MECHANISMS_SHA = '6fdb8945e1f197b24dc71746169078407b7c488d7884a36666617a67a97ba26f'
+ENEMY_SKILLS = ROOT / 'analysis/prologue-boss/mechanism-audit/enemySkills.json'
+ENEMY_SKILLS_SHA = '1be4dea9663cc97674efdc37e037f993d8cbc38d5d55e0aa6919339ebfe53d29'
 BOSS_REPORT = ROOT / 'analysis/prologue-boss/glb/export-report.json'
 BOSS_REPORT_SHA = '969e97367ce143841ed7748a46423586db35fdc0a18fb4181ce563b557418583'
 FIXTURE = PROJECT / 'Source/Hczs/Private/Tests/Fixtures/prologue-boss-party-v1.json'
@@ -62,6 +64,11 @@ def recipe():
     skills = {str(row['id']): row['animation'] for row in json.loads(raw)['skills']}
     check(skills == {'74501': CLIP_PREFIX + 'skill_4', '74502': CLIP_PREFIX + 'skill_3', '74503': CLIP_PREFIX + 'skill_2'},
           'Boss skill animation mapping changed')
+    check(sha(ENEMY_SKILLS.read_bytes()) == ENEMY_SKILLS_SHA, 'Boss skill effect evidence changed')
+    effects = {str(row['id']): row['fields']['SKILL_TARGET_SFX'] for row in json.loads(ENEMY_SKILLS.read_text('utf8'))['rows']}
+    check(effects == {'74501': 'effects/boss/muoumaxitua/muoumaxituan_shouji_01.sfx',
+                      '74502': 'effects/boss/muoumaxitua/muoumaxituan_shouji_01.sfx',
+                      '74503': 'effects/boss/muoumaxitua/muoumaxituan_skill_2_03.sfx'}, 'Boss skill effect paths changed')
     scenario = json.loads(FIXTURE.read_text('utf8'))['initial']['battle']['scenario']
     definition = scenario['definition']
     check(scenario['encounterId'] == 'prologue-boss-1703' and definition['enemy']['id'] == '2013'
@@ -75,6 +82,7 @@ def recipe():
     check(sorted(actions['cardClips']) == future_cards and actions['memberIndex'] == 1, 'Future card mapping does not cover the boss deck')
     return dict(encounterId='prologue-boss-1703', playerId='party-1-3', enemyId='2013',
                 enemySkillClips={key: value[len(CLIP_PREFIX):] for key, value in skills.items()},
+                enemySkillEffects=effects,
                 elsaCards=elsa_cards, sceneSha256=SCENE_SHA, mechanismsSha256=MECHANISMS_SHA,
                 bossReportSha256=BOSS_REPORT_SHA, futureGlbSha256=actions['glbSha256'], futureClips=actions['clips'],
                 futureCardClips=actions['cardClips'], futureActionsSha256=FUTURE_ACTIONS_SHA)
@@ -147,6 +155,7 @@ def main():
     for key, value in dict(
             supported_encounter_id=plan['encounterId'], player_id=plan['playerId'], enemy_id=plan['enemyId'],
             enemy_mesh=boss_mesh, enemy_animations=boss_clips, enemy_skill_clips=plan['enemySkillClips'],
+            enemy_skill_effects=plan['enemySkillEffects'],
             card_animation_queues=card_queues, source_mapping_sha256=MECHANISMS_SHA,
             source_manifest_sha256=BOSS_REPORT_SHA, original_tutorial_stage_recovered=False,
             ally_mesh=future_mesh, ally_member_index=1, ally_animations=future_clips, ally_card_clips=plan['futureCardClips'],
@@ -215,6 +224,7 @@ def main():
     check(unique('HCZSBattlePlayer').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == assets.get_editor_property('player_mesh'), 'Player mesh differs')
     check(unique('HCZSBattleEnemy').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == boss_mesh, 'Boss mesh differs')
     check(dict(assets.get_editor_property('enemy_skill_clips')) == plan['enemySkillClips'], 'Skill clip readback differs')
+    check(dict(assets.get_editor_property('enemy_skill_effects')) == plan['enemySkillEffects'], 'Skill effect readback differs')
     check(dict(assets.get_editor_property('ally_card_clips')) == plan['futureCardClips']
           and sorted(assets.get_editor_property('ally_animations')) == sorted(plan['futureClips'])
           and unique('HCZSBattleAlly3').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == future_mesh,

@@ -56,6 +56,8 @@ public:
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FHczsBattleAnimationSequence> CardAnimationQueues;
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FHczsBattleSourceHit> PlayerHitEvents;
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> EnemySkillClips;
+    /** Source SKILL_TARGET_SFX path. Named when the skill plays; the particle is not imported. */
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> EnemySkillEffects;
     UPROPERTY(EditAnywhere, Category="Recovered") bool bOriginalTutorialStageRecovered = false;
     /** Optional second party member bound by the HCZSBattleAlly tag; -1 means no ally actor. */
     UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<USkeletalMesh> AllyMesh;

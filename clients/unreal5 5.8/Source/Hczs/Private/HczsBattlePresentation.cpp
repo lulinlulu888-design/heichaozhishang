@@ -799,6 +799,8 @@ void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArr
             const auto* Clip = SceneAssets->EnemySkillClips.Find(Event.SkillId);
             if (Clip) QueueClip(true, *Clip);
             else UE_LOG(LogTemp, Display, TEXT("HCZS enemy skill has no recovered animation mapping: %s"), *Event.SkillId);
+            if (const FString* Effect = SceneAssets->EnemySkillEffects.Find(Event.SkillId))
+                UE_LOG(LogTemp, Display, TEXT("HCZS enemy skill source effect: skill=%s sfx=%s mode=hook-only"), *Event.SkillId, **Effect);
         }
         else if (Event.Type == TEXT("DamageApplied"))
         {

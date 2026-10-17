@@ -308,6 +308,12 @@ def run():
                 report['finalCampaign'] = campaign
                 log = native_log.read_text('utf8', errors='replace')
                 report['bossSkillClipsLogged'] = 'enemy skill has no recovered animation mapping' not in log
+                effects = [line.split('sfx=', 1)[1].split(' ', 1)[0] for line in log.splitlines()
+                           if 'HCZS enemy skill source effect:' in line and 'mode=hook-only' in line]
+                allowed = {'effects/boss/muoumaxitua/muoumaxituan_shouji_01.sfx',
+                           'effects/boss/muoumaxitua/muoumaxituan_skill_2_03.sfx'}
+                guard.check(effects and set(effects) <= allowed, 'Boss skill effect hook differs: %s' % sorted(set(effects)))
+                report['bossSkillEffects'] = sorted(set(effects))
                 passed('authoritative-3998-success-recorded')
                 card_clips = json.loads(FUTURE_ACTIONS.read_text('utf8'))['cardClips']
                 report['futureActions'] = validate_ally_actions(log, report['steps'], card_clips)
