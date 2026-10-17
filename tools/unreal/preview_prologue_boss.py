@@ -75,14 +75,19 @@ def source_placement():
     raw = SCENE.read_bytes()
     check(sha(SCENE) == SCENE_SHA, 'Theatre scene bytes changed')
     root = ET.fromstring(raw)
+    files = {node.tag.split('_', 1)[1]: node.get('Path') for node in root.iter() if node.tag.startswith('File_') and node.get('Path')}
     model = next(node for node in root.iter('model') if node.get('Name') == 'muoumaxituan_1743')
+    elsa = next(node for node in root.iter('model')
+                if node.get('Name') == '1_2' and files.get(node.get('FilePathIndex'), '').endswith('ailisha.gim'))
     camera_node = next(node for node in root.iter('Camera') if node.get('Name') == 'camera_1')
     position = [float(v) for v in model.get('Position').split(',')]
     rotation = [float(v) for v in model.get('Rotation').split(',')]
     camera = [float(v) for v in camera_node.get('Transform').split(',')]
     check(len(position) == 3 and len(rotation) == 16 and len(camera) == 16, 'Theatre transform width changed')
     check(abs(float(camera_node.get('Fov')) - 45) < 1e-3, 'Theatre camera_1 FOV changed')
-    return position, rotation, camera
+    elsa_position = [float(v) for v in elsa.get('Position').split(',')]
+    elsa_rotation = [float(v) for v in elsa.get('Rotation').split(',')]
+    return position, rotation, camera, elsa_position, elsa_rotation
 
 
 def to_ue(values):
@@ -91,7 +96,7 @@ def to_ue(values):
 
 def build():
     mesh, idle, report = import_boss()
-    position, rotation, camera_matrix = source_placement()
+    position, rotation, camera_matrix, elsa_position, elsa_rotation = source_placement()
     check(u.EditorAssetLibrary.does_asset_exist(MAP), 'Recovered theatre map is missing')
     check(u.EditorLoadingAndSavingUtils.load_map(MAP), 'Cannot open L_Theatre')
     actors = u.get_editor_subsystem(u.EditorActorSubsystem)
@@ -106,6 +111,19 @@ def build():
     component.play_animation(idle, True)
     component.set_update_animation_in_editor(True)
     component.set_collision_enabled(u.CollisionEnabled.NO_COLLISION)
+    elsa_mesh = u.load_asset('/Game/Recovered/Battle/Elsa/elsa_battle.elsa_battle')
+    elsa_idle = u.load_asset('/Game/Recovered/Battle/Elsa/elsa_battleidle_1.elsa_battleidle_1')
+    check(isinstance(elsa_mesh, u.SkeletalMesh) and isinstance(elsa_idle, u.AnimSequence), 'Recovered Elsa battle idle is missing')
+    elsa_actor = actors.spawn_actor_from_class(
+        u.SkeletalMeshActor, to_ue(elsa_position) * 100,
+        u.MathLibrary.make_rot_from_xz(to_ue(elsa_rotation[8:11]), to_ue(elsa_rotation[4:7])))
+    elsa_actor.set_actor_label('HCZSTheatreElsa')
+    elsa_component = elsa_actor.get_component_by_class(u.SkeletalMeshComponent)
+    elsa_component.set_skeletal_mesh_asset(elsa_mesh)
+    elsa_component.override_animation_data(elsa_idle, True, True, 0, 1)
+    elsa_component.play_animation(elsa_idle, True)
+    elsa_component.set_update_animation_in_editor(True)
+    elsa_component.set_collision_enabled(u.CollisionEnabled.NO_COLLISION)
     origin, extent = actor.get_actor_bounds(False)
     cam = actors.spawn_actor_from_class(
         u.CameraActor, to_ue(camera_matrix[12:15]) * 100,
@@ -115,6 +133,8 @@ def build():
     results.update(mesh=mesh.get_path_name(), idle=idle.get_name(), playLength=idle.get_play_length(),
                    clips=7, sourcePosition=position, bounds=[origin.x, origin.y, origin.z, extent.x, extent.y, extent.z],
                    scale=[actor.get_actor_scale3d().x, actor.get_actor_scale3d().y, actor.get_actor_scale3d().z],
+                   elsaPosition=elsa_position, elsaIdle=elsa_idle.get_name(),
+                   futureBattleMesh='not-imported',
                    sourceSha256=report['animatedSha256'], sceneSha256=SCENE_SHA, camera='camera_1', cameraFov=45,
                    mapSaved=False,
                    limitations=['Placement uses the source model position and camera_1. Material, SFX and battle rules are not ported.',
