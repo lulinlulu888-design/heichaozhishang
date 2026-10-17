@@ -676,6 +676,7 @@ void UHczsSessionWidget::OpenWorldlineSelection()
         if (!WorldlineWidget) return;
         WorldlineWidget->OnBackRequested.AddUObject(this, &UHczsSessionWidget::CloseWorldlineSelection);
         WorldlineWidget->OnLocalBattlePreviewRequested.AddUObject(this, &UHczsSessionWidget::OpenLocalPreviewFromWorldline);
+        WorldlineWidget->OnPrologueDungeonRequested.AddUObject(this, &UHczsSessionWidget::EnterPrologueDungeon);
     }
     if (!WorldlineWidget->IsInViewport()) WorldlineWidget->AddToViewport(65);
     WorldlineWidget->SetSourceInspection(false);
@@ -694,6 +695,7 @@ void UHczsSessionWidget::ShowWorldlineSourceInspection()
         if (!WorldlineWidget) return;
         WorldlineWidget->OnBackRequested.AddUObject(this, &UHczsSessionWidget::CloseWorldlineSelection);
         WorldlineWidget->OnLocalBattlePreviewRequested.AddUObject(this, &UHczsSessionWidget::OpenLocalPreviewFromWorldline);
+        WorldlineWidget->OnPrologueDungeonRequested.AddUObject(this, &UHczsSessionWidget::EnterPrologueDungeon);
     }
     bWorldlineInspection = true;
     WorldlineWidget->SetSourceInspection(true);
@@ -715,6 +717,12 @@ void UHczsSessionWidget::OpenLocalPreviewFromWorldline()
 {
     CloseWorldlineSelection();
     OpenEncounterSelection();
+}
+
+void UHczsSessionWidget::EnterPrologueDungeon()
+{
+    CloseWorldlineSelection();
+    if (Session) Session->EnterMainlineDungeon();
 }
 
 FString UHczsSessionWidget::DevelopmentDescribeWorldlineUI() const

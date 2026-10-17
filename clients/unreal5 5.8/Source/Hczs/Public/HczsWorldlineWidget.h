@@ -20,6 +20,8 @@ class HCZS_API UHczsWorldlineWidget : public UUserWidget
 public:
     FHczsHallEntryRequested OnBackRequested;
     FHczsHallEntryRequested OnLocalBattlePreviewRequested;
+    /** Local adapter into the recovered prologue map. Not an original chapter row. */
+    FHczsHallEntryRequested OnPrologueDungeonRequested;
     /** Development read-only source preview; cannot submit a game intent. */
     void SetSourceInspection(bool bInspect);
     /** Nonshipping isolated acceptance only; routes down/up through its real Slate hit path. */
@@ -45,6 +47,7 @@ private:
     bool bSourceFontReady = false;
     bool bSourceInspection = false;
     FSlateRect LocalPreviewRect = FSlateRect(985, 651, 1215, 698);
+    FSlateRect PrologueRect = FSlateRect(985, 590, 1215, 637);
     mutable uint64 PaintSerial = 0;
     mutable TArray<FString> LastPaintedTexts;
     mutable TArray<FString> LastPaintedSpriteIds;

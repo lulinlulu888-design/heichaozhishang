@@ -1,9 +1,11 @@
 #include "HczsSessionMode.h"
 #include "HczsGameInstance.h"
 #include "HczsSessionWidget.h"
+#include "HczsDungeonWidget.h"
 #include "HczsBattlePresentation.h"
 #include "HczsBattleCamera.h"
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "Engine/GameViewportClient.h"
 #include "UnrealClient.h"
 #include "Engine/World.h"
@@ -20,6 +22,7 @@ namespace
 const TCHAR* TutorialMap = TEXT("/Game/Recovered/Battle/Maps/L_TutorialSource2133");
 const TCHAR* CityMap = TEXT("/Game/Recovered/City/Maps/L_City2077Preview");
 const TCHAR* HallMap = TEXT("/Game/Recovered/Hall/Maps/L_ElsaHallFxPreview");
+const TCHAR* ChessMap = TEXT("/Game/Recovered/Worldline/Maps/L_Chess239");
 
 bool Identity(const UHczsGameInstance* Session, const TCHAR* Encounter, const TCHAR* Enemy, const TCHAR* DefinitionPrefix)
 {
@@ -127,7 +130,9 @@ void AHczsSessionMode::SessionChanged()
     if (bTravelScheduled || !Problem.IsEmpty()) return;
     const bool bToBattle = !bBattleScene && Session->Phase == EHczsSessionPhase::Battle;
     const bool bToHall = bBattleScene && Session->Phase == EHczsSessionPhase::Hall;
-    if (!bToBattle && !bToHall) return;
+    const bool bToDungeon = !bBattleScene && !bDungeonScene && Session->Phase == EHczsSessionPhase::Hall && Session->bInMainlineDungeon;
+    const bool bLeaveDungeon = bDungeonScene && Session->Phase == EHczsSessionPhase::Hall && !Session->bInMainlineDungeon;
+    if (!bToBattle && !bToHall && !bToDungeon && !bLeaveDungeon) return;
     bTravelScheduled = true;
     GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AHczsSessionMode::TravelWhenReady);
 }
@@ -147,6 +152,10 @@ void AHczsSessionMode::TravelWhenReady()
         if (const TCHAR* Map = RecoveredBattleMap(Session)) Desired = Map;
     }
     else if (bBattleScene && Session->IsHallSceneReady())
+        Desired = Session->bInMainlineDungeon ? ChessMap : HallMap;
+    else if (!bBattleScene && !bDungeonScene && Session->Phase == EHczsSessionPhase::Hall && Session->bInMainlineDungeon)
+        Desired = ChessMap;
+    else if (bDungeonScene && Session->Phase == EHczsSessionPhase::Hall && !Session->bInMainlineDungeon)
         Desired = HallMap;
     if (Desired.IsEmpty() || !FPackageName::DoesPackageExist(Desired)) return;
     const FString Current = UGameplayStatics::GetCurrentLevelName(this, true);
@@ -198,4 +207,92 @@ void AHczsBattleMode::ApplySourceProjection()
             HczsBattleCamera::Apply(*It, Client->Viewport->GetSizeXY());
             break;
         }
+}
+
+AHczsDungeonMode::AHczsDungeonMode() { bDungeonScene = true; }
+FName AHczsDungeonMode::SceneCameraTag() const { return TEXT("HCZSDungeonCamera"); }
+
+void AHczsDungeonMode::BeginPlay()
+{
+    Super::BeginPlay();
+    ViewportResizedHandle = FViewport::ViewportResizedEvent.AddUObject(this, &AHczsDungeonMode::ViewportResized);
+    ApplySourceProjection();
+    GetWorldTimerManager().SetTimerForNextTick(this, &AHczsDungeonMode::ApplySourceProjection);
+    if (APlayerController* Controller = GetWorld()->GetFirstPlayerController())
+    {
+        DungeonWidget = CreateWidget<UHczsDungeonWidget>(Controller);
+        if (DungeonWidget)
+        {
+            DungeonWidget->OnBackRequested.AddUObject(this, &AHczsDungeonMode::Leave);
+            DungeonWidget->OnExploreRequested.AddUObject(this, &AHczsDungeonMode::Explore);
+            DungeonWidget->AddToViewport(60);
+            DungeonWidget->SetKeyboardFocus();
+        }
+    }
+    if (Session)
+        ExploreHandle = Session->OnStateChangedNative.AddUObject(this, &AHczsDungeonMode::ExploreState);
+}
+
+void AHczsDungeonMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    FViewport::ViewportResizedEvent.Remove(ViewportResizedHandle);
+    if (Session && ExploreHandle.IsValid()) Session->OnStateChangedNative.Remove(ExploreHandle);
+    if (DungeonWidget) DungeonWidget->RemoveFromParent();
+    Super::EndPlay(EndPlayReason);
+}
+
+void AHczsDungeonMode::ViewportResized(FViewport* Viewport, uint32)
+{
+    const UGameViewportClient* Client = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+    if (Client && Viewport == Client->Viewport) ApplySourceProjection();
+}
+
+void AHczsDungeonMode::ApplySourceProjection()
+{
+    const UGameViewportClient* Client = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+    if (!Client || !Client->Viewport) return;
+    const FIntPoint Size = Client->Viewport->GetSizeXY();
+    if (Size.X <= 0 || Size.Y <= 0) return;
+    for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
+        if (It->ActorHasTag(SceneCameraTag()))
+        {
+            if (UCameraComponent* Component = It->GetCameraComponent())
+            {
+                const double Aspect = double(Size.X) / Size.Y;
+                Component->SetConstraintAspectRatio(false);
+                Component->SetAspectRatio(Aspect);
+                Component->SetFieldOfView(HczsBattleCamera::HorizontalFov(30.0, Aspect));
+            }
+            break;
+        }
+}
+
+void AHczsDungeonMode::Leave()
+{
+    if (Session) Session->LeaveMainlineDungeon();
+}
+
+void AHczsDungeonMode::Explore()
+{
+    if (!Session || Session->bRequestInFlight || Session->bHasPendingIntent || bWaitingExplore) return;
+    // This panel describes challenge 3997. 3998 stays locked until that challenge has a successTime,
+    // and its two-character battle is a later entry, so this button never starts it.
+    bWaitingExplore = true;
+    Session->SelectEncounter(TEXT("tutorial-5000"));
+    if (!Session->bRequestInFlight) bWaitingExplore = false;
+}
+
+void AHczsDungeonMode::ExploreState()
+{
+    if (!bWaitingExplore || !Session || Session->bRequestInFlight) return;
+    if (!Session->ErrorCode.IsEmpty() || Session->SelectedEncounterId != TEXT("tutorial-5000"))
+    {
+        bWaitingExplore = false;
+        return;
+    }
+    if (Session->bEncounterScenarioReady) 
+    {
+        bWaitingExplore = false;
+        Session->CreateSelectedBattle();
+    }
 }

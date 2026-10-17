@@ -236,6 +236,10 @@ int32 UHczsWorldlineWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
     if (!Notice.IsEmpty()) Text(Notice, FVector2f(640, 390), FLinearColor(0.34f, 0.28f, 0.42f, 1));
     const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
     const bool bBusy = bSourceInspection || !Session || Session->bRequestInFlight || Session->bHasPendingIntent;
+    const FGeometry Prologue = Canvas.MakeChild(FVector2f(PrologueRect.GetSize()), FSlateLayoutTransform(FVector2f(PrologueRect.Left, PrologueRect.Top)));
+    FSlateDrawElement::MakeBox(Elements, ++Layer, Prologue.ToPaintGeometry(), FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")), ESlateDrawEffect::None,
+        FLinearColor(0.90f, 0.91f, 1.0f, bBusy ? 0.35f : 0.90f));
+    Text(TEXT("序章"), FVector2f((PrologueRect.Left + PrologueRect.Right) / 2, (PrologueRect.Top + PrologueRect.Bottom) / 2), FLinearColor(0.23f, 0.21f, 0.36f, bBusy ? 0.45f : 1));
     const FGeometry LocalPreview = Canvas.MakeChild(FVector2f(LocalPreviewRect.GetSize()), FSlateLayoutTransform(FVector2f(LocalPreviewRect.Left, LocalPreviewRect.Top)));
     FSlateDrawElement::MakeBox(Elements, ++Layer, LocalPreview.ToPaintGeometry(), FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")), ESlateDrawEffect::None,
         FLinearColor(0.90f, 0.91f, 1.0f, bBusy ? 0.35f : 0.90f));
@@ -252,6 +256,12 @@ int32 UHczsWorldlineWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
     PreviewControl.Transform = FSlateRenderTransform(FVector2f(LocalPreviewRect.Left, LocalPreviewRect.Top));
     PreviewControl.bEnabled = !bBusy;
     LastPaintedControls.Add(PreviewControl);
+    FHczsWorldlineSourceControl PrologueControl;
+    PrologueControl.Action = TEXT("prologue-dungeon");
+    PrologueControl.Size = FVector2f(PrologueRect.GetSize());
+    PrologueControl.Transform = FSlateRenderTransform(FVector2f(PrologueRect.Left, PrologueRect.Top));
+    PrologueControl.bEnabled = !bBusy;
+    LastPaintedControls.Add(PrologueControl);
     return Layer;
 }
 
@@ -268,6 +278,13 @@ FReply UHczsWorldlineWidget::PressAt(const FGeometry& Geometry, const FVector2D&
         if (bSourceInspection) return FReply::Handled();
         ++PointerSerial; LastPointerAction = TEXT("local-battle-preview"); bLastPointerTouch = bTouch; LastPointerPoint = Point;
         OnLocalBattlePreviewRequested.Broadcast();
+        return FReply::Handled();
+    }
+    if (PrologueRect.ContainsPoint(Point))
+    {
+        if (bSourceInspection) return FReply::Handled();
+        ++PointerSerial; LastPointerAction = TEXT("prologue-dungeon"); bLastPointerTouch = bTouch; LastPointerPoint = Point;
+        OnPrologueDungeonRequested.Broadcast();
         return FReply::Handled();
     }
     for (const auto& Control : SourceControls)

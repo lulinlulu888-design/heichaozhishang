@@ -55,6 +55,7 @@ public:
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void OpenProfileSelection();
     /** Original APK MainLineStoryDialog static page; no fabricated chapter state. */
     UFUNCTION(BlueprintCallable, Category="HCZS|Session") void OpenWorldlineSelection();
+    void EnterPrologueDungeon();
     /** Non-shipping, explicit -HczsWorldlineInspect source-only view; no profile selection. */
     void ShowWorldlineSourceInspection();
     /** Separate local battle-preview adapter, not the original worldline page. */

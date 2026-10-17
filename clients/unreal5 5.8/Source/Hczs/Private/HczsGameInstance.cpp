@@ -194,7 +194,8 @@ void UHczsGameInstance::RefreshBootstrap()
             {
                 ++SessionEpoch; SelectedProfileId.Reset(); SelectedEncounterId.Reset(); CurrentBattle = FHczsBattleView();
                 HallPreference = FHczsHallPreference(); bBattleStateCurrent = false; bEncounterScenarioReady = false;
-                bProfileStateCurrent = false; LastVisualReceipt = FHczsBattleVisualReceipt(); LastEvents.Reset(); Battles.Reset();
+                bProfileStateCurrent = false;                 LastVisualReceipt = FHczsBattleVisualReceipt(); LastEvents.Reset(); Battles.Reset();
+                bInMainlineDungeon = false;
                 ResetMainlineProgress();
             }
         }
@@ -216,6 +217,7 @@ void UHczsGameInstance::SelectProfile(const FString& ProfileId)
     FreshBattleEntrance.Reset();
     CurrentBattle = FHczsBattleView(); HallPreference = FHczsHallPreference(); LastEvents.Reset(); Battles.Reset();
     ResetMainlineProgress();
+    bInMainlineDungeon = false;
     LastVisualReceipt = FHczsBattleVisualReceipt(); bProfileStateCurrent = false;
     bBattleStateCurrent = false; bEncounterScenarioReady = false; MinimumBattleRevision = 0;
     Phase = EHczsSessionPhase::ProfileSelection;
@@ -721,6 +723,18 @@ void UHczsGameInstance::RetryPendingIntent()
         else ReadBattle(ConfirmedBattleId, true);
     }
     else SendPendingIntent();
+}
+void UHczsGameInstance::EnterMainlineDungeon()
+{
+    if (bShuttingDown || Phase != EHczsSessionPhase::Hall || bRequestInFlight || bHasPendingIntent || SelectedProfileId.IsEmpty()) return;
+    bInMainlineDungeon = true;
+    Notify();
+}
+void UHczsGameInstance::LeaveMainlineDungeon()
+{
+    if (!bInMainlineDungeon || bRequestInFlight || bHasPendingIntent) return;
+    bInMainlineDungeon = false;
+    Notify();
 }
 void UHczsGameInstance::ReturnToHall()
 {

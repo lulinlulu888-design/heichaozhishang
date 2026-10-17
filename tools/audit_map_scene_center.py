@@ -104,10 +104,21 @@ map_width = 1 + (long_side - short_side) * 2 + 2
 assert (long_side, short_side, map_width, map_height) == (27, 14, 29, 30)
 center_x, center_y = map_width // 2, map_height // 2
 origin = scene['fields']['SceneCenter']
+# buildMapDetail stores _mapData[y][x] from key "y,x", but MLMapPieceHelper.initMapPiece
+# iterates dungeonInfo['data'] (= _mapData) as piceData[x][y], so calculatePiecePos
+# receives the key's first number as x.
+piece_helper = function(load('analysis/mainline-dungeon/scripts/1673.json'), 'initMapPiece')
+helper_ops = [(step['opname'], step.get('operand')) for step in piece_helper['instructions']]
+outer = helper_ops.index(('STORE_FAST', 'x'))
+assert helper_ops[outer - 5:outer] == [('LOAD_FAST', 'piceData'), ('CALL_FUNCTION', None), ('CALL_FUNCTION', None),
+                                       ('GET_ITER', None), ('FOR_ITER', None)]
+assert helper_ops[outer + 1:outer + 4] == [('LOAD_FAST', 'piceData'), ('LOAD_FAST', 'x'), ('BINARY_SUBSCR', None)]
+create = helper_ops.index(('LOAD_ATTR', 'MLUnitPiece'))
+assert helper_ops[create + 1:create + 3] == [('LOAD_FAST', 'x'), ('LOAD_FAST', 'y')]
 pieces = []
 for key, kind in (('21,22', 'start'), ('20,22', 'challenge'), ('19,22', 'end')):
-    cell_y, cell_x = (int(part) for part in key.split(','))
-    temp_x, temp_y = cell_y + 1, map_width - cell_x + 1
+    piece_x, piece_y = (int(part) for part in key.split(','))
+    temp_x, temp_y = piece_y + 1, map_width - piece_x + 1
     even = abs(center_y - temp_x) % 2 == 0
     if even:
         ground_z = origin[2] + (center_x - temp_y) * 27.712 - 27.712
@@ -115,11 +126,11 @@ for key, kind in (('21,22', 'start'), ('20,22', 'challenge'), ('19,22', 'end')):
         ground_z = origin[2] + (center_x - temp_y - 1) * 27.712 + 13.856
     else:
         ground_z = origin[2] + (center_x - temp_y) * 27.712 - 13.856
-    pieces.append((kind, cell_x, cell_y, origin[0] + (center_y - temp_x) * 24, ground_z, even))
+    pieces.append((kind, piece_x, piece_y, origin[0] + (center_y - temp_x) * 24, round(ground_z, 3), even))
 assert pieces == [
-    ('start', 22, 21, -165, 386.116, False),
-    ('challenge', 22, 20, -141, 372.26, True),
-    ('end', 22, 19, -117, 386.116, False),
+    ('start', 21, 22, -189, 344.548, True),
+    ('challenge', 20, 22, -189, 316.836, True),
+    ('end', 19, 22, -189, 289.124, True),
 ]
 piece_pos = next(code for _path, code in walk_codes(
     read_module({
@@ -132,4 +143,4 @@ assert any(step['opcode'] == 0x42 for step in instructions(piece_pos))
 print('scene 239 CenterPos is SceneCenter [3, 16.26, 233.7]')
 print('extra editor center is absent, so it is not added')
 print('dungeon width is 29 and the even-row offset is 1')
-print('piece ground positions stay unplaced: the layer height opcodes are still unread')
+print('cells (piece x, y): start (21,22) -> (-189, 344.548), 3997 (20,22) -> (-189, 316.836), 3998 (19,22) -> (-189, 289.124)')
