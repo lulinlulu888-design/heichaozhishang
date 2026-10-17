@@ -65,6 +65,8 @@ public:
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, TObjectPtr<UAnimSequence>> AllyAnimations;
     /** cardId -> clip via card SKILL_ID, skill timeline ANIMATION_LIST and entity ANIM_STATES_*. */
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> AllyCardClips;
+    /** clip -> gim trigger ObjectFileName. Named when the clip plays; the socket has no bone, so the particle is not shown. */
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> AllyClipEffects;
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnHczsBattlePresentationChanged);

@@ -35,6 +35,8 @@ BOSS_REPORT_SHA = '969e97367ce143841ed7748a46423586db35fdc0a18fb4181ce563b557418
 FIXTURE = PROJECT / 'Source/Hczs/Private/Tests/Fixtures/prologue-boss-party-v1.json'
 FUTURE_ACTIONS = ROOT / 'analysis/prologue-boss/future-actions/report.json'
 FUTURE_ACTIONS_SHA = '239484e1e2202979bb49149a6dda8d26a2ec691fcfc2dbe9fbb484a29d0ec547'
+FUTURE_TRIGGERS = ROOT / 'analysis/prologue-boss/future-clip-triggers/report.json'
+FUTURE_TRIGGERS_SHA = 'd9c9aad1634c55f306fe54b0b3c91c0361f89a33a65a756974e95e91dd2205c1'
 FUTURE_EXPORT = ROOT / 'analysis/characters/hero-003/battle-actions/export/export-report.json'
 CLIP_PREFIX = 'muoumaxituan_'
 RUNTIME_VERTICAL_FOV = 35.985
@@ -80,12 +82,18 @@ def recipe():
     actions = json.loads(actions_raw)
     future_cards = sorted({entry['cardId'] for entry in definition['deck'] if entry['ownerId'] == '3'})
     check(sorted(actions['cardClips']) == future_cards and actions['memberIndex'] == 1, 'Future card mapping does not cover the boss deck')
+    check(sha(FUTURE_TRIGGERS.read_bytes()) == FUTURE_TRIGGERS_SHA, 'Future clip trigger evidence changed')
+    triggers = json.loads(FUTURE_TRIGGERS.read_text('utf8'))['clips']
+    ally_effects = {clip: row['sfx'] for clip, row in triggers.items()}
+    check(ally_effects == {'shield_1': 'effects/player/future/future_buff_2.sfx',
+                           'buff_2': 'effects/player/future/future_buff_2.sfx'}, 'Future clip effects changed')
     return dict(encounterId='prologue-boss-1703', playerId='party-1-3', enemyId='2013',
                 enemySkillClips={key: value[len(CLIP_PREFIX):] for key, value in skills.items()},
                 enemySkillEffects=effects,
                 elsaCards=elsa_cards, sceneSha256=SCENE_SHA, mechanismsSha256=MECHANISMS_SHA,
                 bossReportSha256=BOSS_REPORT_SHA, futureGlbSha256=actions['glbSha256'], futureClips=actions['clips'],
-                futureCardClips=actions['cardClips'], futureActionsSha256=FUTURE_ACTIONS_SHA)
+                futureCardClips=actions['cardClips'], futureActionsSha256=FUTURE_ACTIONS_SHA,
+                allyClipEffects=ally_effects)
 
 
 def main():
@@ -159,6 +167,7 @@ def main():
             card_animation_queues=card_queues, source_mapping_sha256=MECHANISMS_SHA,
             source_manifest_sha256=BOSS_REPORT_SHA, original_tutorial_stage_recovered=False,
             ally_mesh=future_mesh, ally_member_index=1, ally_animations=future_clips, ally_card_clips=plan['futureCardClips'],
+            ally_clip_effects=plan['allyClipEffects'],
             scene_notice='序章首领战：原剧场、首领与艾尔莎/未来模型、未来源战斗动作及首领技能动作；双人规则为重建，原特效/音效未接').items():
         assets.set_editor_property(key, value)
     check(u.EditorAssetLibrary.save_loaded_asset(assets, False), 'Boss SceneAssets save failed')
@@ -225,6 +234,7 @@ def main():
     check(unique('HCZSBattleEnemy').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == boss_mesh, 'Boss mesh differs')
     check(dict(assets.get_editor_property('enemy_skill_clips')) == plan['enemySkillClips'], 'Skill clip readback differs')
     check(dict(assets.get_editor_property('enemy_skill_effects')) == plan['enemySkillEffects'], 'Skill effect readback differs')
+    check(dict(assets.get_editor_property('ally_clip_effects')) == plan['allyClipEffects'], 'Ally clip effect readback differs')
     check(dict(assets.get_editor_property('ally_card_clips')) == plan['futureCardClips']
           and sorted(assets.get_editor_property('ally_animations')) == sorted(plan['futureClips'])
           and unique('HCZSBattleAlly3').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == future_mesh,

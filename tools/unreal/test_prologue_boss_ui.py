@@ -314,6 +314,13 @@ def run():
                            'effects/boss/muoumaxitua/muoumaxituan_skill_2_03.sfx'}
                 guard.check(effects and set(effects) <= allowed, 'Boss skill effect hook differs: %s' % sorted(set(effects)))
                 report['bossSkillEffects'] = sorted(set(effects))
+                ally_effects = [line.split('clip=', 1)[1].split(' ', 1)[0] + '=' + line.split('sfx=', 1)[1].split(' ', 1)[0]
+                                for line in log.splitlines()
+                                if 'HCZS ally clip source effect:' in line and 'mode=hook-only' in line]
+                guard.check(set(ally_effects) == {'shield_1=effects/player/future/future_buff_2.sfx',
+                                                   'buff_2=effects/player/future/future_buff_2.sfx'},
+                            'Future clip effect hook differs: %s' % sorted(set(ally_effects)))
+                report['allyClipEffects'] = sorted(set(ally_effects))
                 passed('authoritative-3998-success-recorded')
                 card_clips = json.loads(FUTURE_ACTIONS.read_text('utf8'))['cardClips']
                 report['futureActions'] = validate_ally_actions(log, report['steps'], card_clips)

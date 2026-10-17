@@ -856,6 +856,8 @@ void AHczsBattlePresentation::PlayNextStep()
         AllyComponent->SetPosition(0, false);
         UE_LOG(LogTemp, Display, TEXT("HCZS source animation playing: side=ally member=%d clip=%s duration=%.6f"),
             SceneAssets->AllyMemberIndex, *Step.Clip, AllyAnimation->GetPlayLength());
+        if (const FString* Effect = SceneAssets->AllyClipEffects.Find(Step.Clip))
+            UE_LOG(LogTemp, Display, TEXT("HCZS ally clip source effect: clip=%s sfx=%s mode=hook-only"), *Step.Clip, **Effect);
         GetWorldTimerManager().SetTimer(StepTimer, this, &AHczsBattlePresentation::FinishStep, AllyAnimation->GetPlayLength(), false);
         return;
     }
