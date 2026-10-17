@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -21,6 +22,11 @@ class BossSkillEffectSummaryTest(unittest.TestCase):
         self.assertEqual(len(fire), 10)
         self.assertEqual(fire[0]['name'], 'L_glow_add')
         self.assertTrue(all(layer['blendMode'] != '' and layer['trackType'] != '' for layer in hit + fire))
+        report = json.loads((ROOT / 'analysis/prologue-boss/skill-effects/report.json').read_text('utf8'))
+        glow = next(row for row in report['textures'] if row['logical'].endswith('glow_002.tga'))
+        self.assertEqual(glow['size'], [128, 128])
+        self.assertTrue(glow['packed'].replace('\\', '/').endswith('glow_002.ktx'))
+        self.assertEqual(report['textureGaps'], ['effects/tex/star/suixie_xuelie01.spr'])
 
 
 if __name__ == '__main__':

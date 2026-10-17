@@ -10,9 +10,12 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from PIL import Image
+
+from decode_ktx import DEFAULT_DECODER, convert
 from export_elsa_model import extract
 from extract_texture_samples import APK_SHA256
-from neox_resource_paths import read_catalogue
+from neox_resource_paths import lookup_logical, read_catalogue
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / 'analysis/prologue-boss/mechanism-audit/enemySkills.json'
@@ -71,12 +74,37 @@ def main():
         documents.append({'logical': logical, 'sha256': sha(payload), 'bytes': len(payload), 'root': root_tag,
                           'layers': layers, 'textures': textures,
                           'source': {k: source[k] for k in ('member', 'index', 'logical_path') if k in source}})
-    report = {'apkSha256': APK_SHA256, 'skills': EXPECTED, 'documents': documents,
-              'limits': ['Layer fields are copied from the SFX. TrackType, DirType and BlendMode are not interpreted, and nothing is played.']}
+    textures, texture_gaps = [], []
+    for logical in sorted({layer['texture'] for doc in documents for layer in doc['layers'] if layer['texture']}):
+        stem = Path(logical).stem
+        candidates = [logical] if not logical.endswith('.tga') else [logical, str(Path(logical).with_suffix('.ktx'))]
+        found = next((item for item in candidates if len(lookup_logical(catalogue, item)) == 1), None)
+        if found is None:
+            texture_gaps.append(logical)
+            continue
+        if not found.endswith(('.tga', '.ktx')):
+            texture_gaps.append(logical)
+            continue
+        target = OUT / 'textures' / (stem + Path(found).suffix)
+        extract(apk, catalogue, found, target, APK_SHA256)
+        if found.endswith('.ktx'):
+            decoded = convert([target], OUT / 'textures' / ('decoded-' + stem), DEFAULT_DECODER)['textures'][0]['outputs'][0]
+            png = ROOT / decoded['png']
+        else:
+            png = target.with_suffix('.png')
+            with Image.open(target) as image:
+                image.convert('RGBA').save(png)
+        with Image.open(png) as image:
+            textures.append({'logical': logical, 'packed': found, 'size': list(image.size), 'pngSha256': sha(png.read_bytes())})
+    report = {'apkSha256': APK_SHA256, 'skills': EXPECTED, 'documents': documents, 'textures': textures,
+              'textureGaps': texture_gaps,
+              'limits': ['Layer fields are copied from the SFX. TrackType, DirType and BlendMode are not interpreted.',
+                         'TGA textures are decoded to PNG. Particle motion is not reconstructed, and nothing is played.']}
     path = OUT / 'report.json'
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
     print(json.dumps({'report': str(path), 'sha256': sha(path.read_bytes()),
-                      'documents': [{'logical': d['logical'], 'layers': len(d['layers']), 'textures': len(d['textures'])} for d in documents]},
+                      'documents': [{'logical': d['logical'], 'layers': len(d['layers'])} for d in documents],
+                      'textures': len(textures), 'textureGaps': texture_gaps},
                     ensure_ascii=False))
 
 
