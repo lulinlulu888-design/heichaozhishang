@@ -202,8 +202,10 @@ def build_sampler():
     build=OUT/'decoder-build'
     for command in [[str(cmake),'-S',str(folder),'-B',str(build),'-G','Visual Studio 17 2022','-A','x64'],
                     [str(cmake),'--build',str(build),'--config','Release','--parallel','2']]:
-        result=subprocess.run(command,capture_output=True,text=True,timeout=180)
-        with (OUT/'decoder-build.log').open('a',encoding='utf8') as stream:stream.write(result.stdout+'\n'+result.stderr+'\n')
+        result=subprocess.run(command,capture_output=True,timeout=180)
+        def text(blob):
+            return (blob or b'').decode('utf-8','replace')
+        with (OUT/'decoder-build.log').open('a',encoding='utf8') as stream:stream.write(text(result.stdout)+'\n'+text(result.stderr)+'\n')
         if result.returncode:raise RuntimeError('ACL helper build failed; see decoder-build.log')
     executable=build/'Release/acl-sample.exe'
     save(OUT/'sampler-provenance.json',{'acceptedAclHashes':PINS,'sourceWrapperSha256':sha(wrapper.read_bytes()),
