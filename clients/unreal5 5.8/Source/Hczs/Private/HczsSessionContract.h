@@ -7,6 +7,11 @@
 /** Strict projection of our new HTTP contract. No original APK protocol claims. */
 namespace HczsSessionContract
 {
+    struct FPartyEffect
+    {
+        FString Type, Target;
+        int32 Factor = 0, Stacks = 0, Count = 0, Times = 0;
+    };
     struct FScenario
     {
         FString DefinitionId, EncounterId, Title, Notice, PlayerId, EnemyId, PlayerName, EnemyName;
@@ -23,7 +28,20 @@ namespace HczsSessionContract
         bool bHasUltimates = false;
         FString UltimateOwnerId, UltimateCardId;
         int32 UltimatePointsRequired = 0, UltimateMaxPerRound = 0;
+        /** hczs-battle-session-party-v1: factors replace amounts; the UI previews them with calcDamage's neutral path. */
+        bool bIsParty = false;
+        TArray<FHczsPartyMemberView> Party;
+        FHczsScalar EnemyAttack;
+        int32 AttackPercentPerStack = 0, MaxStacks = 0;
+        /** Deck instance -> owner party index. */
+        TMap<FString, int32> DeckOwners;
+        TMap<FString, TArray<FPartyEffect>> PartyCardEffects, PartyEnemyEffects;
     };
+    /** calcDamage with neutral inputs: trunc(attack * factor / 100.0 * (1 + stacks * percent / 100.0)), clamped to 1. */
+    int64 PartyDamagePreview(double Attack, int32 Factor, int32 Stacks, int32 PercentPerStack);
+    /** calcBlock with neutral inputs: trunc(attack * factor / 100.0). */
+    int64 PartyShieldPreview(double Attack, int32 Factor);
+    FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int32 Stacks, int32 PercentPerStack, FString* FirstDamage = nullptr);
     bool IsUuid(const FString& Id);
     bool IsId(const FString& Id, int32 MaximumLength = 128);
     bool ParseProfile(const TSharedPtr<FJsonObject>& Object, FHczsLocalProfile& Out);
@@ -38,6 +56,7 @@ namespace HczsSessionContract
     bool ParseHall(const TSharedPtr<FJsonObject>& Object, const FString& ProfileId, FHczsHallPreference& Out);
     bool ParseEncounters(const TSharedPtr<FJsonObject>& Object, TArray<FHczsEncounterSummary>& Out);
     bool ParseScenario(const TSharedPtr<FJsonObject>& Object, FScenario& Out);
+    bool ParsePartyScenario(const TSharedPtr<FJsonObject>& Definition, FScenario& Out);
     bool ParseBattleList(const TSharedPtr<FJsonObject>& Object, TArray<FHczsBattleSummary>& Out);
     bool ParseBattle(const TSharedPtr<FJsonObject>& Object, const FString& ProfileId, const FString& BattleId, FHczsBattleView& Out);
     bool ParseReceipt(const TSharedPtr<FJsonObject>& Object, const FString& ProfileId, const FString& BattleId,

@@ -229,15 +229,16 @@ def tick(delta):
         u.SystemLibrary.quit_editor()
 
 
-for name in ('ue-preview-error.txt', 'ue-preview.json'):
-    path = OUT / name
-    if path.exists():
-        path.unlink()
-try:
-    camera, close_camera = build()
-    started = time.monotonic()
-    stage = 2
-    handle = u.register_slate_post_tick_callback(tick)
-except Exception:
-    (OUT / 'ue-preview-error.txt').write_text(traceback.format_exc(), 'utf8')
-    u.SystemLibrary.quit_editor()
+if __name__ == '__main__':
+    for name in ('ue-preview-error.txt', 'ue-preview.json'):
+        path = OUT / name
+        if path.exists():
+            path.unlink()
+    try:
+        camera, close_camera = build()
+        started = time.monotonic()
+        stage = 2
+        handle = u.register_slate_post_tick_callback(tick)
+    except Exception:
+        (OUT / 'ue-preview-error.txt').write_text(traceback.format_exc(), 'utf8')
+        u.SystemLibrary.quit_editor()

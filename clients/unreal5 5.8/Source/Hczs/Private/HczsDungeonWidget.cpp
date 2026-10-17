@@ -5,6 +5,9 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Rendering/DrawElementTypes.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
@@ -51,6 +54,7 @@ void UHczsDungeonWidget::NativeConstruct()
 {
     Super::NativeConstruct();
     SetIsFocusable(true);
+    SetVisibility(ESlateVisibility::Visible);
     Items.Reset(); ItemWrap.Reset(); Controls.Reset(); bSourceReady = false;
     Layout = LoadObject<UHczsHallLayoutAsset>(nullptr, TEXT("/Game/Recovered/Worldline/Dungeon/UI/DungeonLayout.DungeonLayout"));
     if (!Layout) return;
@@ -176,7 +180,11 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     {
         const FSlateFontInfo& Font = NoticeItem->Font;
         const bool bAvgFinished = Avg138Index >= HczsPrologueAvg138().Num();
-        const FString Notice = bAvgFinished ? TEXT("AVG138 已按序播完，1703 仍未开打") : TEXT("3998 已解锁，首领战尚未恢复");
+        const FHczsMainlineProgress& Progress = Session->MainlineProgress;
+        const bool bBossBound = Progress.Challenges.Num() == 2 && Progress.Challenges[1].bExecutable;
+        const FString Notice = Progress.bBossChallengePassed ? TEXT("3998 已通关 · 序章首领战完成") :
+            !bBossBound ? (bAvgFinished ? TEXT("AVG138 已按序播完，1703 仍未开打") : TEXT("3998 已解锁，首领战尚未恢复")) :
+            bAvgFinished ? TEXT("AVG138 已播完 · 点击探索进入首领战") : TEXT("3998 已解锁 · 首领战规则为重建");
         const FVector2f TextSize(Measure->Measure(Notice, Font));
         const FGeometry NoticeGeometry = Geometry.MakeChild(TextSize, FSlateLayoutTransform(Scale, Offset + FVector2f(930, 560)));
         FSlateDrawElement::MakeText(Elements, ++Layer, NoticeGeometry.ToPaintGeometry(), Notice, Font, ESlateDrawEffect::None, FLinearColor::White);
@@ -208,16 +216,79 @@ FReply UHczsDungeonWidget::PressAt(const FGeometry& Geometry, const FVector2D& A
     {
         const FVector2f Local = TransformPoint(Inverse(Control.Transform), Point);
         if (!Control.bEnabled || Local.X < 0 || Local.Y < 0 || Local.X > Control.Size.X || Local.Y > Control.Size.Y) continue;
+        ++PressSerial; LastPressAction = Control.Action;
         if (Control.Action == TEXT("back")) OnBackRequested.Broadcast();
         else if (Control.Action == TEXT("explore"))
         {
             const bool bBossUnlocked = Session && Session->MainlineProgress.bIsValid && Session->MainlineProgress.bFirstChallengePassed;
+            const bool bAvgFinished = Avg138Index >= HczsPrologueAvg138().Num();
             if (!bBossUnlocked) OnExploreRequested.Broadcast();
-            else Avg138Index = HczsAdvancePrologueAvg138(Avg138Index);
+            else if (!bAvgFinished && !Session->MainlineProgress.bBossChallengePassed) Avg138Index = HczsAdvancePrologueAvg138(Avg138Index);
+            // AVG138 precedes battle 1703; the mode ignores this unless 3998 is bound and not yet passed.
+            else OnExploreRequested.Broadcast();
         }
         return FReply::Handled();
     }
     return FReply::Unhandled();
+}
+
+bool UHczsDungeonWidget::DevelopmentPressControl(const FString& Action)
+{
+#if UE_BUILD_SHIPPING
+    return false;
+#else
+    int32 Port = 0;
+    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsMainlineUITest")) || !FParse::Value(FCommandLine::Get(), TEXT("HczsServerPort="), Port)
+        || Port <= 0 || Port > 65535 || Port == 7460 || !FSlateApplication::IsInitialized() || !bSourceReady || !IsInViewport()) return false;
+    const FControl* Control = Controls.FindByPredicate([&Action](const FControl& C) { return C.Action == Action && C.bEnabled; });
+    const TSharedPtr<SWidget> SlateWidget = GetCachedWidget();
+    if (!Control || !SlateWidget) return false;
+    FSlateApplication& Slate = FSlateApplication::Get();
+    const TSharedPtr<SWindow> Window = Slate.FindWidgetWindow(SlateWidget.ToSharedRef());
+    FWidgetPath DesktopPath;
+    if (!Window || Window->IsWindowMinimized() || !Slate.GeneratePathToWidgetUnchecked(SlateWidget.ToSharedRef(), DesktopPath)) return false;
+    const auto Arranged = DesktopPath.FindArrangedWidget(SlateWidget.ToSharedRef());
+    if (!Arranged.IsSet()) return false;
+    const FGeometry& Geometry = Arranged.GetValue().Geometry;
+    const FVector2f Available(Geometry.GetLocalSize());
+    const float Scale = FMath::Min(Available.X / DesignSize.X, Available.Y / DesignSize.Y);
+    if (Scale <= 0) return false;
+    const FVector2f Point = TransformPoint(Control->Transform, Control->Size * 0.5f);
+    const FVector2f Absolute = Geometry.LocalToAbsolute((Available - DesignSize * Scale) * 0.5f + Point * Scale);
+    TArray<TSharedRef<SWindow>> Windows{Window.ToSharedRef()};
+    FWidgetPath Path = Slate.LocateWindowUnderMouse(Absolute, Windows, false, 0);
+    const bool bContains = Path.IsValid() && Path.ContainsWidget(SlateWidget.Get());
+    const uint64 Before = PressSerial;
+    bool bHandled = false;
+    if (bContains)
+    {
+        TSet<FKey> Buttons{EKeys::LeftMouseButton};
+        bHandled = Slate.RoutePointerDownEvent(Path, FPointerEvent(0u, Absolute, Absolute, Buttons, EKeys::LeftMouseButton, 0, FModifierKeysState())).IsEventHandled();
+        Slate.RoutePointerUpEvent(Path, FPointerEvent(0u, Absolute, Absolute, TSet<FKey>(), EKeys::LeftMouseButton, 0, FModifierKeysState()));
+    }
+    const bool bRouted = PressSerial == Before + 1 && LastPressAction == Action;
+    UE_LOG(LogTemp, Display, TEXT("HCZS dungeon pointer: action=%s design=(%.1f,%.1f) absolute=(%.1f,%.1f) geometry=(%.1f,%.1f) containsWidget=%d handled=%d leaf=%s routed=%d"),
+        *Action, Point.X, Point.Y, Absolute.X, Absolute.Y, Available.X, Available.Y, bContains, bHandled,
+        Path.IsValid() ? *Path.Widgets.Last().Widget->GetTypeAsString() : TEXT("none"), bRouted);
+    return bRouted;
+#endif
+}
+
+FString UHczsDungeonWidget::DevelopmentDescribe() const
+{
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetBoolField(TEXT("sourceReady"), bSourceReady);
+    Root->SetNumberField(TEXT("avg138Index"), Avg138Index);
+    Root->SetNumberField(TEXT("avg138Count"), HczsPrologueAvg138().Num());
+    Root->SetNumberField(TEXT("pressSerial"), static_cast<double>(PressSerial));
+    Root->SetStringField(TEXT("lastPressAction"), LastPressAction);
+    TArray<TSharedPtr<FJsonValue>> Actions;
+    for (const FControl& Control : Controls)
+        if (Control.bEnabled) Actions.Add(MakeShared<FJsonValueString>(Control.Action));
+    Root->SetArrayField(TEXT("enabledControls"), Actions);
+    FString Out;
+    FJsonSerializer::Serialize(Root, TJsonWriterFactory<>::Create(&Out));
+    return Out;
 }
 
 FReply UHczsDungeonWidget::NativeOnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)

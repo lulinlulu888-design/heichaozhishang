@@ -74,4 +74,5 @@ private:
     FDelegateHandle ViewportResizedHandle;
     FDelegateHandle ExploreHandle;
     bool bWaitingExplore = false;
+    FString ExploreEncounter;
 };

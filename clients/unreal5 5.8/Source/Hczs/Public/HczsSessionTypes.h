@@ -63,6 +63,24 @@ struct HCZS_API FHczsHandCard
     UPROPERTY(BlueprintReadOnly) FString EffectsText;
     /** First opponent damage amount, the value card_table RPG_DESCRIPTION's %s shows. */
     UPROPERTY(BlueprintReadOnly) FString FirstDamage;
+    /** Party battles only: the deck entry's owner. Empty for single-character battles. */
+    UPROPERTY(BlueprintReadOnly) FString OwnerId;
+    UPROPERTY(BlueprintReadOnly) FString OwnerName;
+    UPROPERTY(BlueprintReadOnly) int32 OwnerIndex = -1;
+};
+
+/** One server-authoritative party member of a hczs-battle-session-party-v1 battle. */
+USTRUCT(BlueprintType)
+struct HCZS_API FHczsPartyMemberView
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) FString Id;
+    UPROPERTY(BlueprintReadOnly) FString Name;
+    UPROPERTY(BlueprintReadOnly) FHczsScalar Hp;
+    UPROPERTY(BlueprintReadOnly) FHczsScalar MaxHp;
+    UPROPERTY(BlueprintReadOnly) FHczsScalar Shield;
+    UPROPERTY(BlueprintReadOnly) FHczsScalar Attack;
+    UPROPERTY(BlueprintReadOnly) int32 AttackBuff = 0;
 };
 
 /** Validated raw receipt events used by scene presentation; never parsed from UI text. */
@@ -76,6 +94,8 @@ struct HCZS_API FHczsBattleVisualEvent
     UPROPERTY(BlueprintReadOnly) FString Target;
     UPROPERTY(BlueprintReadOnly) FString InstanceId;
     UPROPERTY(BlueprintReadOnly) int32 Round = 0;
+    /** Party battles: card owner (CardPlayed) or hit member (DamageApplied/MemberDefeated); -1 otherwise. */
+    UPROPERTY(BlueprintReadOnly) int32 MemberIndex = -1;
 };
 
 USTRUCT(BlueprintType)
@@ -127,6 +147,11 @@ struct HCZS_API FHczsBattleView
     UPROPERTY(BlueprintReadOnly) TArray<FString> EnemyIntentDamage;
     UPROPERTY(BlueprintReadOnly) int32 DrawCount = 0;
     UPROPERTY(BlueprintReadOnly) int32 DiscardCount = 0;
+    /** Party battles: Player* fields mirror Party[0], the animated combatant. */
+    UPROPERTY(BlueprintReadOnly) bool bIsParty = false;
+    UPROPERTY(BlueprintReadOnly) TArray<FHczsPartyMemberView> Party;
+    UPROPERTY(BlueprintReadOnly) int32 EnemyAttackBuff = 0;
+    UPROPERTY(BlueprintReadOnly) int32 RemovedCount = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -166,9 +191,14 @@ struct HCZS_API FHczsMainlineProgress
     UPROPERTY(BlueprintReadOnly) int64 Revision = 0;
     UPROPERTY(BlueprintReadOnly) int64 UpdatedAt = -1;
     UPROPERTY(BlueprintReadOnly) bool bFirstChallengePassed = false;
+    UPROPERTY(BlueprintReadOnly) bool bBossChallengePassed = false;
     UPROPERTY(BlueprintReadOnly) bool bActivityRecordPresent = false;
+    /** The latest completion; earlier ones stay in CompletedBattleIds/CompletedAts in settle order. */
     UPROPERTY(BlueprintReadOnly) FString CompletedBattleId;
     UPROPERTY(BlueprintReadOnly) int64 CompletedBattleRevision = 0;
     UPROPERTY(BlueprintReadOnly) int64 CompletedAt = -1;
+    UPROPERTY(BlueprintReadOnly) TArray<FString> CompletedBattleIds;
+    UPROPERTY(BlueprintReadOnly) TArray<int64> CompletedBattleRevisions;
+    UPROPERTY(BlueprintReadOnly) TArray<int64> CompletedAts;
     UPROPERTY(BlueprintReadOnly) TArray<FHczsMainlineChallenge> Challenges;
 };

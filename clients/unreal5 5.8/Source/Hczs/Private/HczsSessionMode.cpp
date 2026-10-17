@@ -23,6 +23,7 @@ const TCHAR* TutorialMap = TEXT("/Game/Recovered/Battle/Maps/L_TutorialSource213
 const TCHAR* CityMap = TEXT("/Game/Recovered/City/Maps/L_City2077Preview");
 const TCHAR* HallMap = TEXT("/Game/Recovered/Hall/Maps/L_ElsaHallFxPreview");
 const TCHAR* ChessMap = TEXT("/Game/Recovered/Worldline/Maps/L_Chess239");
+const TCHAR* BossTheatreMap = TEXT("/Game/Recovered/Battle/Maps/L_PrologueBoss1703");
 
 bool Identity(const UHczsGameInstance* Session, const TCHAR* Encounter, const TCHAR* Enemy, const TCHAR* DefinitionPrefix)
 {
@@ -37,6 +38,11 @@ const TCHAR* RecoveredBattleMap(const UHczsGameInstance* Session)
     // 10405 is the recovered local preview whose source gate allows Elsa's ultimate.
     if (Identity(Session, TEXT("city-preview-10405"), TEXT("6605"), TEXT("city-preview-10405-"))) return CityMap;
     if (Identity(Session, TEXT("tutorial-5000"), TEXT("991"), TEXT("tutorial-5000-"))) return TutorialMap;
+    // 3998/1703 runs in boss_theatre with the reconstructed party rules.
+    if (!Session) return nullptr;
+    const FHczsBattleView& Battle = Session->CurrentBattle;
+    if (Battle.bIsParty && Battle.PlayerId == TEXT("party-1-3") && Battle.EnemyId == TEXT("2013") &&
+        Battle.EncounterId == TEXT("prologue-boss-1703")) return BossTheatreMap;
     return nullptr;
 }
 }
@@ -275,17 +281,24 @@ void AHczsDungeonMode::Leave()
 void AHczsDungeonMode::Explore()
 {
     if (!Session || Session->bRequestInFlight || Session->bHasPendingIntent || bWaitingExplore) return;
-    // After 3997 has a successTime, 3998 is unlocked. Battle 1703 is not a rules encounter yet.
-    if (Session->MainlineProgress.bIsValid && Session->MainlineProgress.bFirstChallengePassed) return;
+    // After 3997 has a successTime, 3998 is unlocked and runs only when the server bound battle 1703.
+    const FHczsMainlineProgress& Progress = Session->MainlineProgress;
+    if (Progress.bIsValid && Progress.bFirstChallengePassed)
+    {
+        if (Progress.bBossChallengePassed || Progress.Challenges.Num() != 2 || !Progress.Challenges[1].bExecutable ||
+            Progress.Challenges[1].EncounterId != TEXT("prologue-boss-1703")) return;
+        ExploreEncounter = Progress.Challenges[1].EncounterId;
+    }
+    else ExploreEncounter = TEXT("tutorial-5000");
     bWaitingExplore = true;
-    Session->SelectEncounter(TEXT("tutorial-5000"));
+    Session->SelectEncounter(ExploreEncounter);
     if (!Session->bRequestInFlight) bWaitingExplore = false;
 }
 
 void AHczsDungeonMode::ExploreState()
 {
     if (!bWaitingExplore || !Session || Session->bRequestInFlight) return;
-    if (!Session->ErrorCode.IsEmpty() || Session->SelectedEncounterId != TEXT("tutorial-5000"))
+    if (!Session->ErrorCode.IsEmpty() || Session->SelectedEncounterId != ExploreEncounter)
     {
         bWaitingExplore = false;
         return;

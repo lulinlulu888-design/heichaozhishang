@@ -277,10 +277,10 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
             TEXT("initialStateAuthority"), TEXT("activityDatas"), TEXT("challenges"), TEXT("completed")}) ||
         !Text(O, TEXT("profileId"), P.ProfileId, 36) || P.ProfileId != ProfileId || !IsUuid(P.ProfileId) ||
         !Text(O, TEXT("contentId"), P.ContentId, 64) || P.ContentId != ContentId || !ContentHash(P.ContentId) ||
-        !Integer(O, TEXT("activityId"), Activity, 2, 2) || !Integer(O, TEXT("revision"), P.Revision, 0, 1) ||
+        !Integer(O, TEXT("activityId"), Activity, 2, 2) || !Integer(O, TEXT("revision"), P.Revision, 0, 2) ||
         !Text(O, TEXT("policy"), Policy, 80) || Policy != TEXT("local-prologue-progress-v1") ||
         !Text(O, TEXT("initialStateAuthority"), Authority, 128) || Authority != TEXT("local-fresh-profile-policy; not recovered original account state")) return false;
-    const auto* Completed = Array(O, TEXT("completed"), 1);
+    const auto* Completed = Array(O, TEXT("completed"), 2);
     const auto* Challenges = Array(O, TEXT("challenges"), 2);
     if (!Completed || Completed->Num() != P.Revision || !Challenges || Challenges->Num() != 2) return false;
     if (P.Revision == 0)
@@ -292,28 +292,39 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
     {
         const auto Records = Child(O, TEXT("activityDatas"));
         const auto ActivityRecord = Child(Records, TEXT("2"));
-        int64 SuccessTime = 0;
-        if (!Records.IsValid() || Records->Values.Num() != 1 || !ActivityRecord.IsValid() || ActivityRecord->Values.Num() != 1 ||
-            !Integer(Child(ActivityRecord, TEXT("3997")), TEXT("successTime"), SuccessTime, 1, 1)) return false;
+        if (!Records.IsValid() || Records->Values.Num() != 1 || !ActivityRecord.IsValid() || ActivityRecord->Values.Num() != P.Revision ||
+            !Integer(O, TEXT("updatedAt"), P.UpdatedAt)) return false;
         P.bActivityRecordPresent = true;
-        const auto Done = ObjectValue((*Completed)[0]); int64 Challenge = 0;
-        if (!Integer(O, TEXT("updatedAt"), P.UpdatedAt) || !Exact(Done, {TEXT("challengeId"), TEXT("battleId"), TEXT("battleRevision"), TEXT("completedAt")}) ||
-            !Integer(Done, TEXT("challengeId"), Challenge, 3997, 3997) || !Text(Done, TEXT("battleId"), P.CompletedBattleId, 36) || !IsUuid(P.CompletedBattleId) ||
-            !Integer(Done, TEXT("battleRevision"), P.CompletedBattleRevision, 1, 1000001) || !Integer(Done, TEXT("completedAt"), P.CompletedAt, 0, P.UpdatedAt)) return false;
-        P.bFirstChallengePassed = true;
+        int64 PreviousAt = 0;
+        for (int32 Index = 0; Index < Completed->Num(); ++Index)
+        {
+            // Settlement order follows the single predecessor chain 3997 -> 3998.
+            const int64 ChallengeId = 3997 + Index; int64 SuccessTime = 0, Challenge = 0, Revision = 0, At = 0; FString Battle;
+            const auto Done = ObjectValue((*Completed)[Index]);
+            if (!Integer(Child(ActivityRecord, *FString::Printf(TEXT("%lld"), ChallengeId)), TEXT("successTime"), SuccessTime, 1, 1) ||
+                !Exact(Done, {TEXT("challengeId"), TEXT("battleId"), TEXT("battleRevision"), TEXT("completedAt")}) ||
+                !Integer(Done, TEXT("challengeId"), Challenge, ChallengeId, ChallengeId) || !Text(Done, TEXT("battleId"), Battle, 36) || !IsUuid(Battle) ||
+                P.CompletedBattleIds.Contains(Battle) || !Integer(Done, TEXT("battleRevision"), Revision, 1, 1000001) ||
+                !Integer(Done, TEXT("completedAt"), At, PreviousAt, P.UpdatedAt)) return false;
+            P.CompletedBattleIds.Add(Battle); P.CompletedBattleRevisions.Add(Revision); P.CompletedAts.Add(At); PreviousAt = At;
+        }
+        P.CompletedBattleId = P.CompletedBattleIds.Last(); P.CompletedBattleRevision = P.CompletedBattleRevisions.Last(); P.CompletedAt = P.CompletedAts.Last();
+        P.bFirstChallengePassed = true; P.bBossChallengePassed = P.Revision == 2;
     }
     for (int32 Index = 0; Index < 2; ++Index)
     {
         const auto C = ObjectValue((*Challenges)[Index]); FHczsMainlineChallenge Challenge;
         int64 Battle = 0, Count = 0; bool bLoot = true;
         const bool bFirst = Index == 0;
-        const bool bFields = bFirst ? Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"), TEXT("predecessors"), TEXT("hasLoot"),
+        // 3998 is executable once the server binds the reconstructed prologue-boss-1703 encounter.
+        const bool bBound = !bFirst && C.IsValid() && !C->HasField(TEXT("unavailableReason"));
+        const bool bFields = (bFirst || bBound) ? Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"), TEXT("predecessors"), TEXT("hasLoot"),
             TEXT("status"), TEXT("recordPresent"), TEXT("successTime"), TEXT("encounterId"), TEXT("executable")}) : Exact(C, {TEXT("id"), TEXT("name"), TEXT("subtitle"), TEXT("battleId"),
             TEXT("predecessors"), TEXT("hasLoot"), TEXT("status"), TEXT("recordPresent"), TEXT("successTime"), TEXT("encounterId"), TEXT("executable"), TEXT("unavailableReason")});
         if (!bFields || !Counter(C, TEXT("id"), Challenge.Id, bFirst ? 3997 : 3998, bFirst ? 3997 : 3998) ||
             !Text(C, TEXT("name"), Challenge.Name, 128) || !Text(C, TEXT("subtitle"), Challenge.Subtitle, 128) ||
             !Integer(C, TEXT("battleId"), Battle, bFirst ? 5000 : 1703, bFirst ? 5000 : 1703) ||
-            !Bool(C, TEXT("hasLoot"), bLoot) || bLoot || !Bool(C, TEXT("executable"), Challenge.bExecutable) || Challenge.bExecutable != bFirst ||
+            !Bool(C, TEXT("hasLoot"), bLoot) || bLoot || !Bool(C, TEXT("executable"), Challenge.bExecutable) || Challenge.bExecutable != (bFirst || bBound) ||
             !Text(C, TEXT("status"), Challenge.Status, 16) || !Bool(C, TEXT("recordPresent"), Challenge.bRecordPresent)) return false;
         const auto Success = C->TryGetField(TEXT("successTime"));
         if (Challenge.bRecordPresent)
@@ -322,10 +333,9 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
             Challenge.SuccessTime = static_cast<int32>(Count);
         }
         else if (!Success.IsValid() || !Success->IsNull() || Count != 0) return false;
-        const FString ExpectedStatus = bFirst ? (P.bFirstChallengePassed ? TEXT("passed") : TEXT("available")) :
-            (P.bFirstChallengePassed ? TEXT("available") : TEXT("locked"));
-        if (Challenge.Status != ExpectedStatus || Challenge.bRecordPresent != (bFirst && P.bFirstChallengePassed) ||
-            Challenge.SuccessTime != (bFirst && P.bFirstChallengePassed ? 1 : -1)) return false;
+        const bool bPassed = bFirst ? P.bFirstChallengePassed : P.bBossChallengePassed;
+        const FString ExpectedStatus = bPassed ? TEXT("passed") : (bFirst || P.bFirstChallengePassed) ? TEXT("available") : TEXT("locked");
+        if (Challenge.Status != ExpectedStatus || Challenge.bRecordPresent != bPassed || Challenge.SuccessTime != (bPassed ? 1 : -1)) return false;
         const auto* Predecessors = Array(C, TEXT("predecessors"), 1);
         if (!Predecessors || Predecessors->Num() != (bFirst ? 0 : 1)) return false;
         if (bFirst)
@@ -335,7 +345,12 @@ bool ParseMainline(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, c
         else
         {
             double Previous = 0; FString Reason; const auto Encounter = C->TryGetField(TEXT("encounterId"));
-            if (!(*Predecessors)[0]->TryGetNumber(Previous) || Previous != 3997 || !Encounter.IsValid() || !Encounter->IsNull() ||
+            if (!(*Predecessors)[0]->TryGetNumber(Previous) || Previous != 3997 || !Encounter.IsValid()) return false;
+            if (bBound)
+            {
+                if (!Text(C, TEXT("encounterId"), Challenge.EncounterId, 80) || Challenge.EncounterId != TEXT("prologue-boss-1703")) return false;
+            }
+            else if (!Encounter->IsNull() || P.bBossChallengePassed ||
                 !Text(C, TEXT("unavailableReason"), Reason, 100) || Reason != TEXT("original-boss-mechanics-and-client-not-restored")) return false;
         }
         P.Challenges.Add(MoveTemp(Challenge));
@@ -349,22 +364,33 @@ bool ParseMainlineReceipt(const TSharedPtr<FJsonObject>& O, const FString& Profi
     if (!Exact(O, {TEXT("campaign"), TEXT("settlement"), TEXT("rewards"), TEXT("replayed")}) || !Bool(O, TEXT("replayed"), bReplayed) ||
         !Array(O, TEXT("rewards"), 0) || !ParseMainline(Child(O, TEXT("campaign")), ProfileId, ContentId, P) ||
         P.Revision != ExpectedRevision + 1 || !P.bFirstChallengePassed || P.CompletedBattleId != BattleId || P.CompletedBattleRevision != BattleRevision) return false;
-    const auto* Completed = Array(Child(O, TEXT("campaign")), TEXT("completed"), 1);
-    if (!Completed || Completed->Num() != 1 || !SameJson((*Completed)[0], O->TryGetField(TEXT("settlement")))) return false;
+    const auto* Completed = Array(Child(O, TEXT("campaign")), TEXT("completed"), 2);
+    if (!Completed || Completed->Num() != P.Revision || !SameJson(Completed->Last(), O->TryGetField(TEXT("settlement")))) return false;
     Out = MoveTemp(P); return true;
 }
 bool CanSettleMainlineBattle(const FHczsMainlineProgress& Progress, const FHczsBattleView& Battle)
 {
-    return Progress.bIsValid && !Progress.bFirstChallengePassed && Progress.Revision == 0 && Battle.bIsValid &&
-        Battle.ProfileId == Progress.ProfileId && Battle.Status == TEXT("won") && Battle.OutcomeReason == TEXT("enemy-defeated") &&
-        Battle.EncounterId == TEXT("tutorial-5000") && Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991");
+    if (!Progress.bIsValid || !Battle.bIsValid || Battle.ProfileId != Progress.ProfileId || Battle.Status != TEXT("won") ||
+        Battle.OutcomeReason != TEXT("enemy-defeated")) return false;
+    if (Progress.Revision == 0 && !Progress.bFirstChallengePassed)
+        return !Battle.bIsParty && Battle.EncounterId == TEXT("tutorial-5000") && Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991");
+    return Progress.Revision == 1 && Progress.bFirstChallengePassed && !Progress.bBossChallengePassed &&
+        Progress.Challenges.Num() == 2 && Progress.Challenges[1].bExecutable && Progress.Challenges[1].EncounterId == TEXT("prologue-boss-1703") &&
+        Battle.bIsParty && Battle.EncounterId == TEXT("prologue-boss-1703") && Battle.PlayerId == TEXT("party-1-3") && Battle.EnemyId == TEXT("2013") &&
+        !Progress.CompletedBattleIds.Contains(Battle.Id);
 }
 bool CanApplyMainlineProgress(const FHczsMainlineProgress& Existing, const FHczsMainlineProgress& Incoming, int64 MinimumRevision)
 {
-    return Incoming.bIsValid && Incoming.Revision >= MinimumRevision && (!Existing.bIsValid ||
-        (Incoming.ProfileId == Existing.ProfileId && Incoming.ContentId == Existing.ContentId && Incoming.Revision >= Existing.Revision && Incoming.UpdatedAt >= Existing.UpdatedAt &&
-            (!Existing.bFirstChallengePassed || (Incoming.CompletedBattleId == Existing.CompletedBattleId && Incoming.CompletedBattleRevision == Existing.CompletedBattleRevision &&
-                Incoming.CompletedAt == Existing.CompletedAt))));
+    if (!Incoming.bIsValid || Incoming.Revision < MinimumRevision) return false;
+    if (!Existing.bIsValid) return true;
+    if (Incoming.ProfileId != Existing.ProfileId || Incoming.ContentId != Existing.ContentId || Incoming.Revision < Existing.Revision ||
+        Incoming.UpdatedAt < Existing.UpdatedAt || Incoming.CompletedBattleIds.Num() < Existing.CompletedBattleIds.Num()) return false;
+    // Completions are append-only: every confirmed record stays byte-identical.
+    for (int32 I = 0; I < Existing.CompletedBattleIds.Num(); ++I)
+        if (Incoming.CompletedBattleIds[I] != Existing.CompletedBattleIds[I] || Incoming.CompletedBattleRevisions[I] != Existing.CompletedBattleRevisions[I] ||
+            Incoming.CompletedAts[I] != Existing.CompletedAts[I]) return false;
+    return Incoming.Revision != Existing.Revision || (Incoming.CompletedBattleId == Existing.CompletedBattleId &&
+        Incoming.CompletedBattleRevision == Existing.CompletedBattleRevision && Incoming.CompletedAt == Existing.CompletedAt);
 }
 bool ParseHall(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, FHczsHallPreference& Out)
 {
@@ -401,12 +427,168 @@ bool ParseEncounters(const TSharedPtr<FJsonObject>& O, TArray<FHczsEncounterSumm
     }
     Out = MoveTemp(Parsed); return true;
 }
+int64 PartyDamagePreview(double Attack, int32 Factor, int32 Stacks, int32 PercentPerStack)
+{
+    // Same binary64 order as the server: base, then (1 + (stackFactor - 1)) buff.
+    const double Base = Attack * static_cast<double>(Factor) / 100.0;
+    const double StackFactor = 1.0 + static_cast<double>(static_cast<int64>(Stacks) * PercentPerStack) / 100.0;
+    const double Value = Base * (1.0 + (StackFactor - 1.0));
+    return Value <= 1.0 ? 1 : static_cast<int64>(FMath::FloorToDouble(Value));
+}
+int64 PartyShieldPreview(double Attack, int32 Factor)
+{
+    const double Value = Attack * static_cast<double>(Factor) / 100.0;
+    return Value <= 0.0 ? 0 : static_cast<int64>(FMath::FloorToDouble(Value));
+}
+FString PartyEffectsText(const TArray<FPartyEffect>& Effects, double Attack, int32 Stacks, int32 PercentPerStack, FString* FirstDamage)
+{
+    TArray<FString> Lines;
+    for (const FPartyEffect& E : Effects)
+    {
+        if (E.Type == TEXT("damage"))
+        {
+            const FString Amount = FString::Printf(TEXT("%lld"), PartyDamagePreview(Attack, E.Factor, Stacks, PercentPerStack));
+            if (FirstDamage && FirstDamage->IsEmpty() && E.Target == TEXT("opponent")) *FirstDamage = Amount;
+            if (E.Target == TEXT("opponent")) Lines.Add(TEXT("对方伤害 ") + Amount);
+            else Lines.Add(E.Times > 1 ? FString::Printf(TEXT("首位伤害 %s ×%d"), *Amount, E.Times) : TEXT("首位伤害 ") + Amount);
+        }
+        else if (E.Type == TEXT("shield"))
+            Lines.Add(FString::Printf(TEXT("%s护盾 %lld"), E.Target == TEXT("party") ? TEXT("全队") : TEXT("自身"), PartyShieldPreview(Attack, E.Factor)));
+        else if (E.Type == TEXT("attackBuff"))
+            Lines.Add(FString::Printf(TEXT("%s攻击强化 +%d层"), E.Target == TEXT("party") ? TEXT("全队") : TEXT("自身"), E.Stacks));
+        else if (E.Type == TEXT("draw")) Lines.Add(FString::Printf(TEXT("抽牌 %d"), E.Count));
+    }
+    return FString::Join(Lines, TEXT(" · "));
+}
+namespace
+{
+    bool PartyEffects(const TSharedPtr<FJsonObject>& O, bool bEnemy, TArray<FPartyEffect>& Out)
+    {
+        const auto* Values = Array(O, TEXT("effects"), 32); if (!Values || Values->IsEmpty()) return false;
+        for (const auto& V : *Values)
+        {
+            const auto E = ObjectValue(V); FPartyEffect Effect;
+            if (!Text(E, TEXT("type"), Effect.Type, 24)) return false;
+            if (Effect.Type == TEXT("damage") && !bEnemy)
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("target"), TEXT("factor")}) || !Text(E, TEXT("target"), Effect.Target, 16) ||
+                    Effect.Target != TEXT("opponent") || !Counter(E, TEXT("factor"), Effect.Factor, 0, 100000)) return false;
+            }
+            else if (Effect.Type == TEXT("damage"))
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("target"), TEXT("factor"), TEXT("times")}) || !Text(E, TEXT("target"), Effect.Target, 16) ||
+                    Effect.Target != TEXT("first-mid-last") || !Counter(E, TEXT("factor"), Effect.Factor, 0, 100000) ||
+                    !Counter(E, TEXT("times"), Effect.Times, 1, 16)) return false;
+            }
+            else if (Effect.Type == TEXT("shield") && !bEnemy)
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("target"), TEXT("factor")}) || !Text(E, TEXT("target"), Effect.Target, 16) ||
+                    (Effect.Target != TEXT("self") && Effect.Target != TEXT("party")) || !Counter(E, TEXT("factor"), Effect.Factor, 0, 100000)) return false;
+            }
+            else if (Effect.Type == TEXT("attackBuff"))
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("target"), TEXT("stacks")}) || !Text(E, TEXT("target"), Effect.Target, 16) ||
+                    (Effect.Target != TEXT("self") && (bEnemy || Effect.Target != TEXT("party"))) ||
+                    !Counter(E, TEXT("stacks"), Effect.Stacks, 1, 999)) return false;
+            }
+            else if (Effect.Type == TEXT("draw") && !bEnemy)
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("count")}) || !Counter(E, TEXT("count"), Effect.Count, 0, 64)) return false;
+            }
+            else return false;
+            Out.Add(MoveTemp(Effect));
+        }
+        return true;
+    }
+    bool Combatant(const TSharedPtr<FJsonObject>& O, FHczsPartyMemberView& Out)
+    {
+        return Exact(O, {TEXT("id"), TEXT("name"), TEXT("maxHp"), TEXT("attack")}) && Text(O, TEXT("id"), Out.Id, 128) && IsId(Out.Id) &&
+            Text(O, TEXT("name"), Out.Name, 128) && Scalar(Child(O, TEXT("maxHp")), Out.MaxHp) && Out.MaxHp.Approximate > 0 &&
+            Scalar(Child(O, TEXT("attack")), Out.Attack);
+    }
+}
+bool ParsePartyScenario(const TSharedPtr<FJsonObject>& D, FScenario& S)
+{
+    if (!Exact(D, {TEXT("id"), TEXT("player"), TEXT("party"), TEXT("enemy"), TEXT("deck"), TEXT("cards"), TEXT("enemySkills"),
+            TEXT("enemyIntents"), TEXT("enemyFallback"), TEXT("initialDraw"), TEXT("roundDraw"), TEXT("energyPerRound"),
+            TEXT("handLimit"), TEXT("maxRounds"), TEXT("partyRules")})) return false;
+    S.bIsParty = true;
+    const auto Rules = Child(D, TEXT("partyRules")); FString Policy, Buff, Targeting;
+    if (!Exact(Rules, {TEXT("policy"), TEXT("buffId"), TEXT("attackPercentPerStack"), TEXT("maxStacks"), TEXT("enemyTargeting")}) ||
+        !Text(Rules, TEXT("policy"), Policy, 80) || Policy != TEXT("prologue-party-reconstruction-v1") ||
+        !Text(Rules, TEXT("buffId"), Buff, 16) || Buff != TEXT("1001") ||
+        !Counter(Rules, TEXT("attackPercentPerStack"), S.AttackPercentPerStack, 1, 100) ||
+        !Counter(Rules, TEXT("maxStacks"), S.MaxStacks, 1, 999) ||
+        !Text(Rules, TEXT("enemyTargeting"), Targeting, 40) || Targeting != TEXT("first-living-in-formation")) return false;
+    const auto Player = Child(D, TEXT("player"));
+    if (!Exact(Player, {TEXT("id"), TEXT("name")}) || !Text(Player, TEXT("id"), S.PlayerId, 128) || !IsId(S.PlayerId) ||
+        !Text(Player, TEXT("name"), S.PlayerName, 128)) return false;
+    FHczsPartyMemberView Enemy;
+    if (!Combatant(Child(D, TEXT("enemy")), Enemy)) return false;
+    S.EnemyId = Enemy.Id; S.EnemyName = Enemy.Name; S.EnemyMaxHp = Enemy.MaxHp; S.EnemyAttack = Enemy.Attack;
+    const auto* Members = Array(D, TEXT("party"), 4); if (!Members || Members->IsEmpty()) return false;
+    TSet<FString> MemberIds = {S.EnemyId, S.PlayerId};
+    for (const auto& V : *Members)
+    {
+        FHczsPartyMemberView Member;
+        if (!Combatant(ObjectValue(V), Member) || MemberIds.Contains(Member.Id)) return false;
+        MemberIds.Add(Member.Id); S.Party.Add(MoveTemp(Member));
+    }
+    S.PlayerMaxHp = S.Party[0].MaxHp;
+    auto Cards = Child(D, TEXT("cards")), Skills = Child(D, TEXT("enemySkills"));
+    if (!Cards.IsValid() || Cards->Values.IsEmpty() || Cards->Values.Num() > 256 || !Skills.IsValid() || Skills->Values.IsEmpty() || Skills->Values.Num() > 128) return false;
+    for (const auto& Entry : Cards->Values)
+    {
+        const FString Key(*Entry.Key); auto C = ObjectValue(Entry.Value); FHczsHandCard Card; Card.CardId = Key;
+        TArray<FPartyEffect> Effects;
+        if (!IsId(Key) || !Exact(C, {TEXT("name"), TEXT("cost"), TEXT("effects")}) || !Text(C, TEXT("name"), Card.Name, 128) ||
+            !Counter(C, TEXT("cost"), Card.Cost, 0, 1000000) || !PartyEffects(C, false, Effects)) return false;
+        S.Cards.Add(Key, MoveTemp(Card)); S.PartyCardEffects.Add(Key, MoveTemp(Effects));
+    }
+    for (const auto& Entry : Skills->Values)
+    {
+        const FString Key(*Entry.Key); auto Skill = ObjectValue(Entry.Value); TArray<FPartyEffect> Effects;
+        if (!IsId(Key) || !Exact(Skill, {TEXT("effects")}) || !PartyEffects(Skill, true, Effects)) return false;
+        S.EnemySkills.Add(Key, PartyEffectsText(Effects, S.EnemyAttack.Approximate, 0, S.AttackPercentPerStack));
+        S.PartyEnemyEffects.Add(Key, MoveTemp(Effects));
+    }
+    const auto* Deck = Array(D, TEXT("deck"), 64); if (!Deck || Deck->IsEmpty()) return false;
+    for (const auto& V : *Deck)
+    {
+        auto Entry = ObjectValue(V); FString Instance, Card, Owner;
+        if (!Exact(Entry, {TEXT("instanceId"), TEXT("cardId"), TEXT("ownerId")}) || !Text(Entry, TEXT("instanceId"), Instance, 128) || !IsId(Instance) ||
+            !Text(Entry, TEXT("cardId"), Card, 128) || !S.Cards.Contains(Card) || S.DeckOwners.Contains(Instance) ||
+            !Text(Entry, TEXT("ownerId"), Owner, 128)) return false;
+        const int32 OwnerIndex = S.Party.IndexOfByPredicate([&Owner](const FHczsPartyMemberView& M) { return M.Id == Owner; });
+        if (OwnerIndex == INDEX_NONE) return false;
+        S.DeckOwners.Add(Instance, OwnerIndex); S.Deck.Add(TPair<FString, FString>(Instance, Card));
+    }
+    const auto* Intents = Array(D, TEXT("enemyIntents"), 1000); if (!Intents) return false;
+    for (const auto& V : *Intents)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Order = nullptr; TArray<FString> Names;
+        if (!V.IsValid() || !V->TryGetArray(Order) || !Order || Order->Num() > 16 || !StringIds(Order, Names, true)) return false;
+        for (const FString& Id : Names) if (!S.EnemySkills.Contains(Id)) return false;
+        S.EnemyIntents.Add(MoveTemp(Names));
+    }
+    if (!StringIds(Array(D, TEXT("enemyFallback"), 16), S.EnemyFallback, true)) return false;
+    for (const FString& Id : S.EnemyFallback) if (!S.EnemySkills.Contains(Id)) return false;
+    int32 Initial = 0, Draw = 0;
+    return Counter(D, TEXT("initialDraw"), Initial, 0, 64) && Counter(D, TEXT("roundDraw"), Draw, 0, 64) &&
+        Counter(D, TEXT("handLimit"), S.HandLimit, 0, 64) && Counter(D, TEXT("energyPerRound"), S.EnergyPerRound, 0, 1000000) &&
+        Counter(D, TEXT("maxRounds"), S.MaxRounds, 1, 1000);
+}
 bool ParseScenario(const TSharedPtr<FJsonObject>& O, FScenario& Out)
 {
     FScenario S; auto D = Child(O, TEXT("definition"));
     if (!D.IsValid() || !Text(D, TEXT("id"), S.DefinitionId, 128) || !IsId(S.DefinitionId) ||
         !Text(O, TEXT("title"), S.Title, 256) || !Text(O, TEXT("notice"), S.Notice, 4096, true)) return false;
     if (O->HasField(TEXT("encounterId")) && (!Text(O, TEXT("encounterId"), S.EncounterId, 80) || !IsId(S.EncounterId, 80))) return false;
+    if (D->HasField(TEXT("partyRules")))
+    {
+        if (!ParsePartyScenario(D, S)) return false;
+        Out = MoveTemp(S); return true;
+    }
     S.bHasBreakdown = D->HasField(TEXT("statusRules"));
     S.bHasUltimates = D->HasField(TEXT("ultimateRules"));
     if (S.bHasUltimates)
@@ -514,6 +696,113 @@ bool ParseBattleList(const TSharedPtr<FJsonObject>& O, TArray<FHczsBattleSummary
     }
     Out = MoveTemp(Parsed); return true;
 }
+namespace
+{
+    bool Combat(const TSharedPtr<FJsonObject>& O, int32 MaxStacks, FHczsScalar& Hp, FHczsScalar& Shield, int32& Buff)
+    {
+        return Exact(O, {TEXT("hp"), TEXT("shield"), TEXT("attackBuff")}) && Scalar(Child(O, TEXT("hp")), Hp) &&
+            Scalar(Child(O, TEXT("shield")), Shield) && Counter(O, TEXT("attackBuff"), Buff, 0, MaxStacks);
+    }
+    bool ParsePartyState(const TSharedPtr<FJsonObject>& State, const FScenario& Scenario, FHczsBattleView& B, FHczsBattleView& Out)
+    {
+        FString Format; int64 Action = 0;
+        if (!Exact(State, {TEXT("format"), TEXT("definitionId"), TEXT("round"), TEXT("status"), TEXT("outcomeReason"), TEXT("energy"),
+                TEXT("party"), TEXT("enemy"), TEXT("cards"), TEXT("piles"), TEXT("rng"), TEXT("actionIndex")}) ||
+            !Text(State, TEXT("format"), Format, 40) || Format != TEXT("hczs-battle-session-party-v1") ||
+            !Text(State, TEXT("definitionId"), B.DefinitionId, 128) || B.DefinitionId != Scenario.DefinitionId ||
+            !Counter(State, TEXT("round"), B.Round, 1, Scenario.MaxRounds) || !Counter(State, TEXT("energy"), B.Energy, 0, Scenario.EnergyPerRound) ||
+            !Integer(State, TEXT("actionIndex"), Action, 0, 1000000) || Action + 1 != B.Revision ||
+            !Text(State, TEXT("status"), B.Status, 24) || !Status(B.Status)) return false;
+        B.ActionIndex = Action;
+        const auto* Members = Array(State, TEXT("party"), 4);
+        if (!Members || Members->Num() != Scenario.Party.Num()) return false;
+        int32 Living = 0;
+        for (int32 I = 0; I < Members->Num(); ++I)
+        {
+            FHczsPartyMemberView Member = Scenario.Party[I];
+            if (!Combat(ObjectValue((*Members)[I]), Scenario.MaxStacks, Member.Hp, Member.Shield, Member.AttackBuff) ||
+                Member.Hp.Approximate > Member.MaxHp.Approximate) return false;
+            if (Member.Hp.Approximate > 0) ++Living;
+            B.Party.Add(MoveTemp(Member));
+        }
+        if (!Combat(Child(State, TEXT("enemy")), Scenario.MaxStacks, B.EnemyHp, B.EnemyShield, B.EnemyAttackBuff) ||
+            B.EnemyHp.Approximate > Scenario.EnemyMaxHp.Approximate) return false;
+        const auto Outcome = State->TryGetField(TEXT("outcomeReason")); if (!Outcome.IsValid()) return false;
+        if (B.Status == TEXT("player-turn"))
+        {
+            if (!Outcome->IsNull() || Living == 0 || B.EnemyHp.Approximate <= 0) return false;
+        }
+        else
+        {
+            if (!Text(State, TEXT("outcomeReason"), B.OutcomeReason, 40)) return false;
+            if (B.Status == TEXT("won")) { if (B.OutcomeReason != TEXT("enemy-defeated") || B.EnemyHp.Approximate != 0 || Living == 0) return false; }
+            else if (B.EnemyHp.Approximate <= 0 || !((B.OutcomeReason == TEXT("party-defeated") && Living == 0) ||
+                (B.OutcomeReason == TEXT("round-limit") && Living > 0 && B.Round == Scenario.MaxRounds))) return false;
+        }
+        const auto* Registry = Array(State, TEXT("cards"), Scenario.Deck.Num());
+        if (!Registry || Registry->Num() != Scenario.Deck.Num()) return false;
+        TMap<FString, FString> InstanceCards;
+        for (int32 I = 0; I < Registry->Num(); ++I)
+        {
+            auto C = ObjectValue((*Registry)[I]); FString Instance, Card, Owner;
+            if (!Exact(C, {TEXT("instanceId"), TEXT("cardId"), TEXT("ownerId")}) || !Text(C, TEXT("instanceId"), Instance, 128) ||
+                !Text(C, TEXT("cardId"), Card, 128) || !Text(C, TEXT("ownerId"), Owner, 128) || Instance != Scenario.Deck[I].Key ||
+                Card != Scenario.Deck[I].Value || Owner != Scenario.Party[Scenario.DeckOwners[Instance]].Id) return false;
+            InstanceCards.Add(Instance, Card);
+        }
+        auto Piles = Child(State, TEXT("piles"));
+        if (!Exact(Piles, {TEXT("hand"), TEXT("draw"), TEXT("discard"), TEXT("removed")})) return false;
+        TSet<FString> Seen;
+        for (const TCHAR* Zone : {TEXT("hand"), TEXT("draw"), TEXT("discard"), TEXT("removed")})
+        {
+            const FString ZoneName(Zone);
+            TArray<FString> Members2; if (!StringIds(Array(Piles, Zone, 64), Members2)) return false;
+            if (ZoneName == TEXT("hand") && Members2.Num() > Scenario.HandLimit) return false;
+            for (const FString& Instance : Members2)
+            {
+                const FString* CardId = InstanceCards.Find(Instance); if (!CardId || Seen.Contains(Instance)) return false;
+                const int32 OwnerIndex = Scenario.DeckOwners[Instance];
+                // A defeated member's cards, and only those, leave play.
+                if ((ZoneName == TEXT("removed")) != (B.Party[OwnerIndex].Hp.Approximate == 0)) return false;
+                Seen.Add(Instance);
+                if (ZoneName == TEXT("hand"))
+                {
+                    const FHczsPartyMemberView& Owner = B.Party[OwnerIndex];
+                    FHczsHandCard Card = Scenario.Cards[*CardId]; Card.InstanceId = Instance;
+                    Card.OwnerId = Owner.Id; Card.OwnerName = Owner.Name; Card.OwnerIndex = OwnerIndex;
+                    Card.EffectsText = PartyEffectsText(Scenario.PartyCardEffects[*CardId], Owner.Attack.Approximate, Owner.AttackBuff,
+                        Scenario.AttackPercentPerStack, &Card.FirstDamage);
+                    B.Hand.Add(MoveTemp(Card));
+                }
+            }
+            if (ZoneName == TEXT("draw")) B.DrawCount = Members2.Num();
+            if (ZoneName == TEXT("discard")) B.DiscardCount = Members2.Num();
+            if (ZoneName == TEXT("removed")) B.RemovedCount = Members2.Num();
+        }
+        if (Seen.Num() != Registry->Num()) return false;
+        auto Rng = Child(State, TEXT("rng")); FString Algorithm; int64 RandomState = 0;
+        if (!Exact(Rng, {TEXT("algorithm"), TEXT("state")}) || !Text(Rng, TEXT("algorithm"), Algorithm, 32) ||
+            Algorithm != TEXT("mulberry32-v1") || !Integer(Rng, TEXT("state"), RandomState, 0, 4294967295LL)) return false;
+        const TArray<FString>& Intent = Scenario.EnemyIntents.IsValidIndex(B.Round - 1) ? Scenario.EnemyIntents[B.Round - 1] : Scenario.EnemyFallback;
+        TArray<FString> Descriptions;
+        for (const FString& Skill : Intent)
+        {
+            const TArray<FPartyEffect>& Effects = Scenario.PartyEnemyEffects[Skill];
+            Descriptions.Add(PartyEffectsText(Effects, Scenario.EnemyAttack.Approximate, B.EnemyAttackBuff, Scenario.AttackPercentPerStack));
+            const FPartyEffect* Hit = Effects.Num() == 1 && Effects[0].Type == TEXT("damage") ? &Effects[0] : nullptr;
+            B.EnemyIntentDamage.Add(Hit ? FString::Printf(TEXT("%lld"), PartyDamagePreview(Scenario.EnemyAttack.Approximate, Hit->Factor,
+                B.EnemyAttackBuff, Scenario.AttackPercentPerStack)) : FString());
+        }
+        B.EnemyIntentText = FString::Join(Descriptions, TEXT(" / "));
+        B.EnemyIntentSkills = Intent;
+        B.bIsParty = true;
+        B.PlayerHp = B.Party[0].Hp; B.PlayerShield = B.Party[0].Shield; B.PlayerMaxHp = B.Party[0].MaxHp;
+        B.EncounterId = Scenario.EncounterId; B.Title = Scenario.Title; B.Notice = Scenario.Notice;
+        B.PlayerId = Scenario.PlayerId; B.EnemyId = Scenario.EnemyId; B.PlayerName = Scenario.PlayerName; B.EnemyName = Scenario.EnemyName;
+        B.EnemyMaxHp = Scenario.EnemyMaxHp; B.MaxRounds = Scenario.MaxRounds; B.EnergyPerRound = Scenario.EnergyPerRound;
+        B.bIsValid = true; Out = MoveTemp(B); return true;
+    }
+}
 bool ParseBattle(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, const FString& BattleId, FHczsBattleView& Out)
 {
     FHczsBattleView B; FScenario Scenario;
@@ -521,6 +810,7 @@ bool ParseBattle(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, con
         !Text(O, TEXT("id"), B.Id, 36) || !IsUuid(B.Id) || (!BattleId.IsEmpty() && B.Id != BattleId) ||
         !Text(O, TEXT("profileId"), B.ProfileId, 36) || B.ProfileId != ProfileId || !IsUuid(B.ProfileId) ||
         !Integer(O, TEXT("revision"), B.Revision, 1, 1000001) || !Timestamps(O) || !ParseScenario(Child(O, TEXT("scenario")), Scenario)) return false;
+    if (Scenario.bIsParty) return ParsePartyState(Child(O, TEXT("state")), Scenario, B, Out);
     auto State = Child(O, TEXT("state")); FString Format; int64 Action = 0;
     if (!State.IsValid() || State->Values.Num() != 12 + (Scenario.bHasBreakdown ? 1 : 0) + (Scenario.bHasUltimates ? 1 : 0) ||
         !Text(State, TEXT("format"), Format, 40) || Format != (Scenario.bHasUltimates ? TEXT("hczs-battle-session-v3") :
@@ -653,14 +943,98 @@ bool ParseReceipt(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, co
     // ParseBattle already validated the exact base-deck prefix and each generated instance.
     const auto* Registry = Array(Child(Child(O, TEXT("battle")), TEXT("state")), TEXT("cards"), 3064);
     int32 PlayedCount = 0;
-    const TSet<FString> Allowed = {TEXT("DiscardRecycled"), TEXT("CardDrawn"), TEXT("BattleEnded"), TEXT("BreakdownChanged"), TEXT("HealthRestored"),
+    const bool bParty = Out.bIsParty;
+    const TSet<FString> Allowed = bParty ? TSet<FString>{TEXT("DiscardRecycled"), TEXT("CardDrawn"), TEXT("BattleEnded"), TEXT("ShieldAdded"),
+        TEXT("DamageApplied"), TEXT("EnergyChanged"), TEXT("ShieldCleared"), TEXT("StateUpdated"), TEXT("BattleStarted"), TEXT("TurnStarted"),
+        TEXT("CardPlayed"), TEXT("CardMoved"), TEXT("EnemySkillUsed"), TEXT("BuffChanged"), TEXT("MemberDefeated")} :
+        TSet<FString>{TEXT("DiscardRecycled"), TEXT("CardDrawn"), TEXT("BattleEnded"), TEXT("BreakdownChanged"), TEXT("HealthRestored"),
         TEXT("ShieldAdded"), TEXT("DamageApplied"), TEXT("BreakdownTriggered"), TEXT("EnergyChanged"), TEXT("ShieldCleared"), TEXT("StateUpdated"),
         TEXT("BattleStarted"), TEXT("TurnStarted"), TEXT("CardPlayed"), TEXT("CardMoved"), TEXT("EnemySkillUsed")};
+    const int32 PartySize = Out.Party.Num();
     for (const auto& V : *Values)
     {
         auto E = ObjectValue(V); FString Type; if (!Text(E, TEXT("type"), Type, 40) || !Allowed.Contains(Type)) return false;
         if (ExpectedRevision > 0 && (Type == TEXT("BattleStarted") || (ActionType == TEXT("end-turn") && Type == TEXT("CardPlayed")))) return false;
-        if (Type == TEXT("CardPlayed"))
+        if (bParty && Type == TEXT("CardPlayed"))
+        {
+            FString Card, Instance, Owner; int32 Cost = 0, DefinitionCost = 0, OwnerIndex = 0;
+            if (!Exact(E, {TEXT("type"), TEXT("instanceId"), TEXT("cardId"), TEXT("cost"), TEXT("ownerIndex")}) || !Text(E, TEXT("cardId"), Card, 128) ||
+                !Text(E, TEXT("instanceId"), Instance, 128) || !Counter(E, TEXT("cost"), Cost, 0, 1000000) ||
+                !Counter(E, TEXT("ownerIndex"), OwnerIndex, 0, PartySize - 1) ||
+                !Counter(Child(CardDefinitions, *Card), TEXT("cost"), DefinitionCost, 0, 1000000) || Cost != DefinitionCost || !Registry ||
+                !Registry->ContainsByPredicate([&](const TSharedPtr<FJsonValue>& D)
+                { const auto R = ObjectValue(D); FString I, C, W; return Text(R, TEXT("instanceId"), I, 128) && Text(R, TEXT("cardId"), C, 128) &&
+                    Text(R, TEXT("ownerId"), W, 128) && I == Instance && C == Card && W == Out.Party[OwnerIndex].Id; })) return false;
+            ++PlayedCount;
+            Descriptions.Add(FString::Printf(TEXT("%s出牌 · %s"), *Out.Party[OwnerIndex].Name, *Card));
+            FHczsBattleVisualEvent VEvent; VEvent.Type = Type; VEvent.CardId = Card; VEvent.MemberIndex = OwnerIndex; Visual.Events.Add(MoveTemp(VEvent));
+        }
+        else if (bParty && Type == TEXT("DamageApplied"))
+        {
+            FString Target, Actor, Amount, Skill; FHczsScalar Lost, Absorbed, PreviousHp, FinalHp, PreviousShield, FinalShield;
+            int32 EffectIndex = 0, Member = -1, ActorIndex = 0, HitIndex = 0;
+            if (!Text(E, TEXT("actor"), Actor, 16) || !Text(E, TEXT("target"), Target, 16)) return false;
+            if (Actor == TEXT("party"))
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("actor"), TEXT("actorIndex"), TEXT("target"), TEXT("effectIndex"), TEXT("amount"), TEXT("absorbed"),
+                    TEXT("hpLost"), TEXT("previousHp"), TEXT("finalHp"), TEXT("previousShield"), TEXT("finalShield")}) || Target != TEXT("enemy") ||
+                    !Counter(E, TEXT("actorIndex"), ActorIndex, 0, PartySize - 1)) return false;
+            }
+            else if (Actor == TEXT("enemy"))
+            {
+                if (!Exact(E, {TEXT("type"), TEXT("actor"), TEXT("skillId"), TEXT("effectIndex"), TEXT("hitIndex"), TEXT("target"), TEXT("memberIndex"),
+                    TEXT("amount"), TEXT("absorbed"), TEXT("hpLost"), TEXT("previousHp"), TEXT("finalHp"), TEXT("previousShield"), TEXT("finalShield")}) ||
+                    Target != TEXT("party") || !Text(E, TEXT("skillId"), Skill, 128) || !SkillDefinitions.IsValid() || !SkillDefinitions->HasField(*Skill) ||
+                    !Counter(E, TEXT("hitIndex"), HitIndex, 0, 15) || !Counter(E, TEXT("memberIndex"), Member, 0, PartySize - 1)) return false;
+            }
+            else return false;
+            if (!Text(E, TEXT("amount"), Amount, 64) || !DecimalInteger(Amount, 64) || !Counter(E, TEXT("effectIndex"), EffectIndex, 0, 31) ||
+                !Scalar(Child(E, TEXT("hpLost")), Lost) || !Scalar(Child(E, TEXT("absorbed")), Absorbed) ||
+                !Scalar(Child(E, TEXT("previousHp")), PreviousHp) || !Scalar(Child(E, TEXT("finalHp")), FinalHp) ||
+                !Scalar(Child(E, TEXT("previousShield")), PreviousShield) || !Scalar(Child(E, TEXT("finalShield")), FinalShield)) return false;
+            Descriptions.Add(Member < 0 ? FString::Printf(TEXT("敌方生命 -%s"), *Lost.Decimal)
+                : FString::Printf(TEXT("%s生命 -%s"), *Out.Party[Member].Name, *Lost.Decimal));
+            // The scene animates party member 0 as its player actor; other members have no recovered hit clip here.
+            FHczsBattleVisualEvent VEvent; VEvent.Type = Type; VEvent.MemberIndex = Member;
+            VEvent.Target = Member < 0 ? TEXT("enemy") : Member == 0 ? TEXT("player") : FString::Printf(TEXT("party-%d"), Member);
+            Visual.Events.Add(MoveTemp(VEvent));
+        }
+        else if (bParty && Type == TEXT("BuffChanged"))
+        {
+            FString Actor, Target, Buff, Skill; int32 EffectIndex = 0, Index = 0, Previous = 0, Final = 0, Member = -1;
+            if (!Text(E, TEXT("actor"), Actor, 16) || !Text(E, TEXT("target"), Target, 16) || !Text(E, TEXT("buffId"), Buff, 16) || Buff != TEXT("1001") ||
+                !Counter(E, TEXT("effectIndex"), EffectIndex, 0, 31) || !Counter(E, TEXT("previousStacks"), Previous, 0, 999) ||
+                !Counter(E, TEXT("finalStacks"), Final, Previous, 999)) return false;
+            const bool bShape = Actor == TEXT("party") ? Target == TEXT("party") &&
+                Exact(E, {TEXT("type"), TEXT("actor"), TEXT("actorIndex"), TEXT("effectIndex"), TEXT("target"), TEXT("memberIndex"), TEXT("buffId"),
+                    TEXT("previousStacks"), TEXT("finalStacks")}) && Counter(E, TEXT("actorIndex"), Index, 0, PartySize - 1) &&
+                    Counter(E, TEXT("memberIndex"), Member, 0, PartySize - 1) :
+                Actor == TEXT("enemy") && Target == TEXT("enemy") &&
+                Exact(E, {TEXT("type"), TEXT("actor"), TEXT("skillId"), TEXT("effectIndex"), TEXT("target"), TEXT("buffId"),
+                    TEXT("previousStacks"), TEXT("finalStacks")}) && Text(E, TEXT("skillId"), Skill, 128) &&
+                    SkillDefinitions.IsValid() && SkillDefinitions->HasField(*Skill);
+            if (!bShape) return false;
+            Descriptions.Add(FString::Printf(TEXT("%s攻击强化 %d层"), Member < 0 ? TEXT("敌方") : *Out.Party[Member].Name, Final));
+        }
+        else if (Type == TEXT("MemberDefeated"))
+        {
+            FString MemberId; int32 Member = 0;
+            if (!Exact(E, {TEXT("type"), TEXT("memberIndex"), TEXT("memberId")}) || !Counter(E, TEXT("memberIndex"), Member, 0, PartySize - 1) ||
+                !Text(E, TEXT("memberId"), MemberId, 128) || MemberId != Out.Party[Member].Id || Out.Party[Member].Hp.Approximate != 0) return false;
+            Descriptions.Add(FString::Printf(TEXT("%s倒下"), *Out.Party[Member].Name));
+            FHczsBattleVisualEvent VEvent; VEvent.Type = Type; VEvent.MemberIndex = Member; Visual.Events.Add(MoveTemp(VEvent));
+        }
+        else if (bParty && Type == TEXT("CardMoved"))
+        {
+            FString Instance, From, To;
+            if (!Exact(E, {TEXT("type"), TEXT("instanceId"), TEXT("from"), TEXT("to")}) || !Text(E, TEXT("instanceId"), Instance, 128) || !Registry ||
+                !Registry->ContainsByPredicate([&Instance](const TSharedPtr<FJsonValue>& D) { FString I; return Text(ObjectValue(D), TEXT("instanceId"), I, 128) && I == Instance; }) ||
+                !Text(E, TEXT("from"), From, 16) || !Text(E, TEXT("to"), To, 16)) return false;
+            const bool bDiscard = To == TEXT("discard") && (From == TEXT("hand") || From == TEXT("in-flight"));
+            const bool bRemoved = To == TEXT("removed") && (From == TEXT("hand") || From == TEXT("draw") || From == TEXT("discard"));
+            if (!bDiscard && !bRemoved) return false;
+        }
+        else if (Type == TEXT("CardPlayed"))
         {
             FString Card, Instance; int32 Cost = 0, DefinitionCost = 0;
             if (!Exact(E, {TEXT("type"), TEXT("instanceId"), TEXT("cardId"), TEXT("cost")}) || !Text(E, TEXT("cardId"), Card, 128) ||

@@ -388,7 +388,8 @@ void UHczsGameInstance::ReadBattle(const FString& BattleId, bool bAfterReceipt, 
         if (bAfterReceipt) ClearPendingIntent(LastVisualReceipt.bValid);
         UserMessage = CurrentBattle.Status == TEXT("player-turn") ? TEXT("轮到本方行动，操作会自动保存。") : CurrentBattle.Status == TEXT("won") ? TEXT("战斗胜利，结果已保存。") : TEXT("战斗结束，结果已保存。");
         UE_LOG(LogTemp, Display, TEXT("HCZS battle synchronized: revision=%lld round=%d status=%s hand=%d"), CurrentBattle.Revision, CurrentBattle.Round, *CurrentBattle.Status, CurrentBattle.Hand.Num());
-        if (bHasMainlineProgression && CurrentBattle.Status == TEXT("won") && CurrentBattle.EncounterId == TEXT("tutorial-5000"))
+        if (bHasMainlineProgression && CurrentBattle.Status == TEXT("won") &&
+            (CurrentBattle.EncounterId == TEXT("tutorial-5000") || CurrentBattle.EncounterId == TEXT("prologue-boss-1703")))
         {
             // Deliver the final hit to the existing presentation before starting
             // an unrelated progress GET (scene readiness requires an idle request).
@@ -494,12 +495,15 @@ void UHczsGameInstance::ReadMainline(bool bPrepareSettlement, bool bCanRefreshCo
             Input->SetStringField(TEXT("requestId"), TEXT("ue-mainline-") + CurrentBattle.Id);
             Input->SetNumberField(TEXT("expectedRevision"), static_cast<double>(MainlineProgress.Revision));
             Input->SetStringField(TEXT("contentId"), MainlineContentId); Input->SetStringField(TEXT("battleId"), CurrentBattle.Id);
-            UserMessage = TEXT("正在确认序章首战通关…");
+            UserMessage = CurrentBattle.bIsParty ? TEXT("正在确认序章首领战通关…") : TEXT("正在确认序章首战通关…");
             BeginIntent(TEXT("settlement"), TEXT("POST"), ProfilesRoute() + TEXT("/mainline/settlements"), Json(Input), MainlineProgress.Revision);
             return;
         }
-        UserMessage = MainlineProgress.bFirstChallengePassed
-            ? TEXT("序章首战已通关；下一挑战的战斗仍待恢复。本次不发放奖励。")
+        UserMessage = MainlineProgress.bBossChallengePassed ? TEXT("序章首领战已通关。本次不发放奖励。")
+            : MainlineProgress.bFirstChallengePassed
+            ? (MainlineProgress.Challenges.Num() == 2 && MainlineProgress.Challenges[1].bExecutable
+                ? TEXT("序章首战已通关；首领战已开放（重建规则）。本次不发放奖励。")
+                : TEXT("序章首战已通关；下一挑战的战斗仍待恢复。本次不发放奖励。"))
             : TEXT("序章首战尚未确认通关。胜利后可在结果面板确认。");
         Notify();
     });

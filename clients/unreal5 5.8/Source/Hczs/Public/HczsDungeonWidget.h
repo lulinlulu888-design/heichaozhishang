@@ -12,6 +12,9 @@ class HCZS_API UHczsDungeonWidget : public UUserWidget
 public:
     FHczsHallEntryRequested OnBackRequested;
     FHczsHallEntryRequested OnExploreRequested;
+    /** Isolated UI tests only: routes a real Slate pointer press to the painted control centre. */
+    UFUNCTION(BlueprintCallable, Category="HCZS|Development") bool DevelopmentPressControl(const FString& Action);
+    UFUNCTION(BlueprintCallable, Category="HCZS|Development") FString DevelopmentDescribe() const;
 protected:
     virtual void NativeConstruct() override;
     virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geometry,
@@ -29,4 +32,6 @@ private:
     TArray<FControl> Controls;
     bool bSourceReady = false;
     int32 Avg138Index = -1;
+    uint64 PressSerial = 0;
+    FString LastPressAction;
 };

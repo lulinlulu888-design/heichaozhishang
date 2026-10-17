@@ -61,12 +61,15 @@ bool HasRecoveredScene(const FHczsEncounterSummary& Encounter)
         && Encounter.PlayerId == TEXT("1") && Encounter.EnemyId == TEXT("991");
     const bool bCityPreview = Encounter.Id == TEXT("city-preview-10405") && Encounter.DefinitionId.StartsWith(TEXT("city-preview-10405-"))
         && Encounter.PlayerId == TEXT("1") && Encounter.EnemyId == TEXT("6605");
-    return bTutorial || bCityPreview;
+    const bool bBoss = Encounter.Id == TEXT("prologue-boss-1703") && Encounter.DefinitionId.StartsWith(TEXT("prologue-boss-1703-"))
+        && Encounter.PlayerId == TEXT("party-1-3") && Encounter.EnemyId == TEXT("2013");
+    return bTutorial || bCityPreview || bBoss;
 }
 
 bool HasRecoveredActors(const FHczsBattleView& Battle)
 {
     return (Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991")) ||
+        (Battle.bIsParty && Battle.PlayerId == TEXT("party-1-3") && Battle.EnemyId == TEXT("2013") && Battle.EncounterId == TEXT("prologue-boss-1703")) ||
         (Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("6605") &&
          (Battle.EncounterId == TEXT("city-preview-10405") || Battle.DefinitionId.StartsWith(TEXT("city-preview-10405-"))));
 }
@@ -996,12 +999,30 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         LastHudIn->SetObjectField(TEXT("groups"), HudGroups);
         {
             FSessionPainter Heads = Group(HudNow, HudInRest, TEXT("EnterancePlayerHeads"));
-            FVector2D PlayerSlot(120, 0);
-            for (const auto& Node : HudInRest.Nodes)
-                if (Node.Name == TEXT("HPArea_left_1"))
-                    PlayerSlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
-            Heads.Health(Battle.PlayerName, Battle.PlayerId == TEXT("1") ? TEXT("player-1") : TEXT(""),
-                Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, PlayerSlot, false);
+            const auto LeftSlot = [this](int32 Index)
+            {
+                // PlayerHeadArea slots HPArea_left_1..3 sit at x 120/290/460 in EnterancePlayerHeads.
+                FVector2D Area(120 + 170 * Index, 0);
+                const FString Name = FString::Printf(TEXT("HPArea_left_%d"), Index + 1);
+                for (const auto& Node : HudInRest.Nodes)
+                    if (Node.Name == Name) Area = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
+                return Area;
+            };
+            if (!Battle.bIsParty)
+                Heads.Health(Battle.PlayerName, Battle.PlayerId == TEXT("1") ? TEXT("player-1") : TEXT(""),
+                    Battle.PlayerHp, Battle.PlayerMaxHp, Battle.PlayerShield, LeftSlot(0), false);
+            for (int32 Index = 0; Battle.bIsParty && Index < Battle.Party.Num() && Index < 3; ++Index)
+            {
+                const FHczsPartyMemberView& Member = Battle.Party[Index];
+                const FVector2D Area = LeftSlot(Index);
+                const FString Portrait = TEXT("player-") + Member.Id;
+                Heads.Health(Member.Name, Brushes.Contains(Portrait) ? Portrait : FString(), Member.Hp, Member.MaxHp, Member.Shield, Area, false);
+                // Buff 1001 (攻击强化) stacks: reconstruction readout, the source buff icon row is not wired.
+                if (Member.AttackBuff > 0)
+                    Heads.Text(FString::Printf(TEXT("攻击强化 %d层"), Member.AttackBuff), Area.X - 77, Area.Y + 110, 154, 20, 15, Warm, true);
+                if (Member.Hp.Approximate <= 0)
+                    Heads.Box(Area.X - 77, Area.Y, 154, 108, FLinearColor(0.02f, 0.02f, 0.03f, 0.62f));
+            }
             P.Layer = Heads.Layer;
         }
         {
@@ -1012,6 +1033,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     EnemySlot = Node.LocalToDesign.TransformPoint(FVector2D::ZeroVector);
             Heads.Health(Battle.EnemyName, Battle.EnemyId == TEXT("991") ? TEXT("monster-991") : TEXT(""),
                 Battle.EnemyHp, Battle.EnemyMaxHp, Battle.EnemyShield, EnemySlot, true);
+            if (Battle.bIsParty && Battle.EnemyAttackBuff > 0)
+                Heads.Text(FString::Printf(TEXT("攻击强化 %d层"), Battle.EnemyAttackBuff), EnemySlot.X - 77, EnemySlot.Y + 110, 154, 20, 15, Warm, true);
             P.Layer = Heads.Layer;
         }
         {
@@ -1190,12 +1213,15 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 // FightSmallCard nodes are centred on the 126x166 card at scale 1. Usable,
                 // CharImage_NL_S and Face_NL_S therefore sit at (-28, -34) 182x234 and (2, 4) 120x120.
                 // The local Cost <= Energy check stands in for the server cardInfo.canUse flag.
-                if (Index == 0)
+                // Party hands are not CharPos-sorted on the server, so each run of one owner gets a label.
+                const FString OwnerLabel = Battle.bIsParty ? Card.OwnerName : Battle.PlayerName;
+                const bool bGroupStart = Index == 0 || (Battle.bIsParty && Battle.Hand[Index - 1].OwnerIndex != Card.OwnerIndex);
+                if (bGroupStart)
                 {
                     // CardBaseArea._updateNameLabel seeks the first hand card of each CharPos group;
                     // NameLabelArea hides it while that card is dispatching. Root sits at card
                     // (-getCardWidth/2 - 4, getCardHeight/2 + 3) and follows the card rotation.
-                    if (bDispatching || Battle.PlayerName.IsEmpty()) NameLabelSince = -1;
+                    if (bDispatching || OwnerLabel.IsEmpty()) { if (Index == 0) NameLabelSince = -1; }
                     else
                     {
                         if (NameLabelSince < 0) NameLabelSince = PaintSeconds;
@@ -1205,7 +1231,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                         Label.Opacity = FMath::Clamp(float(PaintSeconds - NameLabelSince) / 0.2f, 0.0f, 1.0f);
                         // getPlayerNameForFightCard stacks CharName vertically; names over five glyphs use 18px.
                         // The 19x46 two-line Txt sets a 23px line at 22px, and taller text stretches bg.
-                        const int32 Glyphs = Battle.PlayerName.Len();
+                        const int32 Glyphs = OwnerLabel.Len();
                         const float FontPixels = Glyphs > 5 ? 18 : 22;
                         const float LineHeight = 23 * FontPixels / 22;
                         const float BgHeight = 100 + FMath::Max(0.0f, Glyphs * LineHeight - 46);
@@ -1215,7 +1241,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                         const float Mark = 150 * 0.59f * 0.75f;
                         Label.Image(TEXT("card-owner-mark-1"), -20 - Mark * 0.5f, 14 - Mark * 0.5f, Mark, Mark);
                         for (int32 Glyph = 0; Glyph < Glyphs; ++Glyph)
-                            Label.Text(Battle.PlayerName.Mid(Glyph, 1), -36, 33 + Glyph * LineHeight, 30, LineHeight,
+                            Label.Text(OwnerLabel.Mid(Glyph, 1), -36, 33 + Glyph * LineHeight, 30, LineHeight,
                                 FontPixels, FLinearColor::White, true, false);
                         C.Layer = Label.Layer;
                     }
@@ -1326,8 +1352,10 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         }
         else
         {
-            const bool bMainlineResult = Session->bHasMainlineProgression && Battle.Status == TEXT("won") &&
-                Battle.EncounterId == TEXT("tutorial-5000") && Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991");
+            const bool bBossResult = Battle.bIsParty && Battle.EncounterId == TEXT("prologue-boss-1703") &&
+                Battle.PlayerId == TEXT("party-1-3") && Battle.EnemyId == TEXT("2013");
+            const bool bMainlineResult = Session->bHasMainlineProgression && Battle.Status == TEXT("won") && (bBossResult ||
+                (Battle.EncounterId == TEXT("tutorial-5000") && Battle.PlayerId == TEXT("1") && Battle.EnemyId == TEXT("991")));
             P.Box(270, 205, 740, bMainlineResult ? 395 : 300, FLinearColor(0.015f, 0.024f, 0.05f, 0.89f));
             if (Battle.Status == TEXT("won"))
             {
@@ -1338,7 +1366,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             else P.Text(TEXT("战斗失败"), 440, 292, 400, 65, 42, Muted, true);
             const FString ResultMessage = !bMainlineResult ? TEXT("战斗记录已保存") :
                 !Session->bMainlineStateCurrent ? TEXT("战斗已保存 · 主线进度尚未同步") :
-                Session->MainlineProgress.bFirstChallengePassed ? TEXT("序章首战已通关 · 下一挑战战斗待恢复") : TEXT("战斗已保存 · 请确认序章首战通关");
+                bBossResult ? (Session->MainlineProgress.bBossChallengePassed ? TEXT("序章首领战已通关 · 3998 的 successTime 为 1") : TEXT("战斗已保存 · 请确认序章首领战通关")) :
+                Session->MainlineProgress.bFirstChallengePassed ? TEXT("序章首战已通关 · 首领战可从副本继续") : TEXT("战斗已保存 · 请确认序章首战通关");
             P.Text(ResultMessage, 340, 422, 600, 25, 17, Muted, true);
             const bool bEncounterAvailable = Session->Encounters.ContainsByPredicate([&Battle](const FHczsEncounterSummary& E)
                 { return E.Id == Battle.EncounterId && HasRecoveredScene(E); });
@@ -1347,8 +1376,9 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             Button(TEXT("hall"), TEXT(""), TEXT("返回大厅"), 661, 458, 210, 46);
             if (bMainlineResult)
             {
-                const bool bPassed = Session->bMainlineStateCurrent && Session->MainlineProgress.bFirstChallengePassed;
-                Button(TEXT("settle-mainline"), TEXT(""), bPassed ? TEXT("已记录通关") : TEXT("确认序章首战通关"),
+                const bool bPassed = Session->bMainlineStateCurrent && (bBossResult ? Session->MainlineProgress.bBossChallengePassed
+                    : Session->MainlineProgress.bFirstChallengePassed);
+                Button(TEXT("settle-mainline"), TEXT(""), bPassed ? TEXT("已记录通关") : bBossResult ? TEXT("确认序章首领战通关") : TEXT("确认序章首战通关"),
                     407, 516, 250, 43, Session->CanConfirmMainlineVictory(), true);
                 Button(TEXT("refresh-mainline"), TEXT(""), TEXT("读取最新进度"), 681, 516, 190, 43);
                 P.Text(TEXT("本地主线进度适配 · 本次不发放奖励"), 340, 568, 600, 22, 14, Muted, true);
@@ -1363,6 +1393,7 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         P.Text(Session->bHasMainlineProgression ? TEXT("本地选关与主线进度") : TEXT("本地战斗预览"), 220, 114, 620, 45, 32, Light);
         const FString ProgressMessage = !Session->bHasMainlineProgression ? TEXT("选择恢复样例或继续本地战斗") :
             !Session->bMainlineStateCurrent ? TEXT("主线进度未同步 · 请读取最新进度") :
+            Session->MainlineProgress.bBossChallengePassed ? TEXT("3997 与 3998 的 successTime 均为 1") :
             Session->MainlineProgress.bFirstChallengePassed ? TEXT("3997 的 successTime 为 1 · 3998 尚无记录") : TEXT("序章尚无 activityDatas 记录 · 不预填 successTime 0");
         P.Text(ProgressMessage, 223, 163, 800, 24, 17, Muted);
         if (Session->bHasMainlineProgression)
@@ -2082,6 +2113,28 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
         Root->SetStringField(TEXT("serverPlayerHp"), Session->CurrentBattle.PlayerHp.Decimal);
         Root->SetStringField(TEXT("serverEnemyHp"), Session->CurrentBattle.EnemyHp.Decimal);
         Root->SetStringField(TEXT("serverStatus"), Session->CurrentBattle.Status);
+        Root->SetStringField(TEXT("encounterId"), Session->CurrentBattle.EncounterId);
+        Root->SetNumberField(TEXT("round"), Session->CurrentBattle.Round);
+        Root->SetNumberField(TEXT("energy"), Session->CurrentBattle.Energy);
+        Root->SetBoolField(TEXT("party"), Session->CurrentBattle.bIsParty);
+        Root->SetNumberField(TEXT("enemyAttackBuff"), Session->CurrentBattle.EnemyAttackBuff);
+        Root->SetStringField(TEXT("enemyIntentText"), Session->CurrentBattle.EnemyIntentText);
+        TArray<TSharedPtr<FJsonValue>> Members, HandRows;
+        for (const auto& Member : Session->CurrentBattle.Party)
+        {
+            auto Row = MakeShared<FJsonObject>(); Row->SetStringField(TEXT("id"), Member.Id); Row->SetStringField(TEXT("hp"), Member.Hp.Decimal);
+            Row->SetStringField(TEXT("shield"), Member.Shield.Decimal); Row->SetNumberField(TEXT("attackBuff"), Member.AttackBuff);
+            Members.Add(MakeShared<FJsonValueObject>(Row));
+        }
+        for (const auto& Card : Session->CurrentBattle.Hand)
+        {
+            auto Row = MakeShared<FJsonObject>(); Row->SetStringField(TEXT("instanceId"), Card.InstanceId); Row->SetStringField(TEXT("cardId"), Card.CardId);
+            Row->SetNumberField(TEXT("cost"), Card.Cost); Row->SetStringField(TEXT("ownerId"), Card.OwnerId);
+            Row->SetStringField(TEXT("effects"), Card.EffectsText); Row->SetStringField(TEXT("firstDamage"), Card.FirstDamage);
+            HandRows.Add(MakeShared<FJsonValueObject>(Row));
+        }
+        Root->SetArrayField(TEXT("partyMembers"), Members);
+        Root->SetArrayField(TEXT("hand"), HandRows);
         Root->SetBoolField(TEXT("pending"), Session->bRequestInFlight || Session->bHasPendingIntent);
         Root->SetBoolField(TEXT("profileStateCurrent"), Session->bProfileStateCurrent);
         Root->SetBoolField(TEXT("battleStateCurrent"), Session->bBattleStateCurrent);
@@ -2093,6 +2146,7 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
         Mainline->SetStringField(TEXT("contentId"), Session->MainlineProgress.ContentId);
         Mainline->SetNumberField(TEXT("revision"), static_cast<double>(Session->MainlineProgress.Revision));
         Mainline->SetBoolField(TEXT("firstChallengePassed"), Session->MainlineProgress.bFirstChallengePassed);
+        Mainline->SetBoolField(TEXT("bossChallengePassed"), Session->MainlineProgress.bBossChallengePassed);
         Mainline->SetStringField(TEXT("completedBattleId"), Session->MainlineProgress.CompletedBattleId);
         TArray<TSharedPtr<FJsonValue>> Challenges;
         for (const auto& Challenge : Session->MainlineProgress.Challenges)

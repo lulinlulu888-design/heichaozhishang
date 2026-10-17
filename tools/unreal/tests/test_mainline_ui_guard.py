@@ -44,14 +44,15 @@ class MainlineUiGuardTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(RuntimeError):
                 UI.validate_identity({**identity, key: value}, manifest, raw)
 
-    def test_completed_progress_cannot_open_boss_or_substitute_city(self):
+    def test_completed_progress_binds_boss_and_rejects_city_substitute(self):
         campaign = dict(profileId='profile', contentId='content', activityId=2, policy='local-prologue-progress-v1', revision=1,
                         completed=[dict(challengeId=3997, battleId='won-battle', battleRevision=9)],
                         activityDatas={'2': {'3997': {'successTime': 1}}},
                         challenges=[dict(id=3997, battleId=5000, encounterId='tutorial-5000', executable=True, hasLoot=False, status='passed', recordPresent=True, successTime=1),
-                                    dict(id=3998, battleId=1703, encounterId=None, executable=False, hasLoot=False, status='available', recordPresent=False, successTime=None)])
+                                    dict(id=3998, battleId=1703, encounterId='prologue-boss-1703', executable=True, hasLoot=False, status='available', recordPresent=False, successTime=None)])
         UI.validate_campaign(campaign, 'profile', 'content', True, 'won-battle')
-        for index, key, value in [(0, 'encounterId', 'city-preview-10405'), (1, 'executable', True), (1, 'status', 'locked'), (0, 'hasLoot', True)]:
+        for index, key, value in [(0, 'encounterId', 'city-preview-10405'), (1, 'encounterId', 'city-preview-10405'), (1, 'executable', False),
+                                  (1, 'unavailableReason', 'original-boss-mechanics-and-client-not-restored'), (1, 'status', 'locked'), (0, 'hasLoot', True)]:
             modified = copy.deepcopy(campaign)
             modified['challenges'][index][key] = value
             with self.subTest(key=key), self.assertRaises(RuntimeError):
