@@ -143,7 +143,14 @@ private:
     bool bEntrancePlaying = false;
     bool bEntranceEventEmitted = false;
     bool bEntranceSoundPlayed = false;
+    bool bAllyShowSoundPlayed = false;
+    FString PendingAllyCue;
+    FTimerHandle AllyCueTimer;
     UPROPERTY() TObjectPtr<UAudioComponent> EntranceSound;
+    UPROPERTY() TArray<TObjectPtr<UAudioComponent>> AllyCueSounds;
+    void PlayAllyCue(const FString& Clip, const FString& Event, uint32 SourceId, float VolumeDb, const TCHAR* AssetPath, float Position);
+    void TryPlayPendingAllyCue();
+    void StopAllyCues();
     FString EntranceBattleId;
     FString EntrancePhase = TEXT("none");
     FString EntranceDiagnostic;

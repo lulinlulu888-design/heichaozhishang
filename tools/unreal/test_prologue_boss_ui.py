@@ -54,6 +54,25 @@ def validate_ally_actions(log, steps, card_clips):
                 entranceShow='HCZS entrance ally SHOW:' in log)
 
 
+def validate_future_sounds(log, clips):
+    def heard(clip):
+        return [line for line in log.splitlines() if 'HCZS ally source sound: clip=%s ' % clip in line]
+    expected = {
+        'show': ('future_show_2', '815007610', '-3.0', 1),
+        'shield_1': ('future_shield1', '787477600', '-5.0', clips.count('shield_1')),
+        'buff_2': ('future_buff2', '132220398', '2.0', clips.count('buff_2')),
+    }
+    counts = {}
+    for clip, (event, source, volume, count) in expected.items():
+        rows = heard(clip)
+        guard.check(count > 0 and len(rows) == count, 'Future %s sound count %d != %d' % (clip, len(rows), count))
+        guard.check(all('event=%s ' % event in line and 'source=%s ' % source in line and 'volumeDb=%s ' % volume in line
+                        and 'loaded=1' in line and 'playing=1' in line for line in rows),
+                    'Future %s sound log differs: %s' % (clip, rows))
+        counts[clip] = len(rows)
+    return counts
+
+
 def validate_boss_campaign(campaign, profile_id, battle_id):
     guard.check(campaign.get('profileId') == profile_id and campaign.get('revision') == 2
                 and [row.get('challengeId') for row in campaign.get('completed', [])] == [3997, 3998]
@@ -325,6 +344,7 @@ def run():
                 card_clips = json.loads(FUTURE_ACTIONS.read_text('utf8'))['cardClips']
                 report['futureActions'] = validate_ally_actions(log, report['steps'], card_clips)
                 guard.check(report['futureActions']['entranceShow'], 'Future SHOW did not start with the Elsa entrance')
+                report['futureSounds'] = validate_future_sounds(log, report['futureActions']['cardClips'])
                 passed('future-source-battle-actions', **report['futureActions'])
                 report['partyFaces'] = validate_party_faces(state.get('sprites', set()), state.get('texts', set()),
                                                             state.get('handCards', set()), state.get('shields', set()))

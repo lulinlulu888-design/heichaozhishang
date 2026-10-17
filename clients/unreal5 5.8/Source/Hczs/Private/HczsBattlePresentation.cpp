@@ -26,6 +26,18 @@ namespace
     constexpr float SourceEntranceSoundRatio = 0.0183f;
     constexpr float SourceEntranceSoundVolumeDb = -7.5f;
     constexpr uint32 SourceEntranceSoundId = 580663517u;
+    // future_music.ags cues in future_skill.bnk. Volume is the in-bank parent chain only.
+    struct FFutureCue { const TCHAR* Clip; float Ratio; float VolumeDb; uint32 SourceId; const TCHAR* Event; const TCHAR* Asset; };
+    const FFutureCue FutureCues[] = {
+        {TEXT("show"), 0.0235f, -3.0f, 815007610u, TEXT("future_show_2"), TEXT("/Game/Recovered/Audio/Future/FutureShow_815007610.FutureShow_815007610")},
+        {TEXT("shield_1"), 0.0105f, -5.0f, 787477600u, TEXT("future_shield1"), TEXT("/Game/Recovered/Audio/Future/FutureShield_787477600.FutureShield_787477600")},
+        {TEXT("buff_2"), 0.0148f, 2.0f, 132220398u, TEXT("future_buff2"), TEXT("/Game/Recovered/Audio/Future/FutureBuff_132220398.FutureBuff_132220398")},
+    };
+    const FFutureCue* FindFutureCue(const FString& Clip)
+    {
+        for (const FFutureCue& Cue : FutureCues) if (Clip == Cue.Clip) return &Cue;
+        return nullptr;
+    }
     bool IsDead(const FHczsScalar& Hp) { return Hp.Approximate <= 0.0; }
     int64 VisualUnixMs() { const FDateTime Now = FDateTime::UtcNow(); return Now.ToUnixTimestamp() * 1000 + Now.GetMillisecond(); }
 }
@@ -242,6 +254,7 @@ bool AHczsBattlePresentation::TryPlayFreshEntrance(const FHczsBattleView& View)
     OpeningWorldStart = -1.0;
     FirstDealCount = View.Hand.Num();
     EntranceBattleId = View.Id; EntranceLastPosition = 0; bEntranceEventEmitted = false; bEntranceSoundPlayed = false;
+    bAllyShowSoundPlayed = false;
     EntranceAnimation = LoadObject<UAnimSequence>(nullptr,
         TEXT("/Game/Recovered/Battle/Entrance/elsa_entrance.elsa_entrance"));
     if (!PlayerComponent || !SceneAssets || !SceneAssets->PlayerMesh || !EntranceAnimation ||
@@ -327,6 +340,44 @@ void AHczsBattlePresentation::RevealEntrancePlayer()
         *EntranceBattleId, ShowElapsed, WorldNow, VisualUnixMs());
 }
 
+void AHczsBattlePresentation::PlayAllyCue(const FString& Clip, const FString& Event, uint32 SourceId, float VolumeDb, const TCHAR* AssetPath, float Position)
+{
+    const float Volume = FMath::Pow(10.0f, VolumeDb / 20.0f);
+    USoundWave* Sound = LoadObject<USoundWave>(nullptr, AssetPath);
+    UAudioComponent* Component = Sound ? UGameplayStatics::SpawnSound2D(this, Sound, Volume) : nullptr;
+    if (Component) AllyCueSounds.Add(Component);
+    UE_LOG(LogTemp, Display, TEXT("HCZS ally source sound: clip=%s event=%s ratio=%.4f position=%.6f source=%u volumeDb=%.1f loaded=%d playing=%d"),
+        *Clip, *Event, FindFutureCue(Clip) ? FindFutureCue(Clip)->Ratio : -1.0f, Position, SourceId, VolumeDb,
+        Sound ? 1 : 0, Component && Component->IsPlaying() ? 1 : 0);
+}
+
+void AHczsBattlePresentation::TryPlayPendingAllyCue()
+{
+    const FFutureCue* Cue = FindFutureCue(PendingAllyCue);
+    if (!Cue || !bRunningAlly || !AllyComponent) return;
+    UAnimSequence* Clip = FindAllyAnimation(PendingAllyCue);
+    auto* Playback = AllyComponent->GetSingleNodeInstance();
+    if (!Clip || !Playback || Playback->GetAnimationAsset() != Clip || !FMath::IsFinite(Playback->GetCurrentTime())) return;
+    const float Length = Clip->GetPlayLength();
+    const float Position = Playback->GetCurrentTime();
+    if (Length <= 0 || Position / Length < Cue->Ratio)
+    {
+        const float Wait = Length > 0 ? FMath::Max(0.001f, Cue->Ratio * Length - Position) : 0.02f;
+        GetWorldTimerManager().SetTimer(AllyCueTimer, this, &AHczsBattlePresentation::TryPlayPendingAllyCue, Wait, false);
+        return;
+    }
+    PendingAllyCue.Reset();
+    PlayAllyCue(Cue->Clip, Cue->Event, Cue->SourceId, Cue->VolumeDb, Cue->Asset, Position);
+}
+
+void AHczsBattlePresentation::StopAllyCues()
+{
+    GetWorldTimerManager().ClearTimer(AllyCueTimer);
+    PendingAllyCue.Reset();
+    for (UAudioComponent* Component : AllyCueSounds) if (Component) Component->Stop();
+    AllyCueSounds.Reset();
+}
+
 void AHczsBattlePresentation::ObserveEntrance()
 {
     if (!bEntrancePlaying) return;
@@ -360,6 +411,20 @@ void AHczsBattlePresentation::ObserveEntrance()
         const bool bPlaying = EntranceSound && EntranceSound->IsPlaying();
         UE_LOG(LogTemp, Display, TEXT("HCZS entrance source sound: battle=%s event=sound ratio=0.018300 position=%.6f wwise=ailisha_show_2 source=%u volumeDb=-7.5 loaded=%d playing=%d"),
             *EntranceBattleId, EntranceLastPosition, SourceEntranceSoundId, Sound ? 1 : 0, bPlaying ? 1 : 0);
+    }
+    if (!bAllyShowSoundPlayed && AllyComponent && !bAllyDeathPresented)
+    {
+        if (const FFutureCue* Cue = FindFutureCue(TEXT("show")))
+        {
+            UAnimSequence* Show = FindAllyAnimation(TEXT("show"));
+            auto* AllyPlayback = AllyComponent->GetSingleNodeInstance();
+            if (Show && AllyPlayback && AllyPlayback->GetAnimationAsset() == Show && Show->GetPlayLength() > 0 &&
+                FMath::IsFinite(AllyPlayback->GetCurrentTime()) && AllyPlayback->GetCurrentTime() / Show->GetPlayLength() >= Cue->Ratio)
+            {
+                bAllyShowSoundPlayed = true;
+                PlayAllyCue(Cue->Clip, Cue->Event, Cue->SourceId, Cue->VolumeDb, Cue->Asset, AllyPlayback->GetCurrentTime());
+            }
+        }
     }
     if (!bEntranceEventEmitted && ShowRatio >= SourceEntranceEffectRatio)
     {
@@ -403,6 +468,7 @@ void AHczsBattlePresentation::StopEntrance(bool bCompleted, const FString& Reaso
     {
         EntranceSourceFx->Stop(TEXT("entrance-cancelled"));
         if (EntranceSound) { EntranceSound->Stop(); EntranceSound = nullptr; }
+        StopAllyCues();
     }
     EntranceDeadline = 0; EntranceHiddenWorldStart = -1.0; EntranceShowWorldStart = -1.0;
     EntrancePhase = bCompleted ? TEXT("complete") : TEXT("cancelled"); EntranceDiagnostic = Reason;
@@ -879,6 +945,9 @@ void AHczsBattlePresentation::PlayNextStep()
             SceneAssets->AllyMemberIndex, *Step.Clip, AllyAnimation->GetPlayLength());
         if (const FString* Effect = SceneAssets->AllyClipEffects.Find(Step.Clip))
             UE_LOG(LogTemp, Display, TEXT("HCZS ally clip source effect: clip=%s sfx=%s mode=hook-only"), *Step.Clip, **Effect);
+        GetWorldTimerManager().ClearTimer(AllyCueTimer);
+        PendingAllyCue = FindFutureCue(Step.Clip) ? Step.Clip : FString();
+        if (!PendingAllyCue.IsEmpty()) TryPlayPendingAllyCue();
         GetWorldTimerManager().SetTimer(StepTimer, this, &AHczsBattlePresentation::FinishStep, AllyAnimation->GetPlayLength(), false);
         return;
     }
@@ -912,6 +981,8 @@ void AHczsBattlePresentation::FinishStep()
     if (!bPresentationBusy || !Queue.IsValidIndex(QueueIndex)) return;
     if (bRunningAlly)
     {
+        GetWorldTimerManager().ClearTimer(AllyCueTimer);
+        PendingAllyCue.Reset();
         bRunningAlly = false;
         if (bRunningDeath) { bAllyDeathPresented = true; SetAllyVisible(false); }
         else RestoreAllyIdle();
@@ -928,6 +999,7 @@ void AHczsBattlePresentation::FinishStep()
 void AHczsBattlePresentation::CancelPresentation(bool bKeepUnconfirmedIntent)
 {
     StopEntrance(false, TEXT("presentation-cancelled"), false);
+    StopAllyCues();
     bUltimatePlaying = false;
     if (UltimateSequence) UltimateSequence->Cancel();
     UltimateIntent.Reset(); bUltimateIntentAborted = false;
