@@ -11,6 +11,8 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundWave.h"
 #include "HczsGameInstance.h"
 #include "HAL/PlatformTime.h"
 
@@ -20,6 +22,10 @@ namespace
     constexpr int32 MaxPresentationSteps = 128;
     constexpr float SourceEntranceSeconds = 3.7f;
     constexpr float SourceEntranceEffectRatio = 0.144595f;
+    // ailisha_music.ags fight_idle_show/sound. Bank chain Volume is the sound -6 plus its actor-mixer -1.5.
+    constexpr float SourceEntranceSoundRatio = 0.0183f;
+    constexpr float SourceEntranceSoundVolumeDb = -7.5f;
+    constexpr uint32 SourceEntranceSoundId = 580663517u;
     bool IsDead(const FHczsScalar& Hp) { return Hp.Approximate <= 0.0; }
     int64 VisualUnixMs() { const FDateTime Now = FDateTime::UtcNow(); return Now.ToUnixTimestamp() * 1000 + Now.GetMillisecond(); }
 }
@@ -235,7 +241,7 @@ bool AHczsBattlePresentation::TryPlayFreshEntrance(const FHczsBattleView& View)
     if (!Session || !Session->ConsumeFreshBattleEntrance(View.Id)) return false;
     OpeningWorldStart = -1.0;
     FirstDealCount = View.Hand.Num();
-    EntranceBattleId = View.Id; EntranceLastPosition = 0; bEntranceEventEmitted = false;
+    EntranceBattleId = View.Id; EntranceLastPosition = 0; bEntranceEventEmitted = false; bEntranceSoundPlayed = false;
     EntranceAnimation = LoadObject<UAnimSequence>(nullptr,
         TEXT("/Game/Recovered/Battle/Entrance/elsa_entrance.elsa_entrance"));
     if (!PlayerComponent || !SceneAssets || !SceneAssets->PlayerMesh || !EntranceAnimation ||
@@ -344,7 +350,18 @@ void AHczsBattlePresentation::ObserveEntrance()
         !FMath::IsFinite(Playback->GetCurrentTime()))
     { StopEntrance(false, TEXT("source-playback-interrupted")); return; }
     EntranceLastPosition = Playback->GetCurrentTime();
-    if (!bEntranceEventEmitted && EntranceLastPosition / EntranceAnimation->GetPlayLength() >= SourceEntranceEffectRatio)
+    const float ShowRatio = EntranceLastPosition / EntranceAnimation->GetPlayLength();
+    if (!bEntranceSoundPlayed && ShowRatio >= SourceEntranceSoundRatio)
+    {
+        bEntranceSoundPlayed = true;
+        const float Volume = FMath::Pow(10.0f, SourceEntranceSoundVolumeDb / 20.0f);
+        USoundWave* Sound = LoadObject<USoundWave>(nullptr, TEXT("/Game/Recovered/Audio/Elsa/ElsaShow_580663517.ElsaShow_580663517"));
+        EntranceSound = Sound ? UGameplayStatics::SpawnSound2D(this, Sound, Volume) : nullptr;
+        const bool bPlaying = EntranceSound && EntranceSound->IsPlaying();
+        UE_LOG(LogTemp, Display, TEXT("HCZS entrance source sound: battle=%s event=sound ratio=0.018300 position=%.6f wwise=ailisha_show_2 source=%u volumeDb=-7.5 loaded=%d playing=%d"),
+            *EntranceBattleId, EntranceLastPosition, SourceEntranceSoundId, Sound ? 1 : 0, bPlaying ? 1 : 0);
+    }
+    if (!bEntranceEventEmitted && ShowRatio >= SourceEntranceEffectRatio)
     {
         bEntranceEventEmitted = true;
         // Without the opt-in flag the cue stays a hook only: the SFX timeline is a
@@ -382,7 +399,11 @@ void AHczsBattlePresentation::StopEntrance(bool bCompleted, const FString& Reaso
     GetWorldTimerManager().ClearTimer(EntranceVisibleTimer);
     GetWorldTimerManager().ClearTimer(EntranceFinishTimer);
     if (Session) Session->CompleteFreshBattleEntrance(EntranceBattleId);
-    if (!bCompleted) EntranceSourceFx->Stop(TEXT("entrance-cancelled"));
+    if (!bCompleted)
+    {
+        EntranceSourceFx->Stop(TEXT("entrance-cancelled"));
+        if (EntranceSound) { EntranceSound->Stop(); EntranceSound = nullptr; }
+    }
     EntranceDeadline = 0; EntranceHiddenWorldStart = -1.0; EntranceShowWorldStart = -1.0;
     EntrancePhase = bCompleted ? TEXT("complete") : TEXT("cancelled"); EntranceDiagnostic = Reason;
     if (bRestoreStablePose && bSceneReady) ApplyStablePose(DesiredSnapshot);

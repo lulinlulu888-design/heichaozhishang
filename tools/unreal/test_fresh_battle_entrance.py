@@ -250,10 +250,17 @@ def run():
                             and 'maxActiveLayers=3' in fx_ends[0], 'Entrance source fx did not start once and complete')
             else:
                 guard.check(not fx_starts, 'Entrance source fx played without the cue/opt-in')
+            sounds=matching('HCZS entrance source sound:')
             if index==0:
                 guard.check(times[2]-times[1]>=3600 and ('effectPlayed=1' if report['entranceFx'] else 'effectPlayed=0') in cues[0]
                             and float(re.search(r'position=([0-9.]+)',cues[0])[1])>=3.7*.144595-.000002,
                             'Native actual-position completion/source event differs')
+                guard.check(len(sounds)==1 and 'wwise=ailisha_show_2' in sounds[0] and 'source=580663517' in sounds[0]
+                            and 'volumeDb=-7.5' in sounds[0] and 'loaded=1' in sounds[0] and 'playing=1' in sounds[0]
+                            and float(re.search(r'position=([0-9.]+)',sounds[0])[1])>=3.7*0.0183-.000002,
+                            'Entrance sound did not play at the music-ags ratio')
+            else:
+                guard.check(len(sounds)<=1, 'Cancelled entrance replayed the show sound')
             events.append(dict(battleId=battle_id,freshStarts=1,showStarts=1,sourceCueCount=len(cues),
                 completed=index==0,hiddenWaitUnixMs=times[1]-times[0],showToEndUnixMs=times[2]-times[1]))
         return dict(authoritative=[dict(id=b['id'],revision=b['revision'],actionIndex=b['state']['actionIndex'],status=b['state']['status']) for b in battles],

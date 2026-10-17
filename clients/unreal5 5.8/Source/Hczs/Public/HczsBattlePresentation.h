@@ -8,6 +8,7 @@
 #include "HczsBattlePresentation.generated.h"
 
 class UAnimSequence;
+class UAudioComponent;
 class USkeletalMesh;
 class USkeletalMeshComponent;
 class UHczsGameInstance;
@@ -141,6 +142,8 @@ private:
     UPROPERTY() TObjectPtr<UAnimSequence> EntranceAnimation;
     bool bEntrancePlaying = false;
     bool bEntranceEventEmitted = false;
+    bool bEntranceSoundPlayed = false;
+    UPROPERTY() TObjectPtr<UAudioComponent> EntranceSound;
     FString EntranceBattleId;
     FString EntrancePhase = TEXT("none");
     FString EntranceDiagnostic;
