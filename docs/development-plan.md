@@ -70,7 +70,7 @@ SHA-256：`aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4`。
 | 画面修复 | UE5.8 已实际修复云层白框、魔方颜色贴图误识别为法线及角色过曝；原箭头、手牌文字与拖拽通过实机检查 | 当前是源资源的 UE 显示适配；原 NeoX 完整着色与更多技能特效尚未恢复 |
 | 命中时序 | 艾尔莎当前单击与二连击改用 APK 动作事件比例；两个 UE/Node 进程的 7 次出牌、9 个命中点核验通过；单段斩击的明确 409 拒绝与回执丢失后的同 ID 重试均已在真实 UE 恢复 | 延迟时停在命中姿势等待权威回执是本地适配；超时后释放起手并显示原重试框是重建交互；原随机动作组及其他技能的失败恢复仍待覆盖 |
 | 终结技 | 32 段原片已入 UE Movies；城市试战 10405 已从大厅进入 `L_City2077Preview`，真实出牌启动原 `crit_4` 并在原片处暂停；权威回执 8 段伤害按攻击事件逐段推进（重建）；原卡面已接，拖拽出牌；序章首战仍禁用 | 哪个攻击事件不带伤害仍未恢复（当前按顺序，第 9 个空推进）；镜头、VFX 和听感待验收 |
-| Node/Mongo | 本地档案与战斗持久化；序章 3997 权威胜利结算已接 UE 确认按钮；3998/1703 双人 BOSS 战已按标注的重建规则可玩，UE 客户端在 `L_PrologueBoss1703` 显示双人战斗并经结算按钮一次性记 3998；无普通奖励，事务幂等、响应丢失恢复、UE/Node 重启验证通过 | 未来的出牌/受击/死亡动作、首领技能特效与变身、目标类型 9 原解析器、养成/背包/任务等领域仍需补齐 |
+| Node/Mongo | 本地档案与战斗持久化；序章 3997 权威胜利结算已接 UE 确认按钮；3998/1703 双人 BOSS 战已按标注的重建规则可玩，UE 客户端在 `L_PrologueBoss1703` 显示双人战斗并经结算按钮一次性记 3998；无普通奖励，事务幂等、响应丢失恢复、UE/Node 重启验证通过 | 未来受击/倒下动作未经真实 UE 触发（重建目标规则只在艾尔莎倒下后才打到未来）、首领技能特效与变身、目标类型 9 原解析器、养成/背包/任务等领域仍需补齐 |
 | Admin | 已有独立端和部分管理基础 | 需按下面的运营功能矩阵补齐，恢复进度只留在开发工具内 |
 | 平台 | 当前主要验证 Windows UE 开发运行 | 四平台正式构建、安装、输入和性能验收尚未完成 |
 
@@ -326,11 +326,13 @@ UE API 的语义应支持多角色、多目标、事件队列和配置版本，�
 
 UE 客户端已接入 1703（重建标注保持不变）：
 - 契约：`HczsSessionContract` 按 15 个定义键与 12 个状态键严格解析 `hczs-battle-session-party-v1`，校验卡牌归属、removed 只含阵亡队员的卡、`BuffChanged`/`MemberDefeated` 事件与目标 `party-N`；主线支持 revision 0–2、3997→3998 顺序、完成时间递增，结算回执必须等于最后一条完成记录。夹具 `Source/Hczs/Private/Tests/Fixtures/prologue-boss-party-v1.json` 由 `tools/unreal/generate_prologue_boss_fixture.mjs` 用生产会话 reducer 生成（种子 7，26 步胜利、10 次结束回合判负），Node 回放测试与 UE `Hczs.LocalSession.Contract.PartyBattle`/`BossMainline` 通过；UE 自动化共 26 项通过。
-- 场景：`tools/unreal/setup_prologue_boss_battle.py` 从 `L_Theatre` 另存 `/Game/Recovered/Battle/Maps/L_PrologueBoss1703`，艾尔莎（1_2）、未来（3_4，仅待机）、BOSS（muoumaxituan_1743）与 camera_1 均取 `boss_theatre.scn` 原位置；运行时镜头仍由 `HczsBattleCamera` 按源竖直 FOV 设置，16:9 下三者都在画面内。独立 DataAsset `PrologueBoss1703SceneAssets` 复制首战艾尔莎动作，换上 BOSS 7 段原动作；技能动作按机制审计映射 74501→skill_4、74502→skill_3、74503→skill_2；卡牌动作只保留艾尔莎在本卡组的 4 张（110009、210003、410101、410102）。`L_Theatre`、首战地图与首战 DataAsset 字节不变。
+- 场景：`tools/unreal/setup_prologue_boss_battle.py` 从 `L_Theatre` 另存 `/Game/Recovered/Battle/Maps/L_PrologueBoss1703`，艾尔莎（1_2）、未来（3_4）、BOSS（muoumaxituan_1743）与 camera_1 均取 `boss_theatre.scn` 原位置；运行时镜头仍由 `HczsBattleCamera` 按源竖直 FOV 设置，16:9 下三者都在画面内。独立 DataAsset `PrologueBoss1703SceneAssets` 复制首战艾尔莎动作，换上 BOSS 7 段原动作；技能动作按机制审计映射 74501→skill_4、74502→skill_3、74503→skill_2；卡牌动作只保留艾尔莎在本卡组的 4 张（110009、210003、410101、410102）。`L_Theatre`、首战地图与首战 DataAsset 字节不变。
 - HUD：左侧按源 `HPArea_left_N` 槽位显示两名队员头像、生命、护盾与「攻击强化 N层」，阵亡变暗；BOSS 头像下显示强化层数；卡名按归属角色分组；意图文字按 BOSS 当前层数计算（如「首位伤害 187 ×3」）。
 - 流程：棋盘 `HczsDungeonMode` 在 3997 通关且 3998 绑定、未通关时，先逐句推进 AVG138（9 句），播完后探索进入 1703；胜利面板显示「确认序章首领战通关」，结算后显示「序章首领战已通关 · 3998 的 successTime 为 1」。棋盘信息区原先不可命中，真实点击会落到视口，现已设为可交互。
 - 真实 UE 验收 `tools/unreal/test_prologue_boss_ui.py`：HTTP 只准备并结算 3997；之后大厅→棋盘→9 次原生点按播完 AVG138→探索进入 `L_PrologueBoss1703`→24 次出牌、5 次结束回合获胜→原生点按结算；服务端 revision 2、3997/3998 各 `successTime` 1。证据 `analysis/unreal/session-test/prologue-boss-20261017c/`。原 3997 结算验收按 3998 已绑定更新后复跑通过（`mainline-bound-20261017/`）。
-- 仍未恢复：未来的出牌/受击/死亡动作（GLB 只有待机，打到未来的段落不播受击）；BOSS 技能特效、音效、变身阶段；双人入场演出（目前只播艾尔莎原 SHOW）。
+- 未来战斗动作：`tools/recover_hero_preview.py 3 --purpose battle-actions` 按实体 12 的 `ANIM_STATES_*` 导出 8 段原动作（idle_1、show 4.17 秒、fire_1、hit_1、hit_2、death、shield_1、buff_2），每段 ACL 解码逐值核对；hit_1 为单段无范围格式，按首领导出同样的显式放行处理。GLB `8b9316a2…` 导入独立命名空间。`tools/map_prologue_ally_actions.py` 用源表定出卡牌动作：卡牌 `SKILL_ID` → `skill_timeline_table` 的 `ANIMATION_LIST` → 实体状态，得 140002/440302/440303→SPL_1（buff_2），140004/240008→SHD_UP_1（shield_1），报告 `analysis/prologue-boss/future-actions/report.json`。SceneAssets 新增 `AllyMesh`、`AllyMemberIndex`、`AllyAnimations`、`AllyCardClips`；表现层按 `HCZSBattleAlly` 绑定未来，她的出牌、受击（打到成员 1 播 hit_1）与倒下（death 后隐藏）进入同一串行队列。以下为重建时序：入场时与艾尔莎同隐藏、同起播 SHOW、同 0.01 秒显形，SHOW 放完 4.17 秒再回待机；技能时间线的特效、音效与事件偏移未接。
+- 未来验收：真实 UE `prologue-boss-future-20261018/` 全流程通过并结算 3998；未来 10 次出牌按源映射依次播放 shield_1/buff_2，入场 SHOW 与艾尔莎同起，出牌中途截图见 `prologue-boss-future-action-*.png`。服务端重建目标规则只打第一个存活成员，获胜流程里未来没有挨打，她的 hit_1/death 分支尚无真实 UE 证据。首战入场回归 `entrance-ally-regress-20261018/` 通过；首战场景没有同伴，行为不变。
+- 仍未恢复：BOSS 技能特效、音效、变身阶段；未来技能时间线的特效与音效。
 
 Guide 1001 与 AVG134 已接入，序章全流程含进程重启在真实 UE 通过：
 - Guide 1001 来源：`guide_table` 组 1001 条件 MazeId 3997，赢一次战斗 5000 后失效（首领组 1002 为 3998/1703）。步骤 1850–1860 的文字、延时、锚点、框尺寸/偏移与手势取 `guide_step_table`/`guide_show_table`，文字经 9111 字面表解出（`analysis/first-encounter/guide-steps.json`）。`HczsGuide1001` 状态机：首回合且未出牌开 1850 链（看牌→「攻」标识→拖牌释放→能量消耗→卡顶费用→「尽全力去攻击吧！」）；1852 只能真实拖牌推进，1857 只能点结束回合，其余点任意处推进；第 2 回合开 1858 链，1860 读完即整组完成。从棋盘进入的 tutorial-5000、3997 未通关时才显示；中途恢复的首回合战斗跳过出牌教学。

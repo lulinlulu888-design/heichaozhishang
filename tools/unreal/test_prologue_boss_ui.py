@@ -22,6 +22,18 @@ HALL = 'L_ElsaHallFxPreview'
 DUNGEON = 'L_Chess239'
 BOSS_MAP = 'L_PrologueBoss1703'
 BOSS = 'prologue-boss-1703'
+FUTURE_ACTIONS = TOOLS.parents[1] / 'analysis/prologue-boss/future-actions/report.json'
+
+
+def validate_ally_actions(log, steps, card_clips):
+    rows = [line.split('side=ally member=1 clip=', 1)[1].split(' ', 1)[0]
+            for line in log.splitlines() if 'HCZS source animation playing: side=ally member=1 clip=' in line]
+    expected = [card_clips[s['cardId']] for s in steps if s.get('action') == 'play-card' and s.get('ownerIndex') == 1]
+    card_rows = [clip for clip in rows if clip in set(card_clips.values())]
+    guard.check(expected and card_rows == expected, 'Future card clips differ from source timelines: %s vs %s' % (card_rows, expected))
+    guard.check(all(clip in set(card_clips.values()) | {'hit_1', 'death'} for clip in rows), 'Unexpected Future clip: %s' % rows)
+    return dict(cardClips=card_rows, hits=rows.count('hit_1'), deaths=rows.count('death'),
+                entranceShow='HCZS entrance ally SHOW:' in log)
 
 
 def validate_boss_campaign(campaign, profile_id, battle_id):
@@ -148,6 +160,10 @@ def run():
             world = editor.get_game_world()
             if not world:
                 return
+            if state.get('allyShotAt') and time.monotonic() >= state['allyShotAt']:
+                state['allyShotAt'] = 0
+                report['allyActionScreenshot'] = str(path.parent / ('prologue-boss-future-action-' + str(time.time_ns()) + '.png'))
+                u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="' + Path(report['allyActionScreenshot']).as_posix() + '" -nosuffix')
             game = u.GameplayStatics.get_game_instance(world)
             if not game or game.get_editor_property('request_in_flight'):
                 return
@@ -205,6 +221,8 @@ def run():
                 choice = next((card for card in hand if card[2] <= energy), None)
                 guard.check(state['plays'] + state['ends'] < 80, 'Boss battle did not finish within bounds')
                 if choice:
+                    if choice[3] == 1 and 'allyShotAt' not in state:
+                        state['allyShotAt'] = time.monotonic() + .6
                     state['plays'] += 1
                     report['steps'].append(dict(action='play-card', cardId=choice[1], ownerIndex=choice[3]))
                     game.play_card(choice[0])
@@ -247,6 +265,10 @@ def run():
                 log = native_log.read_text('utf8', errors='replace')
                 report['bossSkillClipsLogged'] = 'enemy skill has no recovered animation mapping' not in log
                 passed('authoritative-3998-success-recorded')
+                card_clips = json.loads(FUTURE_ACTIONS.read_text('utf8'))['cardClips']
+                report['futureActions'] = validate_ally_actions(log, report['steps'], card_clips)
+                guard.check(report['futureActions']['entranceShow'], 'Future SHOW did not start with the Elsa entrance')
+                passed('future-source-battle-actions', **report['futureActions'])
                 state['shot'] = path.parent / ('prologue-boss-native-' + str(time.time_ns()) + '.png')
                 u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="' + state['shot'].as_posix() + '" -nosuffix')
                 stage('capture-wait')

@@ -18,7 +18,7 @@ import unreal as u
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = ROOT / 'clients/unreal5 5.8'
 sys.path.insert(0, str(ROOT / 'tools/unreal'))
-from preview_prologue_boss import import_boss, import_future, source_placement, to_ue, SCENE_SHA
+from preview_prologue_boss import import_boss, import_future_glb, source_placement, to_ue, SCENE_SHA
 
 OUT = ROOT / 'analysis/unreal/prologue-boss-1703'
 THEATRE = '/Game/Recovered/SourceStages/Maps/L_Theatre'
@@ -31,6 +31,9 @@ MECHANISMS_SHA = '6fdb8945e1f197b24dc71746169078407b7c488d7884a36666617a67a97ba2
 BOSS_REPORT = ROOT / 'analysis/prologue-boss/glb/export-report.json'
 BOSS_REPORT_SHA = '969e97367ce143841ed7748a46423586db35fdc0a18fb4181ce563b557418583'
 FIXTURE = PROJECT / 'Source/Hczs/Private/Tests/Fixtures/prologue-boss-party-v1.json'
+FUTURE_ACTIONS = ROOT / 'analysis/prologue-boss/future-actions/report.json'
+FUTURE_ACTIONS_SHA = '239484e1e2202979bb49149a6dda8d26a2ec691fcfc2dbe9fbb484a29d0ec547'
+FUTURE_EXPORT = ROOT / 'analysis/characters/hero-003/battle-actions/export/export-report.json'
 CLIP_PREFIX = 'muoumaxituan_'
 RUNTIME_VERTICAL_FOV = 35.985
 
@@ -65,10 +68,16 @@ def recipe():
           and [m['id'] for m in definition['party']] == ['1', '3'], 'Boss party definition changed')
     elsa_cards = sorted({entry['cardId'] for entry in definition['deck'] if entry['ownerId'] == '1'})
     check(elsa_cards, 'Boss deck has no Elsa cards')
+    actions_raw = FUTURE_ACTIONS.read_bytes()
+    check(sha(actions_raw) == FUTURE_ACTIONS_SHA, 'Future action mapping changed')
+    actions = json.loads(actions_raw)
+    future_cards = sorted({entry['cardId'] for entry in definition['deck'] if entry['ownerId'] == '3'})
+    check(sorted(actions['cardClips']) == future_cards and actions['memberIndex'] == 1, 'Future card mapping does not cover the boss deck')
     return dict(encounterId='prologue-boss-1703', playerId='party-1-3', enemyId='2013',
                 enemySkillClips={key: value[len(CLIP_PREFIX):] for key, value in skills.items()},
                 elsaCards=elsa_cards, sceneSha256=SCENE_SHA, mechanismsSha256=MECHANISMS_SHA,
-                bossReportSha256=BOSS_REPORT_SHA)
+                bossReportSha256=BOSS_REPORT_SHA, futureGlbSha256=actions['glbSha256'], futureClips=actions['clips'],
+                futureCardClips=actions['cardClips'], futureActionsSha256=FUTURE_ACTIONS_SHA)
 
 
 def main():
@@ -93,7 +102,13 @@ def main():
         return world
 
     boss_mesh, boss_idle, _ = import_boss()
-    future_mesh, future_idle = import_future()
+    future_mesh, future_sequences = import_future_glb(FUTURE_EXPORT, plan['futureGlbSha256'], 'battle-actions', len(plan['futureClips']))
+    future_clips = {}
+    for clip in plan['futureClips']:
+        matches = [s for s in future_sequences if s.get_name() == future_mesh.get_name() + clip]
+        check(len(matches) == 1, 'Future clip not uniquely imported: ' + clip)
+        future_clips[clip] = matches[0]
+    future_idle = future_clips['idle_1']
     position, rotation, camera_matrix, elsa_position, elsa_rotation, future_position, future_rotation = source_placement()
     boss_clips = {}
     for path in u.EditorAssetLibrary.list_assets(boss_idle.get_path_name().rsplit('/', 1)[0], True, False):
@@ -120,9 +135,13 @@ def main():
           and source_assets.get_editor_property('player_mesh') == template['playerMesh'], 'Tutorial SceneAssets changed')
 
     if u.EditorAssetLibrary.does_asset_exist(SCENE_ASSETS):
-        check(u.EditorAssetLibrary.delete_asset(SCENE_ASSETS), 'Cannot replace owned SceneAssets')
-    assets = u.EditorAssetLibrary.duplicate_asset(TUTORIAL_ASSETS, SCENE_ASSETS)
-    check(assets is not None, 'Cannot duplicate tutorial SceneAssets')
+        assets = u.load_asset(SCENE_ASSETS)
+        check(isinstance(assets, u.HczsBattleSceneAssets), 'Owned SceneAssets path holds another asset type')
+        for key in ('source_hit_timing_sha256', 'player_mesh', 'player_animations', 'player_hit_events'):
+            assets.set_editor_property(key, source_assets.get_editor_property(key))
+    else:
+        assets = u.EditorAssetLibrary.duplicate_asset(TUTORIAL_ASSETS, SCENE_ASSETS)
+    check(assets is not None, 'Cannot create owned SceneAssets')
     queues = source_assets.get_editor_property('card_animation_queues')
     card_queues = {card: queues[card] for card in plan['elsaCards'] if card in queues}
     for key, value in dict(
@@ -130,7 +149,8 @@ def main():
             enemy_mesh=boss_mesh, enemy_animations=boss_clips, enemy_skill_clips=plan['enemySkillClips'],
             card_animation_queues=card_queues, source_mapping_sha256=MECHANISMS_SHA,
             source_manifest_sha256=BOSS_REPORT_SHA, original_tutorial_stage_recovered=False,
-            scene_notice='序章首领战：原剧场、首领与艾尔莎/未来模型及首领技能动作；双人规则为重建，原特效/音效未接').items():
+            ally_mesh=future_mesh, ally_member_index=1, ally_animations=future_clips, ally_card_clips=plan['futureCardClips'],
+            scene_notice='序章首领战：原剧场、首领与艾尔莎/未来模型、未来源战斗动作及首领技能动作；双人规则为重建，原特效/音效未接').items():
         assets.set_editor_property(key, value)
     check(u.EditorAssetLibrary.save_loaded_asset(assets, False), 'Boss SceneAssets save failed')
 
@@ -195,6 +215,10 @@ def main():
     check(unique('HCZSBattlePlayer').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == assets.get_editor_property('player_mesh'), 'Player mesh differs')
     check(unique('HCZSBattleEnemy').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == boss_mesh, 'Boss mesh differs')
     check(dict(assets.get_editor_property('enemy_skill_clips')) == plan['enemySkillClips'], 'Skill clip readback differs')
+    check(dict(assets.get_editor_property('ally_card_clips')) == plan['futureCardClips']
+          and sorted(assets.get_editor_property('ally_animations')) == sorted(plan['futureClips'])
+          and unique('HCZSBattleAlly3').get_component_by_class(u.SkeletalMeshComponent).get_skeletal_mesh_asset() == future_mesh,
+          'Future action readback differs')
     cc = unique('HCZSBattleCamera').get_component_by_class(u.CameraComponent)
     from verify_battle_scene import project
     axes = dict(position=vec(cc.get_world_transform().translation), forward=vec(cc.get_forward_vector()),
@@ -207,10 +231,11 @@ def main():
           'A protected source map/asset changed on disk')
     return dict(passed=True, map=TARGET, sceneAssets=SCENE_ASSETS, recipe=plan,
                 cardQueues=sorted(card_queues), cardsWithoutClips=[c for c in plan['elsaCards'] if c not in card_queues],
-                bossClips=sorted(boss_clips), projections=projections, protectedFilesUnchanged=True,
+                bossClips=sorted(boss_clips), futureClips=sorted(future_clips), futureCardClips=plan['futureCardClips'],
+                projections=projections, protectedFilesUnchanged=True,
                 mapSha256=sha(asset_file(TARGET, True).read_bytes()),
                 limitations=['Elsa/Future/boss/camera use boss_theatre source placements; FOV follows HczsBattleCamera at runtime.',
-                             'Future is an idle ally actor only; her card/hit/death clips are not recovered, party-N hits stay unanimated.',
+                             'Future card clips follow skill timelines (SPL_1/SHD_UP_1); hit_1 on damage, death on defeat and show with the Elsa entrance are reconstructed timing.',
                              'Boss skill clips are source-mapped (74501/2/3); skill VFX, SFX and transform phases are not ported.',
                              'Two-member rules are prologue-party-reconstruction-v1, not observed original runtime.'])
 

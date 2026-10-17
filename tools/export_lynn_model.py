@@ -81,7 +81,8 @@ def remove_bind_shear(model, frame0, max_displacement_over_height=0.02):
         scope='Reconstruction for TRS skeletons, not original bind data')
 
 
-def export_character(out, model_path, library_path, clip_name, character_name, clip_directory=None):
+def export_character(out, model_path, library_path, clip_name, character_name, clip_directory=None,
+                     extra_clips=(), output_suffix='idle'):
     global OUT
     OUT=Path(out)
     OUT.mkdir(parents=True,exist_ok=True)
@@ -163,11 +164,19 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
     # Use mesh locals only as the encoder's temporary matrix input; replace the
     # unanimated defaults with full source TRS after animation channels are added.
     base=pack_glb(doc,binary)
-    clip=dict(name=clip_name,values=values,
+    clips=[dict(name=clip_name,values=values,
         frames=metadata['samples'],rate=metadata['sample_rate'],pose_sha256=file_sha256(pose_path),
         metadata_sha256=file_sha256(metadata_path),metadata=metadata,
-        mapping=metadata['bone_mappings'][mesh_path])
-    animated,reports,_=encode(base,[clip]);doc,binary=split_glb(animated)
+        mapping=metadata['bone_mappings'][mesh_path])]
+    for extra in extra_clips:
+        extra_meta_path=clip_directory/(extra+'.json');extra_meta=json.loads(extra_meta_path.read_text('utf8'))
+        extra_pose=clip_directory/(extra+'.poses')
+        if file_sha256(extra_pose)!=extra_meta['poses']['sha256']:raise ValueError('Sample changed: '+extra)
+        extra_values=np.frombuffer(extra_pose.read_bytes(),dtype='<f4',offset=20).reshape(extra_meta['samples'],extra_meta['bone_count'],10)
+        clips.append(dict(name=extra,values=extra_values,frames=extra_meta['samples'],rate=extra_meta['sample_rate'],
+            pose_sha256=file_sha256(extra_pose),metadata_sha256=file_sha256(extra_meta_path),metadata=extra_meta,
+            mapping=extra_meta['bone_mappings'][mesh_path]))
+    animated,reports,_=encode(base,clips);doc,binary=split_glb(animated)
     # UE bakes skinned vertices into the node rest pose, so a rest pose far from
     # the bind distorts blended vertices; keep bind TRS when the reference differs.
     keep_bind_rest='reference_pose_mismatch' in bind and joint_local_source.startswith('mesh')
@@ -181,8 +190,8 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
         'Full original local reference TRS, including unweighted ancestors; original inverse bind matrices unchanged')
     doc['extras']['character']=character_name
     animated=pack_glb(doc,binary)
-    verified=validate_roundtrip(base,animated,[clip])
-    output=OUT/(character_name.lower()+'-idle.colour-reference.glb');output.write_bytes(animated)
+    verified=validate_roundtrip(base,animated,clips)
+    output=OUT/(character_name.lower()+'-'+output_suffix+'.colour-reference.glb');output.write_bytes(animated)
     report=dict(output=str(output),sha256=digest(animated),bytes=len(animated),reference_skin=bind,
         animations=reports,verification=verified,textures=textures,colour_adaptations=colour_adaptations,
         unresolved_no_shader_slots=no_shader,joint_local_source=joint_local_source,

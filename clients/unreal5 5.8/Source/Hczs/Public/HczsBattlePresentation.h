@@ -57,6 +57,12 @@ public:
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FHczsBattleSourceHit> PlayerHitEvents;
     UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> EnemySkillClips;
     UPROPERTY(EditAnywhere, Category="Recovered") bool bOriginalTutorialStageRecovered = false;
+    /** Optional second party member bound by the HCZSBattleAlly tag; -1 means no ally actor. */
+    UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<USkeletalMesh> AllyMesh;
+    UPROPERTY(EditAnywhere, Category="Recovered") int32 AllyMemberIndex = -1;
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, TObjectPtr<UAnimSequence>> AllyAnimations;
+    /** cardId -> clip via card SKILL_ID, skill timeline ANIMATION_LIST and entity ANIM_STATES_*. */
+    UPROPERTY(EditAnywhere, Category="Recovered") TMap<FString, FString> AllyCardClips;
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnHczsBattlePresentationChanged);
@@ -79,6 +85,7 @@ struct FHczsBattleAnimationStep
     bool bEnemy = false;
     bool bDeath = false;
     FString Clip;
+    bool bAlly = false;
 };
 
 /** Pure intent identity gate. Confirmation authorizes reactions, never predictions. */
@@ -162,6 +169,16 @@ private:
     UPROPERTY() TObjectPtr<USkeletalMeshComponent> PlayerComponent;
     UPROPERTY() TObjectPtr<USkeletalMeshComponent> EnemyComponent;
     UPROPERTY() TObjectPtr<AActor> WeaponActor;
+    UPROPERTY() TObjectPtr<USkeletalMeshComponent> AllyComponent;
+    bool bAllyDeathPresented = false;
+    bool bRunningAlly = false;
+    double AllyShowUntil = -1.0;
+    FTimerHandle AllyShowTimer;
+    UAnimSequence* FindAllyAnimation(const FString& Clip) const;
+    void QueueAllyClip(const FString& Clip, bool bDeath = false);
+    void SetAllyVisible(bool bVisible);
+    void RestoreAllyIdle();
+    bool IsAllyDead(const FHczsBattleView& View) const;
     FHczsBattlePresentationCursor Cursor;
     TArray<FHczsBattleAnimationStep> Queue;
     FTimerHandle StepTimer;

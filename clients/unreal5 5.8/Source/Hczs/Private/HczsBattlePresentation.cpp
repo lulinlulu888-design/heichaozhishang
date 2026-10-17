@@ -254,6 +254,7 @@ bool AHczsBattlePresentation::TryPlayFreshEntrance(const FHczsBattleView& View)
     EntranceDeadline = FPlatformTime::Seconds() + 6.5;
     // Source playerShow hides only our side. Entity6605 has no SHOW animation.
     SetSideVisible(false, false);
+    if (AllyComponent && !IsAllyDead(View)) SetAllyVisible(false);
     SetBusy(true);
     UE_LOG(LogTemp, Display, TEXT("HCZS entrance prepared: battle=%s source=fight_idle_show waitingForFirstTick=1 atUnixMs=%lld"),
         *View.Id, VisualUnixMs());
@@ -283,6 +284,15 @@ void AHczsBattlePresentation::StartEntranceClip()
     PlayerComponent->SetPlayRate(1.0f);
     // Keep every authored translation, including the jump-in. No root-motion
     // extraction, upright correction or actor transform is applied here.
+    if (UAnimSequence* AllyShow = AllyComponent && !bAllyDeathPresented ? FindAllyAnimation(TEXT("show")) : nullptr)
+    {
+        // Reconstruction: playerShow covers our whole side; the ally SHOW starts with Elsa's.
+        AllyComponent->PlayAnimation(AllyShow, false);
+        AllyComponent->SetPosition(0, false);
+        AllyShowUntil = WorldNow + AllyShow->GetPlayLength();
+        UE_LOG(LogTemp, Display, TEXT("HCZS entrance ally SHOW: battle=%s member=%d clip=show duration=%.6f mode=reconstruction"),
+            *EntranceBattleId, SceneAssets->AllyMemberIndex, AllyShow->GetPlayLength());
+    }
     EntrancePhase = TEXT("show-hidden"); EntranceDiagnostic = TEXT("Source SHOW playing; reveal after 0.01 seconds.");
     GetWorldTimerManager().SetTimer(EntranceVisibleTimer, this, &AHczsBattlePresentation::RevealEntrancePlayer, .01f, false);
     GetWorldTimerManager().SetTimer(EntranceFinishTimer, this, &AHczsBattlePresentation::CheckEntranceFinished,
@@ -305,6 +315,7 @@ void AHczsBattlePresentation::RevealEntrancePlayer()
         return;
     }
     SetSideVisible(false, true); EntrancePhase = TEXT("show-visible");
+    if (AllyComponent && !bAllyDeathPresented) SetAllyVisible(true);
     EntranceDiagnostic = TEXT("Original 3.7-second fight_idle_show; source event_1 effect not imported.");
     UE_LOG(LogTemp, Display, TEXT("HCZS entrance source visible: battle=%s showElapsed=%.6f worldTime=%.6f atUnixMs=%lld"),
         *EntranceBattleId, ShowElapsed, WorldNow, VisualUnixMs());
@@ -607,6 +618,21 @@ bool AHczsBattlePresentation::EnsureSceneReady()
     }
     for (const auto& Pair : SceneAssets->EnemySkillClips)
         if (!FindAnimation(true, Pair.Value)) return false;
+    if (SceneAssets->AllyMemberIndex >= 0)
+    {
+        if (!SceneAssets->AllyMesh || !Bind(TEXT("HCZSBattleAlly"), SceneAssets->AllyMesh, AllyComponent))
+        { UE_LOG(LogTemp, Error, TEXT("HCZS ally actor tag or original mesh reference is incomplete")); return false; }
+        TArray<FString> Required = {TEXT("idle_1"), TEXT("show"), TEXT("hit_1"), TEXT("death")};
+        for (const auto& Pair : SceneAssets->AllyCardClips) Required.AddUnique(Pair.Value);
+        for (const FString& Clip : Required)
+        {
+            UAnimSequence* Animation = FindAllyAnimation(Clip);
+            if (!Animation || Animation->GetSkeleton() != SceneAssets->AllyMesh->GetSkeleton() ||
+                !FMath::IsFinite(Animation->GetPlayLength()) || Animation->GetPlayLength() <= 0)
+            { UE_LOG(LogTemp, Error, TEXT("HCZS original ally animation is missing/incompatible: %s"), *Clip); return false; }
+        }
+        AllyComponent->PlayAnimation(FindAllyAnimation(TEXT("idle_1")), true);
+    }
     TArray<AActor*> Weapons; UGameplayStatics::GetAllActorsWithTag(GetWorld(), TEXT("HCZSBattleWeapon"), Weapons);
     if (Weapons.Num() != 1) return false;
     WeaponActor = Weapons[0];
@@ -628,6 +654,38 @@ UAnimSequence* AHczsBattlePresentation::FindAnimation(bool bEnemy, const FString
     return Found ? Found->Get() : nullptr;
 }
 
+UAnimSequence* AHczsBattlePresentation::FindAllyAnimation(const FString& Clip) const
+{
+    const auto* Found = SceneAssets ? SceneAssets->AllyAnimations.Find(Clip) : nullptr;
+    return Found ? Found->Get() : nullptr;
+}
+
+bool AHczsBattlePresentation::IsAllyDead(const FHczsBattleView& View) const
+{
+    return SceneAssets && View.Party.IsValidIndex(SceneAssets->AllyMemberIndex) && IsDead(View.Party[SceneAssets->AllyMemberIndex].Hp);
+}
+
+void AHczsBattlePresentation::SetAllyVisible(bool bVisible)
+{
+    if (!AllyComponent) return;
+    AllyComponent->SetVisibility(bVisible, true);
+    AllyComponent->GetOwner()->SetActorHiddenInGame(!bVisible);
+}
+
+void AHczsBattlePresentation::RestoreAllyIdle()
+{
+    AllyShowUntil = -1.0;
+    if (!AllyComponent || bAllyDeathPresented || (bRunningAlly && Queue.IsValidIndex(QueueIndex))) return;
+    AllyComponent->PlayAnimation(FindAllyAnimation(TEXT("idle_1")), true);
+}
+
+void AHczsBattlePresentation::QueueAllyClip(const FString& Clip, bool bDeath)
+{
+    if (!AllyComponent || Queue.Num() >= MaxPresentationSteps || !FindAllyAnimation(Clip)) return;
+    FHczsBattleAnimationStep Step{false, bDeath, Clip}; Step.bAlly = true;
+    Queue.Add(Step);
+}
+
 bool AHczsBattlePresentation::CanPresentBattle(const FHczsBattleView& View) const
 {
     if (!SceneAssets || !View.bIsValid || View.PlayerId != SceneAssets->PlayerId || View.EnemyId != SceneAssets->EnemyId) return false;
@@ -640,7 +698,7 @@ void AHczsBattlePresentation::ApplySnapshot(const FHczsBattleView& View, const F
     if (!EnsureSceneReady()) return;
     if (!CanPresentBattle(View))
     {
-        CancelPresentation(); SetSideVisible(false, false); SetSideVisible(true, false); Cursor.Reset();
+        CancelPresentation(); SetSideVisible(false, false); SetSideVisible(true, false); SetAllyVisible(false); Cursor.Reset();
         if (!bUnsupportedLogged)
             UE_LOG(LogTemp, Warning, TEXT("HCZS scene cannot represent this encounter/actor identity; source actors remain hidden"));
         bUnsupportedLogged = true; return;
@@ -729,6 +787,8 @@ void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArr
                 Queue.Add(FHczsBattleAnimationStep{false, false, TEXT("__elsa_ultimate_sequence")});
                 continue;
             }
+            const FString* AllyClip = Event.MemberIndex == SceneAssets->AllyMemberIndex ? SceneAssets->AllyCardClips.Find(Event.CardId) : nullptr;
+            if (AllyClip) { QueueAllyClip(*AllyClip); continue; }
             const auto* Sequence = SceneAssets->CardAnimationQueues.Find(Event.CardId);
             if (Sequence) for (const FString& Clip : Sequence->Clips) QueueClip(false, Clip);
             else UE_LOG(LogTemp, Display, TEXT("HCZS card has no recovered animation mapping: %s"), *Event.CardId);
@@ -744,11 +804,14 @@ void AHczsBattlePresentation::BuildQueue(const FHczsBattleView& View, const TArr
             if ((LocalCard.bConfirmed || bUltimateStepped) && Event.Target == TEXT("enemy")) continue;
             if (Event.Target == TEXT("player")) QueueClip(false, TEXT("hit_2"));
             else if (Event.Target == TEXT("enemy")) QueueClip(true, TEXT("hit_1"));
+            else if (Event.MemberIndex >= 0 && Event.MemberIndex == SceneAssets->AllyMemberIndex) QueueAllyClip(TEXT("hit_1"));
         }
     }
     // Confirmed local card reactions are released separately at each clip's
     // authored attack event, not serialized by the hit animation's duration.
     if (IsDead(View.PlayerHp)) QueueClip(false, TEXT("death"), true);
+    const bool bAllyNewlyDead = IsAllyDead(View) && !bAllyDeathPresented;
+    if (bAllyNewlyDead) QueueAllyClip(TEXT("death"), true);
     if (IsDead(View.EnemyHp)) QueueClip(true, TEXT("death"), true);
     bPlayerDeathPresented = false; bEnemyDeathPresented = false;
 }
@@ -769,6 +832,25 @@ void AHczsBattlePresentation::PlayNextStep()
         { bUltimatePlaying = false; CancelPresentation(); ApplyStablePose(DesiredSnapshot); }
         return;
     }
+    if (Step.bAlly)
+    {
+        UAnimSequence* AllyAnimation = FindAllyAnimation(Step.Clip);
+        if (!AllyAnimation || !AllyComponent)
+        {
+            UE_LOG(LogTemp, Error, TEXT("HCZS ally clip disappeared; restore authoritative stable pose"));
+            CancelPresentation(); ApplyStablePose(DesiredSnapshot); return;
+        }
+        GetWorldTimerManager().ClearTimer(AllyShowTimer); AllyShowUntil = -1.0;
+        bRunningAlly = true; bRunningEnemy = false; bRunningDeath = Step.bDeath;
+        SetAllyVisible(true);
+        AllyComponent->PlayAnimation(AllyAnimation, false);
+        AllyComponent->SetPosition(0, false);
+        UE_LOG(LogTemp, Display, TEXT("HCZS source animation playing: side=ally member=%d clip=%s duration=%.6f"),
+            SceneAssets->AllyMemberIndex, *Step.Clip, AllyAnimation->GetPlayLength());
+        GetWorldTimerManager().SetTimer(StepTimer, this, &AHczsBattlePresentation::FinishStep, AllyAnimation->GetPlayLength(), false);
+        return;
+    }
+    bRunningAlly = false;
     UAnimSequence* Animation = FindAnimation(Step.bEnemy, Step.Clip);
     auto* Component = Step.bEnemy ? EnemyComponent.Get() : PlayerComponent.Get();
     if (!Animation || !Component || !FMath::IsFinite(Animation->GetPlayLength()) || Animation->GetPlayLength() <= 0)
@@ -796,6 +878,13 @@ void AHczsBattlePresentation::PlayNextStep()
 void AHczsBattlePresentation::FinishStep()
 {
     if (!bPresentationBusy || !Queue.IsValidIndex(QueueIndex)) return;
+    if (bRunningAlly)
+    {
+        bRunningAlly = false;
+        if (bRunningDeath) { bAllyDeathPresented = true; SetAllyVisible(false); }
+        else RestoreAllyIdle();
+        ++QueueIndex; PlayNextStep(); return;
+    }
     if (bRunningDeath)
     {
         if (bRunningEnemy) bEnemyDeathPresented = true; else bPlayerDeathPresented = true;
@@ -823,6 +912,7 @@ void AHczsBattlePresentation::CancelPresentation(bool bKeepUnconfirmedIntent)
     bLocalPlayerPlaying = false; bWaitingForImpact = false;
     bLocalVisualAborted = bKeep;
     if (!bKeep) LocalCard.Reset();
+    bRunningAlly = false;
     Queue.Reset(); QueueIndex = 0; SetBusy(false);
 }
 
@@ -913,6 +1003,15 @@ void AHczsBattlePresentation::ApplyStablePose(const FHczsBattleView& View)
             else Component->PlayAnimation(FindAnimation(bEnemy, bEnemy ? TEXT("idle") : TEXT("idle_1")), true);
         }
     }
+    if (!AllyComponent) return;
+    bAllyDeathPresented = IsAllyDead(View);
+    SetAllyVisible(!bAllyDeathPresented);
+    if (bAllyDeathPresented) { GetWorldTimerManager().ClearTimer(AllyShowTimer); AllyShowUntil = -1.0; AllyComponent->Stop(); return; }
+    // The ally's 4.17s SHOW outlasts Elsa's 3.7s one; let it finish before idling.
+    const double Remaining = AllyShowUntil - GetWorld()->GetTimeSeconds();
+    if (Remaining > .01)
+        GetWorldTimerManager().SetTimer(AllyShowTimer, this, &AHczsBattlePresentation::RestoreAllyIdle, static_cast<float>(Remaining), false);
+    else RestoreAllyIdle();
 }
 
 void AHczsBattlePresentation::SetBusy(bool bBusy)

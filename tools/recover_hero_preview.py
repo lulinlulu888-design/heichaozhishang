@@ -20,6 +20,9 @@ from sample_lynn_idle import sample_pinned
 from trace_first_encounter import literal_table
 
 ROOT = Path(__file__).resolve().parents[1]
+# Battle entity animation states sampled for --purpose battle-actions (idle first).
+BATTLE_ACTION_STATES = ('ANIM_STATES_IDLE_1', 'ANIM_STATES_SHOW', 'ANIM_STATES_ATK_1', 'ANIM_STATES_HIT_1',
+                        'ANIM_STATES_HIT_2', 'ANIM_STATES_DIE', 'ANIM_STATES_SHD_UP_1', 'ANIM_STATES_SPL_1')
 
 
 def select_character(character_id, purpose):
@@ -37,9 +40,13 @@ def select_character(character_id, purpose):
     state = 'ANIM_STATES_HOME_STAND_IDLE' if purpose == 'hall' else 'ANIM_STATES_IDLE_1'
     if len(lod0) != 1 or not ef.get(state):
         raise ValueError('Unique LOD0 or explicit idle state unavailable; no fallback chosen')
+    states = {}
+    if purpose == 'battle-actions':
+        states = {name: ef[name] for name in BATTLE_ACTION_STATES if ef.get(name)}
     return dict(characterId=character_id, name=fields['NAME'], initial=fields['InitChar'],
         purpose=purpose, entityId=entity['rows'][0]['id'], model=lod0[0]['fields']['MODEL_PATH'],
-        clip=ef[state], state=state, modelSelection='Source LEVEL=0 for inspection; runtime LOD selection unobserved',
+        clip=ef[state], state=state, actionStates=states,
+        modelSelection='Source LEVEL=0 for inspection; runtime LOD selection unobserved',
         sourceTables=dict(character=character, entity=entity, lod=lod, levels=levels))
 
 
@@ -84,23 +91,28 @@ def recover(character_id, purpose, apk, catalogue):
     model = drop_unanimated_leaf_bones(model, library['bone_names'])
     selected['droppedUnanimatedLeafBones'] = model.get('dropped_unanimated_leaf_bones', [])
     clip_name = selected['clip']
-    records = [row for row in library['clips'] if row['name'] == clip_name]
-    if len(records) != 1:
-        raise ValueError('Configured idle is not unique in this model library')
-    clip_raw = get(clip_path(library_path, clip_name))
-    parsed = parse_clip(clip_raw)
+    clip_names = list(dict.fromkeys([clip_name, *selected['actionStates'].values()]))
     mesh_bones = [b['name'] for b in model['bones']]
-    mapping = map_bones(library, parsed, mesh_bones, allow_library_extras=True)
     selected['libraryOnlyBones'] = sorted(set(library['bone_names']) - set(mesh_bones))
-    scale_format = clip_raw[parsed['acl_offset'] + 25]
-    if scale_format not in (0,1):
-        raise ValueError('Unsupported source ACL scale format')
     clip_directory = out / purpose / 'poses'
     clip_directory.mkdir(parents=True, exist_ok=True)
-    (clip_directory / (clip_name+'.gisacl')).write_bytes(clip_raw)
-    parsed.update(source=sources[clip_path(library_path, clip_name)], library_sha256=library['sha256'],
-        library_record=records[0], bone_mappings={mesh_path:mapping})
-    write_json(clip_directory / (clip_name+'.json'), parsed)
+    pins, scale_formats = {}, set()
+    for name in clip_names:
+        records = [row for row in library['clips'] if row['name'] == name]
+        if len(records) != 1:
+            raise ValueError('Configured clip is not unique in this model library: ' + name)
+        clip_raw = get(clip_path(library_path, name))
+        parsed = parse_clip(clip_raw)
+        mapping = map_bones(library, parsed, mesh_bones, allow_library_extras=True)
+        scale_formats.add(clip_raw[parsed['acl_offset'] + 25])
+        (clip_directory / (name+'.gisacl')).write_bytes(clip_raw)
+        parsed.update(source=sources[clip_path(library_path, name)], library_sha256=library['sha256'],
+            library_record=records[0], bone_mappings={mesh_path:mapping})
+        write_json(clip_directory / (name+'.json'), parsed)
+        pins[name] = parsed['acl_sha256']
+    if len(scale_formats) != 1 or not scale_formats <= {0, 1}:
+        raise ValueError('Unsupported or mixed source ACL scale formats')
+    scale_format = scale_formats.pop()
     audit = dict(apk_sha256=APK_SHA256, selection=selected, models=[dict(path=model_path,
         mesh=summary(model), materials=materials, bindings=bindings, libraries=libraries)],
         sources=sources, textures=texture_sources)
@@ -108,10 +120,11 @@ def recover(character_id, purpose, apk, catalogue):
     # purpose self-contained so another export cannot replace its evidence.
     audit_directory = out / purpose
     write_json(audit_directory / 'asset-audit.json', audit)
-    sample_pinned(clip_directory, {clip_name:parsed['acl_sha256']},
-        'hero-' + str(character_id) + '-' + purpose, scale_format)
+    sample_pinned(clip_directory, pins, 'hero-' + str(character_id) + '-' + purpose, scale_format,
+                  allow_single_segment_no_range=purpose == 'battle-actions')
     export_character(audit_directory / 'export', model_path, library_path, clip_name,
-        'Hero' + str(character_id).zfill(3), clip_directory)
+        'Hero' + str(character_id).zfill(3), clip_directory, extra_clips=clip_names[1:],
+        output_suffix='battle-actions' if purpose == 'battle-actions' else 'idle')
     report_path = audit_directory / 'export/export-report.json'
     result = json.loads(report_path.read_text('utf8'))
     result.update(sourceApkSha256=APK_SHA256, selection=selected,
@@ -125,7 +138,7 @@ def recover(character_id, purpose, apk, catalogue):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('character_ids', type=int, nargs='+')
-    parser.add_argument('--purpose', choices=('hall','battle'), default='hall')
+    parser.add_argument('--purpose', choices=('hall','battle','battle-actions'), default='hall')
     args = parser.parse_args()
     apk = ROOT / 'heichaozhishang_v1.222180.224889_ervajk_anfensi.com.apk'
     with apk.open('rb') as stream:

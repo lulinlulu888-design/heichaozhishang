@@ -20,7 +20,7 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def sample_pinned(source, pins, label, scale_format=1):
+def sample_pinned(source, pins, label, scale_format=1, allow_single_segment_no_range=False):
     import re
     if not re.fullmatch(r'[a-z0-9-]+',label) or scale_format not in (0,1):
         raise ValueError('Unreviewed sampler configuration')
@@ -45,6 +45,10 @@ def sample_pinned(source, pins, label, scale_format=1):
     text = text.replace('four pinned original clips', 'one pinned original Lynn idle clip')
     text = text.replace('Decode exactly four SHA-256-pinned original clips', 'Decode exactly one SHA-256-pinned original Lynn idle clip')
     text=text.replace('raw[25] == 1',f'raw[25] == {scale_format}')
+    if allow_single_segment_no_range:
+        # ACL ClipHeader::segment_range_reduction: None=0 is valid for one-segment clips (as for boss2013 hits).
+        if text.count('raw[24] == 7')!=1:raise ValueError('Sampler format gate changed')
+        text=text.replace('raw[24] == 7','(raw[24] == 7 || (raw[24] == 0 && h.num_segments == 1))')
     destination = RUNTIME/(label+'-wrapper')
     destination.mkdir(exist_ok=True)
     # Preserve timestamps for identical build inputs. Rewriting these on every

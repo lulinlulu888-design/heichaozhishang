@@ -74,11 +74,16 @@ def import_boss():
 
 
 def import_future():
-    report = json.loads(FUTURE.read_text('utf8'))
+    mesh, sequences = import_future_glb(FUTURE, FUTURE_SHA, 'battle', 1)
+    return mesh, sequences[0]
+
+
+def import_future_glb(report_path, expected_sha, purpose, clip_count):
+    report = json.loads(report_path.read_text('utf8'))
     glb = Path(report['output'])
-    check(glb.is_file() and sha(glb) == FUTURE_SHA and report.get('selection', {}).get('characterId') == 3, 'Future battle GLB identity changed')
-    check(report['selection']['purpose'] == 'battle' and report['selection']['clip'] == 'idle_1', 'Future export is not the battle idle')
-    destination = '/Game/Recovered/Battle/Future/v_' + FUTURE_SHA[:16]
+    check(glb.is_file() and sha(glb) == expected_sha and report.get('selection', {}).get('characterId') == 3, 'Future battle GLB identity changed')
+    check(report['selection']['purpose'] == purpose and report['selection']['clip'] == 'idle_1', 'Future export purpose changed')
+    destination = '/Game/Recovered/Battle/Future/v_' + expected_sha[:16]
     paths = u.EditorAssetLibrary.list_assets(destination, True, False)
     if not paths:
         pipeline, overrides = make_pipeline(u, dict(import_operation='asset'))
@@ -93,13 +98,15 @@ def import_future():
         paths = u.EditorAssetLibrary.list_assets(destination, True, False)
         for path in paths:
             asset = u.load_asset(path)
-            u.EditorAssetLibrary.set_metadata_tag(asset, 'HczsFutureSourceGLB', FUTURE_SHA)
+            u.EditorAssetLibrary.set_metadata_tag(asset, 'HczsFutureSourceGLB', expected_sha)
             check(u.EditorAssetLibrary.save_loaded_asset(asset, False), 'Future asset save failed')
     objects = [u.load_asset(path) for path in paths]
+    check(all(u.EditorAssetLibrary.get_metadata_tag(asset, 'HczsFutureSourceGLB') == expected_sha for asset in objects),
+          'Future import namespace does not match this GLB')
     meshes = [asset for asset in objects if isinstance(asset, u.SkeletalMesh)]
     sequences = [asset for asset in objects if isinstance(asset, u.AnimSequence)]
-    check(len(meshes) == 1 and len(sequences) == 1, 'Expected one Future mesh and idle')
-    return meshes[0], sequences[0]
+    check(len(meshes) == 1 and len(sequences) == clip_count, 'Unexpected Future mesh/clip count')
+    return meshes[0], sequences
 
 
 def source_placement():
