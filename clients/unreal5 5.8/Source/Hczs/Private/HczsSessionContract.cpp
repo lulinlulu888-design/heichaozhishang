@@ -137,7 +137,7 @@ namespace
         }
         return true;
     }
-    bool Effects(const TSharedPtr<FJsonObject>& O, bool bEnemy, bool bBreakdown, FString& Out)
+    bool Effects(const TSharedPtr<FJsonObject>& O, bool bEnemy, bool bBreakdown, FString& Out, FString* FirstDamage = nullptr)
     {
         const auto* Values = Array(O, TEXT("effects"), 32); if (!Values) return false;
         TArray<FString> Lines;
@@ -150,6 +150,7 @@ namespace
                 if (!Exact(E, {TEXT("type"), TEXT("target"), TEXT("amount")}) ||
                     !Text(E, TEXT("target"), Target, 16) || (Target != TEXT("self") && Target != TEXT("opponent")) ||
                     !Text(E, TEXT("amount"), Amount, 64) || !DecimalInteger(Amount, 64)) return false;
+                if (FirstDamage && FirstDamage->IsEmpty() && Type == TEXT("damage") && Target == TEXT("opponent")) *FirstDamage = Amount;
                 const TCHAR* Action = Type == TEXT("damage") ? TEXT("伤害") : Type == TEXT("shield") ? TEXT("护盾") : TEXT("恢复");
                 Lines.Add(FString::Printf(TEXT("%s%s %s"), Target == TEXT("opponent") ? TEXT("对方") : TEXT("自身"), Action, *Amount));
             }
@@ -443,7 +444,7 @@ bool ParseScenario(const TSharedPtr<FJsonObject>& O, FScenario& Out)
         const bool bFieldsValid = S.bHasUltimates ? Exact(C, {TEXT("name"), TEXT("cost"), TEXT("effects"), TEXT("ownerId"),
             TEXT("cardType"), TEXT("specialPoints"), TEXT("removeOnLeaveHand")}) : Exact(C, {TEXT("name"), TEXT("cost"), TEXT("effects")});
         if (!IsId(Key) || !bFieldsValid || !Text(C, TEXT("name"), Card.Name, 128) ||
-            !Counter(C, TEXT("cost"), Card.Cost, 0, 1000000) || !Effects(C, false, S.bHasBreakdown, Card.EffectsText)) return false;
+            !Counter(C, TEXT("cost"), Card.Cost, 0, 1000000) || !Effects(C, false, S.bHasBreakdown, Card.EffectsText, &Card.FirstDamage)) return false;
         if (S.bHasUltimates)
         {
             FString Owner; int32 Type = 0, Points = 0; bool bRemove = false;

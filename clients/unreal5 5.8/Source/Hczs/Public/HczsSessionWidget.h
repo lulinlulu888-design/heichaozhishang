@@ -158,6 +158,9 @@ private:
     /** ScaleXY/offsetXY maps full generated canvases onto original content bounds. */
     TMap<FString, FVector4f> IconDrawAdjustments;
     TMap<int32, TArray<FVector3f>> CardPlacements;
+    /** card_table CARD_RARITY / RPG_DESCRIPTION for attack (CARD_TYPE 0) cards with recovered face parts. */
+    struct FHczsCardFace { int32 Rarity = 0; FString Description; };
+    TMap<FString, FHczsCardFace> CardFaces;
     FDelegateHandle StateChangedHandle;
     FTimerHandle DealTimer;
     mutable TArray<FHczsSessionControl> Controls;

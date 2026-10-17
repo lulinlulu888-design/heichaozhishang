@@ -30,6 +30,7 @@ PINS = {
     'analysis/battle-ui/card-usable/report.json': '635f2c8785aaf847725a1adc2de16337bdc4b817167c7a39f642035753c78e5b',
     'analysis/battle-ui/card-owner/report.json': '90b9e3ca8181114abf5bd308fe0d11c14687e957589bb5772ee158fd60bfce88',
     'analysis/battle-ui/intention/report.json': 'f5d616c2d8bd2fbaeeb85ec93aabd0415b160a5625e2df20a089d289257c0baa',
+    'analysis/battle-ui/card-face/report.json': '92dbbb96fef481c9632cc0c09ff8294fa00feaefc7fafc810b2f17849dd85701',
 }
 
 
@@ -116,6 +117,15 @@ def main():
     for row in intention['frames']:
         sprite(row['name'], row['png'], row['png_sha256'],
                'analysis/battle-ui/intention/report.json', row['logical'])
+    face = sources['analysis/battle-ui/card-face/report.json']
+    if face['apk_sha256'] != APK_SHA or {row['name']: row['size'] for row in face['frames']} != {
+            'card-type-bar-attack': [48, 94], 'card-type-icon-attack': [40, 40], 'card-rarity-bg': [120, 120],
+            'card-rarity-1': [120, 120], 'card-rarity-2': [120, 120], 'card-rarity-4': [120, 120]}:
+        raise ValueError('Card face part provenance changed')
+    for row in face['frames']:
+        sprite(row['name'], row['png'], row['png_sha256'], 'analysis/battle-ui/card-face/report.json', row['logical'])
+    card_faces = {cid: {'rarity': row['rarity'], 'cardType': row['cardType'], 'description': row['description']}
+                  for cid, row in face['cards'].items()}
     frames = sources['analysis/battle-ui/card-frames/provenance.json']
     for row in frames['frames']:
         if row['key'] in ('card/bg_atk_s.png', 'card/cost_s1.png'):
@@ -173,7 +183,7 @@ def main():
     report = {'schemaVersion': 1, 'sourceApkSha256': APK_SHA,
               'evidenceKind': 'ordinary tools: verified static extraction and UE presentation inputs',
               'sourcePins': {**PINS, geometry_path: geometry_sha}, 'sprites': sprites, 'font': font,
-              'runtime': {'canvas': [1280, 720], 'cardPlacements': by_count},
+              'runtime': {'canvas': [1280, 720], 'cardPlacements': by_count, 'cardFaces': card_faces},
               'limitations': ['Original runtime colour profile is unverified.',
                              'HUD screen translations are reconstructed around the UE battle camera.',
                              'Only the five source-linked attack card illustrations are available.',

@@ -495,6 +495,17 @@ void UHczsSessionWidget::NativeConstruct()
                     if (Positions.Num() == Count) CardPlacements.Add(Count, MoveTemp(Positions));
                 }
             }
+            const TSharedPtr<FJsonObject>* Faces = nullptr;
+            if (Layout->TryGetObjectField(TEXT("cardFaces"), Faces))
+                for (const auto& Pair : (*Faces)->Values)
+                {
+                    const auto Object = Pair.Value->AsObject();
+                    FHczsCardFace Face; double Type = -1;
+                    if (!Object || !Object->TryGetNumberField(TEXT("rarity"), Face.Rarity) ||
+                        !Object->TryGetNumberField(TEXT("cardType"), Type) || Type != 0 ||
+                        !Object->TryGetStringField(TEXT("description"), Face.Description)) continue;
+                    CardFaces.Add(FString(*Pair.Key), MoveTemp(Face));
+                }
         }
     }
     else UE_LOG(LogTemp, Error, TEXT("HCZS: battle UI DataAsset missing; run verified battle UI importer"));
@@ -1228,14 +1239,29 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     }
                 }
                 else C.Box(7, 113, 112, 51, FLinearColor(0.94f, 0.95f, 0.97f, 1));
+                const FHczsCardFace* Face = CardFaces.Find(Card.CardId);
+                if (Face)
+                {
+                    // rare_bg (0,-20) 120x120 at 0.5 holds Ssr_NL at its centre; img_infobar anchored (.5, 1)
+                    // at (-46, 62) 48x94 at 0.6 holds img_type at (24, 52). Card-centre Cocos coordinates.
+                    C.Image(TEXT("card-rarity-bg"), 33, 73, 60, 60, Tint, false, true);
+                    C.Image(FString::Printf(TEXT("card-rarity-%d"), Face->Rarity), 33, 73, 60, 60, Tint, false, true);
+                    C.Image(TEXT("card-type-bar-attack"), 2.6f, 21, 28.8f, 56.4f, Tint, false, true);
+                    C.Image(TEXT("card-type-icon-attack"), 5, 34.2f, 24, 24, Tint, false, true);
+                }
                 C.Image(TEXT("card-cost"), -5, -9, 32, 38, Tint);
                 C.Text(FString::FromInt(Card.Cost), -5, -7, 32, 32, 23, Light, true);
                 // APK FightSmallCard: Name_S center (0,-40), 16px; Descr top
                 // (0,-50), 102x24 at 12px, relative to the 126x166 card center.
                 C.Text(Card.Name, 7, 115, 112, 16, 16, FLinearColor(67 / 255.0f, 53 / 255.0f, 85 / 255.0f, 1), true, false);
-                const FString CardDescription = Card.EffectsText.Replace(TEXT(" · "), TEXT("\n"));
-                C.Wrapped(CardDescription, 12, 133, 102, 12, 2,
-                    FLinearColor(54 / 255.0f, 52 / 255.0f, 85 / 255.0f, 1), false, 0);
+                const FLinearColor DescrColor(54 / 255.0f, 52 / 255.0f, 85 / 255.0f, 1);
+                if (Face && !Card.FirstDamage.IsEmpty())
+                {
+                    const TArray<FString> Lines = C.WrapLines(Face->Description.Replace(TEXT("%s"), *Card.FirstDamage), 102, 12);
+                    for (int32 Line = 0; Line < FMath::Min(2, Lines.Num()); ++Line)
+                        C.Text(Lines[Line], 12, 133 + Line * 12, 102, 12, 12, DescrColor, true, false);
+                }
+                else C.Wrapped(Card.EffectsText.Replace(TEXT(" · "), TEXT("\n")), 12, 133, 102, 12, 2, DescrColor, false, 0);
                 P.Layer = C.Layer;
                 FHczsSessionControl Control;
                 Control.Action = TEXT("play-card");
@@ -1248,16 +1274,21 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             }
             const bool bEnd = !bBusy && Session->CanSubmitBattleIntent();
             {
+                // EndArea_ext Node_s1 at the RightBottom/EnteranceFEndTurn rest origin (1280, 555), in
+                // the state black_in (frames 5-27) ends on: bg_s1 226x78 from (-108, -39) runs past the
+                // right edge as in the source, icon_s1 back at scale 1 centred at (-46, -12), glow alpha 0.
+                // Dimming while a request is pending is a reconstruction; Node_s2 white_* states are off.
                 FSessionPainter EndArea = Group(CardNow, OwnCardInRest, TEXT("EndTurnArea"));
-                EndArea.Image(TEXT("end-bg"), 1090, 530, 170, 68, FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
-                EndArea.Image(bEnd ? TEXT("end-icon-active") : TEXT("end-icon-normal"), 1146, 520, 58, 58,
-                    FLinearColor(1, 1, 1, bEnd ? 1 : 0.5f));
-                EndArea.Text(TEXT("回合结束"), 1090, 577, 170, 31, 21, bEnd ? Light : Muted, true);
+                const float EndAlpha = bEnd ? 1.0f : 0.5f;
+                EndArea.Image(TEXT("end-bg"), 1172, 516, 226, 78, FLinearColor(1, 1, 1, EndAlpha), false, true);
+                EndArea.Image(TEXT("end-icon-normal"), 1192, 501, 84, 84, FLinearColor(1, 1, 1, EndAlpha), false, true);
+                EndArea.Text(TEXT("回合结束"), 1189, 562.5f, 82, 21, 20, FLinearColor(1, 1, 1, EndAlpha), true);
                 P.Layer = EndArea.Layer;
             }
             FHczsSessionControl End;
             End.Action = TEXT("end-turn");
-            End.Rect = FSlateRect(1090, 520, 1260, 615);
+            // btn's Replace panel: 100x80 anchored (1, .5) at the EndArea origin.
+            End.Rect = FSlateRect(1180, 515, 1280, 595);
             End.bEnabled = bEnd;
             Controls.Add(End);
             if (Battle.Hand.IsEmpty()) P.Text(TEXT("本回合已无手牌"), 385, 584, 510, 50, 23, Muted, true);

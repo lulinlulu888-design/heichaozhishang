@@ -61,6 +61,8 @@ struct HCZS_API FHczsHandCard
     UPROPERTY(BlueprintReadOnly) FString Name;
     UPROPERTY(BlueprintReadOnly) int32 Cost = 0;
     UPROPERTY(BlueprintReadOnly) FString EffectsText;
+    /** First opponent damage amount, the value card_table RPG_DESCRIPTION's %s shows. */
+    UPROPERTY(BlueprintReadOnly) FString FirstDamage;
 };
 
 /** Validated raw receipt events used by scene presentation; never parsed from UI text. */
