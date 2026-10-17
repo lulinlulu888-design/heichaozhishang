@@ -7,6 +7,7 @@ import json
 import sys
 import time
 import traceback
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import unreal as u
@@ -16,6 +17,8 @@ sys.path.insert(0, str(ROOT / 'tools/unreal'))
 from import_recovered_assets import make_pipeline
 
 REPORT = ROOT / 'analysis/prologue-boss/glb/export-report.json'
+SCENE = ROOT / 'analysis/prologue-boss/resource-audit/source/scene/boss_theatre/boss_theatre.scn'
+SCENE_SHA = 'a403f116cb65da739457a8ddf32c8ae65820c7428cfdec51735e41baa1c05921'
 OUT = ROOT / 'analysis/prologue-boss/glb'
 MAP = '/Game/Recovered/SourceStages/Maps/L_Theatre'
 results = {}
@@ -68,12 +71,33 @@ def import_boss():
     return meshes[0], idle, report
 
 
+def source_placement():
+    raw = SCENE.read_bytes()
+    check(sha(SCENE) == SCENE_SHA, 'Theatre scene bytes changed')
+    root = ET.fromstring(raw)
+    model = next(node for node in root.iter('model') if node.get('Name') == 'muoumaxituan_1743')
+    camera_node = next(node for node in root.iter('Camera') if node.get('Name') == 'camera_1')
+    position = [float(v) for v in model.get('Position').split(',')]
+    rotation = [float(v) for v in model.get('Rotation').split(',')]
+    camera = [float(v) for v in camera_node.get('Transform').split(',')]
+    check(len(position) == 3 and len(rotation) == 16 and len(camera) == 16, 'Theatre transform width changed')
+    check(abs(float(camera_node.get('Fov')) - 45) < 1e-3, 'Theatre camera_1 FOV changed')
+    return position, rotation, camera
+
+
+def to_ue(values):
+    return u.Vector(-values[0], values[2], values[1])
+
+
 def build():
     mesh, idle, report = import_boss()
+    position, rotation, camera_matrix = source_placement()
     check(u.EditorAssetLibrary.does_asset_exist(MAP), 'Recovered theatre map is missing')
     check(u.EditorLoadingAndSavingUtils.load_map(MAP), 'Cannot open L_Theatre')
     actors = u.get_editor_subsystem(u.EditorActorSubsystem)
-    actor = actors.spawn_actor_from_class(u.SkeletalMeshActor, u.Vector(0, 0, 0))
+    # Same centimetre mapping as the chess map: source (x, y, z) -> UE (-x, z, y) * 100.
+    location = to_ue(position) * 100
+    actor = actors.spawn_actor_from_class(u.SkeletalMeshActor, location, u.MathLibrary.make_rot_from_xz(to_ue(rotation[8:11]), to_ue(rotation[4:7])))
     actor.set_actor_label('HCZSBoss2013')
     actor.set_editor_property('tags', ['HCZSBoss2013'])
     component = actor.get_component_by_class(u.SkeletalMeshComponent)
@@ -83,20 +107,17 @@ def build():
     component.set_update_animation_in_editor(True)
     component.set_collision_enabled(u.CollisionEnabled.NO_COLLISION)
     origin, extent = actor.get_actor_bounds(False)
-    longest = max(extent.x, extent.y, extent.z)
-    if longest < 50:
-        actor.set_actor_scale3d(u.Vector(100, 100, 100))
-        origin, extent = actor.get_actor_bounds(False)
-        longest = max(extent.x, extent.y, extent.z)
-    cam = actors.spawn_actor_from_class(u.CameraActor, origin + u.Vector(0, -longest * 4.5, longest * 0.35))
+    cam = actors.spawn_actor_from_class(
+        u.CameraActor, to_ue(camera_matrix[12:15]) * 100,
+        u.MathLibrary.make_rot_from_xz(to_ue(camera_matrix[8:11]), to_ue(camera_matrix[4:7])))
     cam.set_actor_label('HCZSBossPreviewCamera')
-    cam.get_component_by_class(u.CameraComponent).set_editor_property('field_of_view', 30)
-    cam.set_actor_rotation(u.MathLibrary.find_look_at_rotation(cam.get_actor_location(), origin), False)
+    cam.get_component_by_class(u.CameraComponent).set_editor_property('field_of_view', 45)
     results.update(mesh=mesh.get_path_name(), idle=idle.get_name(), playLength=idle.get_play_length(),
-                   clips=7, bounds=[origin.x, origin.y, origin.z, extent.x, extent.y, extent.z],
+                   clips=7, sourcePosition=position, bounds=[origin.x, origin.y, origin.z, extent.x, extent.y, extent.z],
                    scale=[actor.get_actor_scale3d().x, actor.get_actor_scale3d().y, actor.get_actor_scale3d().z],
-                   sourceSha256=report['animatedSha256'], mapSaved=False,
-                   limitations=['Source XYZ was imported without a reviewed theatre placement or NeoX material port.',
+                   sourceSha256=report['animatedSha256'], sceneSha256=SCENE_SHA, camera='camera_1', cameraFov=45,
+                   mapSaved=False,
+                   limitations=['Placement uses the source model position and camera_1. Material, SFX and battle rules are not ported.',
                                 'Transform phase and battle 1703 rules are not part of this preview.'])
     return cam
 
