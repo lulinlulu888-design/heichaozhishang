@@ -185,7 +185,8 @@ try {
   await journal('app-initializing');
   app = await createApp({ port: 0, storage: 'mongodb', mongoUri, mongoDatabase,
     dataDirectory: resolve(root, 'analysis/game-data'), tutorialDirectory: resolve(root, 'analysis/first-encounter'), cityPreview: true,
-    ...(mainlineEnabled ? { mainlineDirectory: resolve(root, 'analysis/mainline-progression') } : {}),
+    ...(mainlineEnabled ? { mainlineDirectory: resolve(root, 'analysis/mainline-progression'),
+      prologueBossDirectory: resolve(root, 'analysis/prologue-boss') } : {}),
     allowedOrigins: [], log: message => note({ phase: 'backend-error', message: String(message).slice(0, 500) }) });
   async function upstream(path, method, body) {
     const result = await fetch(app.address + path, { method, headers: { accept: 'application/json', ...(body ? {'content-type':'application/json'} : {}) },

@@ -1,6 +1,8 @@
 // Explicit reconstruction rules. No original server compatibility, Node API,
 // wall clock, global random generator, or execution of APK code.
 import { int, fromTagged, toTagged, compare, add, subtract, multiply, rpgPropertyPercent } from '../../battle-core/src/index.js';
+import { isPartyDefinition, validatePartyDefinition, validatePartyState, createPartyBattle, playPartyCard, endPartyTurn } from './party.js';
+export { PARTY_FORMAT, PARTY_POLICY, isPartyDefinition } from './party.js';
 export const FORMAT = 'hczs-battle-session-v1';
 export const STATUS_FORMAT = 'hczs-battle-session-v2';
 export const ULTIMATE_FORMAT = 'hczs-battle-session-v3';
@@ -172,7 +174,9 @@ function definitionCopy(input) {
   return result;
 }
 /** Validates and copies the public definition, without inferring any gameplay data. */
-export function validateDefinition(definition) { return freeze(definitionCopy(definition)); }
+export function validateDefinition(definition) {
+  return isPartyDefinition(definition) ? validatePartyDefinition(definition) : freeze(definitionCopy(definition));
+}
 function stateCopy(definition, input) {
   const format = definition.ultimateRules ? ULTIMATE_FORMAT : definition.statusRules ? STATUS_FORMAT : FORMAT;
   record(input, [...STATE_KEYS, ...(definition.statusRules ? ['breakdown'] : []),
@@ -243,7 +247,9 @@ function stateCopy(definition, input) {
   return out;
 }
 /** Structural validation only; does not authenticate the save or its gameplay history. */
-export function validateState(definition, state) { return freeze(stateCopy(definitionCopy(definition), state)); }
+export function validateState(definition, state) {
+  return isPartyDefinition(definition) ? validatePartyState(definition, state) : freeze(stateCopy(definitionCopy(definition), state));
+}
 function nextRandom(rng) {
   rng.state = (rng.state + 0x6d2b79f5) >>> 0;
   let value = rng.state;
@@ -370,6 +376,7 @@ function leaveHand(definition, state, instanceId, from, events) {
   events.push({ type: 'CardMoved', instanceId, from, to });
 }
 export function createBattle(input, seed) {
+  if (isPartyDefinition(input)) return createPartyBattle(input, seed);
   const definition = definitionCopy(input);
   seed = integer(seed, 0xffffffff, 'seed');
   const state = { format: definition.ultimateRules ? ULTIMATE_FORMAT : definition.statusRules ? STATUS_FORMAT : FORMAT, definitionId: definition.id, round: 1, status: 'player-turn', outcomeReason: null,
@@ -384,6 +391,7 @@ export function createBattle(input, seed) {
   return finish(definition, state, events);
 }
 export function playCard(input, original, instanceId) {
+  if (isPartyDefinition(input)) return playPartyCard(input, original, instanceId);
   const definition = definitionCopy(input), state = active(definition, original);
   id(instanceId, 'instanceId');
   const position = state.piles.hand.indexOf(instanceId);
@@ -399,6 +407,7 @@ export function playCard(input, original, instanceId) {
   return finish(definition, state, events);
 }
 export function endTurn(input, original) {
+  if (isPartyDefinition(input)) return endPartyTurn(input, original);
   const definition = definitionCopy(input), state = active(definition, original), events = [];
   tickBreakdown(definition, state, 'player', events);
   if (state.status !== 'player-turn') return finish(definition, state, events);

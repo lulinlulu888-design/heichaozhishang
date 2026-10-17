@@ -11,6 +11,7 @@ module.exports = {
       '--data-directory', path.join(__dirname, 'analysis/game-data'),
       '--tutorial-directory', path.join(__dirname, 'analysis/first-encounter'),
       '--mainline-directory', path.join(__dirname, 'analysis/mainline-progression'),
+      '--prologue-boss-directory', path.join(__dirname, 'analysis/prologue-boss'),
     ],
     exec_mode: 'fork',
     instances: 1,

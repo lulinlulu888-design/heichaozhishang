@@ -16,6 +16,7 @@ const { values } = parseArgs({ options: {
   'custom-scenario': { type: 'string' },
   'city-preview': { type: 'boolean', default: false },
   'mainline-directory': { type: 'string' },
+  'prologue-boss-directory': { type: 'string' },
 } });
 const port = Number(values.port);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Port must be 0–65535');
@@ -27,6 +28,7 @@ const app = await createApp({ port, dataDirectory: resolve(values['data-director
   tutorialDirectory: values['no-tutorial'] ? undefined : resolve(values['tutorial-directory']),
   customScenarioPath: values['custom-scenario'] ? resolve(values['custom-scenario']) : undefined,
   mainlineDirectory: values['mainline-directory'] ? resolve(values['mainline-directory']) : undefined,
+  prologueBossDirectory: values['prologue-boss-directory'] ? resolve(values['prologue-boss-directory']) : undefined,
   cityPreview: values['city-preview'] });
 console.log(JSON.stringify({ event: 'ready', address: app.address, api: '/api/rebuild/v1',
   gameplayReady: false, catalogContentId: app.catalog.contentId }));

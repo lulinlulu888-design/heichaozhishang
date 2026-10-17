@@ -220,7 +220,7 @@ test('admin Mongo profile/hall CAS writes survive process restart and battle rea
     assert.equal(detail.battles.length, 1);
     assert.equal(detail.battles[0].id, battle.id);
     const overview = (await adminRequest(first.address, '/overview')).body;
-    assert.deepEqual(overview.counts, { profiles: 2, battles: 1, heroes: 35, hallVerified: 2 });
+    assert.deepEqual(overview.counts, { profiles: 2, battles: 1, heroes: 35, hallVerified: 3 });
     assert.equal(overview.service.storage, 'mongodb');
     assert.deepEqual((await adminRequest(first.address, '/heroes')).body,
       (await gameRequest(first.address, '/heroes')).body);

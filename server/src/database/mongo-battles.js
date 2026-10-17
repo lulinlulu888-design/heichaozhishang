@@ -12,7 +12,7 @@ const hash = text => createHash('sha256').update(text).digest('hex');
 const integer = (n, min = 0) => Number.isSafeInteger(n) && n >= min;
 const check = condition => { if (!condition) throw new ServiceError('SAVE_CORRUPT', 'Stored battle integrity validation failed', 500); };
 const bounded = (text, limit = 8 * 1024 * 1024) => typeof text === 'string' && Buffer.byteLength(text) <= limit;
-const events = new Set(['DiscardRecycled', 'CardDrawn', 'BattleEnded', 'BreakdownChanged', 'HealthRestored', 'ShieldAdded', 'DamageApplied', 'BreakdownTriggered', 'EnergyChanged', 'ShieldCleared', 'StateUpdated', 'BattleStarted', 'TurnStarted', 'CardPlayed', 'CardMoved', 'EnemySkillUsed']);
+const events = new Set(['DiscardRecycled', 'CardDrawn', 'BattleEnded', 'BreakdownChanged', 'HealthRestored', 'ShieldAdded', 'DamageApplied', 'BreakdownTriggered', 'EnergyChanged', 'ShieldCleared', 'StateUpdated', 'BattleStarted', 'TurnStarted', 'CardPlayed', 'CardMoved', 'EnemySkillUsed', 'BuffChanged', 'MemberDefeated']);
 
 function request(input, creation) {
   if (creation) return creationRequest(input);

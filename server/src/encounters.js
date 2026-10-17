@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 /** Only already validated, executable scenarios enter this local selection menu.
  * No APK unlock/loot behavior is inferred from the availability of a loader. */
-export function createEncounterDirectory({ baseTutorial, current, cityPreview, customScenarioPath }) {
+export function createEncounterDirectory({ baseTutorial, current, cityPreview, customScenarioPath, prologueBoss = null }) {
   if (!baseTutorial) return null;
   const entries = new Map();
   const add = (id, scenario, classification, source) => entries.set(id, {
@@ -12,6 +12,7 @@ export function createEncounterDirectory({ baseTutorial, current, cityPreview, c
       enemy: { id: scenario.definition.enemy.id, name: scenario.definition.enemy.name } },
   });
   add('tutorial-5000', baseTutorial, 'recovered-tutorial-with-reconstruction-rules', { challengeId: 3997, battleId: 5000 });
+  if (prologueBoss) add('prologue-boss-1703', prologueBoss, 'recovered-boss-with-reconstruction-rules', { challengeId: 3998, battleId: 1703 });
   let defaultEncounterId = 'tutorial-5000';
   if (cityPreview) {
     defaultEncounterId = 'city-preview-10405';

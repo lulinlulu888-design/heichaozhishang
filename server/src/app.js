@@ -6,6 +6,7 @@ import { loadCatalog } from './catalog.js';
 import { loadHeroes } from './heroes.js';
 import { openStorage } from './database/storage.js';
 import { loadTutorialScenario } from './tutorial.js';
+import { loadPrologueBossScenario } from './prologue-boss.js';
 import { loadCustomScenario } from './custom-scenario.js';
 import { loadCityScenario } from './city-scenario.js';
 import { createRebuildRoutes } from './routes/rebuild.js';
@@ -20,7 +21,7 @@ const SHUTDOWN_GRACE_MS = 1_000;
 
 /** New-client API, intentionally separate from the unverified legacy gateway. */
 export async function createApp({ dataDirectory, savePath, tutorialDirectory, customScenarioPath, cityPreview = false, battleSavePath, port = 7457,
-  storage = 'mongodb', mongoUri, mongoDatabase, mainlineDirectory,
+  storage = 'mongodb', mongoUri, mongoDatabase, mainlineDirectory, prologueBossDirectory,
   allowedOrigins = ['http://127.0.0.1:7456', 'http://localhost:7456',
     'http://127.0.0.1:7470', 'http://localhost:7470', 'http://127.0.0.1:7471', 'http://localhost:7471'], log = console.error } = {}) {
   const catalog = await loadCatalog(dataDirectory);
@@ -29,7 +30,9 @@ export async function createApp({ dataDirectory, savePath, tutorialDirectory, cu
   if (cityPreview && (!tutorialDirectory || customScenarioPath)) throw new Error('City preview requires tutorial evidence and cannot combine with custom scenario');
   const baseTutorial = tutorialDirectory ? await loadTutorialScenario(tutorialDirectory) : null;
   const tutorial = cityPreview ? await loadCityScenario(baseTutorial) : customScenarioPath ? await loadCustomScenario(baseTutorial, customScenarioPath) : baseTutorial;
-  const encounters = createEncounterDirectory({ baseTutorial, current: tutorial, cityPreview, customScenarioPath });
+  if (prologueBossDirectory && !baseTutorial) throw new Error('Prologue boss requires verified tutorial evidence');
+  const prologueBoss = prologueBossDirectory ? await loadPrologueBossScenario(prologueBossDirectory) : null;
+  const encounters = createEncounterDirectory({ baseTutorial, current: tutorial, cityPreview, customScenarioPath, prologueBoss });
   const mainlineDefinition = mainlineDirectory ? await loadMainline(mainlineDirectory, encounters) : null;
   const persistence = await openStorage({ storage, mongoUri, mongoDatabase, savePath, battleSavePath, tutorial, heroes,
     operationalDefaults: defaultSettings(encounters), mainlineDefinition });

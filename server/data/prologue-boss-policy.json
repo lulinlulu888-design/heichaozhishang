@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "id": "prologue-boss-1703-reconstruction-v1",
+  "title": "序章 BOSS · 终焉使者（重建规则）",
+  "notice": "这是基于 APK 静态证据制作的重建规则演示，并非原服务器或原版完整战斗。队伍、卡组归属、卡牌系数、状态目标枚举、BOSS 技能和行为树顺序来自源表；目标类型 9 按枚举名 FIRST_MID_LAST 解释为编队优先级、增益 1001 按描述索引 %s*6 折算攻击因子、阵亡角色卡牌移出牌堆、抽牌能量与手牌上限均为重建政策。原解析器代码未恢复。",
+  "sourceApkSha256": "aae6c23e44a016ddb93f90f8d5934356960614a61545a4bf35c87820e4a645e4",
+  "rules": {
+    "party": {
+      "kind": "recovered-course-fields",
+      "courseRow": 2,
+      "source": "new_player_course_table[2].BattleChar=[1,3], CharLevel=[100,100]; formation order follows BattleChar."
+    },
+    "partyBaseline": {
+      "kind": "reconstruction-choice",
+      "configuration": "prologue-party-level100-base-only",
+      "statsRecovered": false
+    },
+    "playerFactor": {
+      "kind": "reconstruction-choice",
+      "source": "card.RPG_DEFAULT_FORMULA[0][0] (same as first-encounter-reconstruction-v1); state-row factors that differ are recorded as conflicts",
+      "providerRecovered": false
+    },
+    "targetEnums": {
+      "kind": "recovered-enum-names-with-reconstruction-resolver",
+      "16": "ENUM_SINGEL: camp 0 -> the boss; camp 1 -> the card owner",
+      "17": "ENUM_ALL: camp 1 -> every living party member",
+      "9": "ENUM_OPPOSITE_FIRST_MID_LAST: first living member in formation order, re-selected per hit",
+      "resolverRecovered": false
+    },
+    "attackBuff": {
+      "kind": "reconstruction-choice",
+      "buffId": "1001",
+      "attackPercentPerStack": 6,
+      "maxStacks": 999,
+      "source": "buff_table[1001].DESCRIPTION_INDEX '%s*6', BUFF_MAX 999, NEED_TIME false",
+      "mapping": "one attack factor 1 + stacks*6/100.0 passed through attackFactorValue; permanent for the battle"
+    },
+    "drawValue": {
+      "kind": "reconstruction-choice",
+      "source": "card SKILL_DIY_VALUE[VALUE] when present (410102 -> 0, same override as the first encounter), else state STORYLINE_PARAM.VALUE"
+    },
+    "memberDefeat": {
+      "kind": "reconstruction-choice",
+      "rule": "a defeated member's cards move to the removed pile; the party loses when every member is defeated"
+    },
+    "enemyTurns": {
+      "kind": "reconstruction-choice-informed-by-static-BT",
+      "source": "bt/xinshou_zhongyanshizhe.xml selector: round 1 -> 74503, round 2 -> 74501, odd -> 74502, even -> 74503",
+      "originalBehaviorTreeRuntimeRecovered": false
+    },
+    "specialSkill": {
+      "kind": "recovered-course-field-not-executed",
+      "DisableSpecialSkill": true,
+      "EnableSpecialSkillRound": 2,
+      "note": "This deck has no ultimate card; per-character ultimates are not part of this reconstruction."
+    },
+    "limits": {
+      "kind": "reconstruction-choice",
+      "initialDraw": 6,
+      "roundDraw": 6,
+      "energyPerRound": 5,
+      "handLimit": 10,
+      "maxRoundsSource": "maze_battle_table_2[1703].MaxRoundFail"
+    }
+  },
+  "sourcePins": {
+    "course.json": "cb34004d7a864c68f3c117f60721d92531057faa75a2e31495dcaacf3f2d9806",
+    "cards.json": "23b9e701a5cc1db72eeb9d9b424bc63d88bb0ecb3a810c9d3afc4d08b2a1c1d1",
+    "skill-states.json": "f0c4d01b777739f0ae7290e6ba27df16a1709b338843718784b967cfbcd7734b",
+    "enemy-skills.json": "1be4dea9663cc97674efdc37e037f993d8cbc38d5d55e0aa6919339ebfe53d29",
+    "monster.json": "3431bb073e817fb8a160a328752b44fee29cadd31890bc07389a26920a185849",
+    "battle.json": "66cf22855a831f742da859aafeed2a29ea477a0815b0be7e39e01da974ab7b37",
+    "referenced-buffs.json": "0b5195538ff211507a5d38835874997c4af85936d3006f416cc70473e25d2af9",
+    "characters.json": "d0de39e45b2c70edb2646740689796ae3b107377bf0e4baba65f69573cd3cf96",
+    "party-baseline.json": "95eca3ec745d22e2d0b39601128a0b6cf596681fd886f34a2fbe3d374a3a73c9",
+    "party-baseline.evidence.json": "9ff85682857dab5f05429e0268cda089a994c5ceeab775a796fe25cd443c1efc"
+  }
+}

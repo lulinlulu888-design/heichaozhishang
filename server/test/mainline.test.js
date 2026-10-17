@@ -46,6 +46,15 @@ test('Only a won, source-bound battle can complete a one-time prologue challenge
   assert.throws(()=>completedChallenge(d,state,{...b,scenario:{encounterId:'city-preview-10405'}}),{code:'BATTLE_NOT_MAINLINE'});
   assert.throws(()=>completedChallenge(d,{...state,completed:[{challengeId:3997,battleId:'other'}]},b),{code:'CHALLENGE_ALREADY_COMPLETED'});
 });
+test('A loaded prologue boss binds 3998 to its encounter and settles only that battle', source, async () => {
+  const d = await loadMainline(directory, { resolve: id => ['tutorial-5000', 'prologue-boss-1703'].includes(id) ? {} : null });
+  const after = projectMainline(d, { ...state, revision: 1, completed: [{ challengeId: 3997 }] });
+  assert.deepEqual(after.challenges.map(n => [n.id, n.encounterId, n.executable, n.status]),
+    [[3997, 'tutorial-5000', true, 'passed'], [3998, 'prologue-boss-1703', true, 'available']]);
+  const boss = { id: 'boss-battle', scenario: { encounterId: 'prologue-boss-1703' }, state: { status: 'won' } };
+  assert.throws(() => completedChallenge(d, state, boss), { code: 'CHALLENGE_LOCKED' });
+  assert.equal(completedChallenge(d, { ...state, completed: [{ challengeId: 3997, battleId: 'tutorial' }] }, boss).id, 3998);
+});
 test('Modified source evidence is rejected before a progression definition is loaded', source, async t => {
   const dir=await mkdtemp(join(tmpdir(),'hczs-mainline-source-'));
   t.after(()=>rm(dir,{recursive:true,force:true}));

@@ -88,7 +88,7 @@ test('Authoritative win settlement is atomic, concurrent/retry safe, profile sco
 
   // Keep using this test's generated, owned database and real victorious battle.
   // Availability changes are simulated definitions, never production enablement.
-  const definition=await loadMainline(options.mainlineDirectory,{resolve:()=>({})});
+  const definition=await loadMainline(options.mainlineDirectory,{resolve:id=>id==='tutorial-5000'?{}:null});
   const profiles=new MongoProfileStore(connection),battles=new MongoBattleStore(connection);
   const original=new MongoMainlineStore(connection,definition,profiles,battles);
   const states=connection.db.collection('mainline_states'),requests=connection.db.collection('mainline_requests');
@@ -157,4 +157,45 @@ test('Authoritative win settlement is atomic, concurrent/retry safe, profile sco
     {code:'MAINLINE_CONTENT_CHANGED',status:409});
   assert.deepEqual(await states.findOne({_id:stateKey}),stateRow);
   assert.equal(await requests.countDocuments(),1);
+});
+test('Prologue boss 1703 is created and played through the API and settles 3998 exactly once after 3997',enabled,async t=>{
+  const files=await fixture(t),database='hczs_test_progress_'+randomUUID().replaceAll('-','');
+  const connection=await mongoose.createConnection(uri,{dbName:database,serverSelectionTimeoutMS:5000}).asPromise();
+  assert.deepEqual(await connection.db.listCollections().toArray(),[],'Only a newly allocated empty test database may be used');
+  let server=null;
+  files.cleanupWith(async()=>{try{if(server)await server.close();}
+    finally{try{assert.match(database,/^hczs_test_progress_[0-9a-f]{32}$/);assert.equal(connection.name,database);
+      await connection.dropDatabase();}finally{await connection.close();}}});
+  server=await start({storage:'mongodb',mongoUri:uri,mongoDatabase:database,port:0,dataDirectory:files.dataDirectory,
+    tutorialDirectory:fileURLToPath(new URL('../../analysis/first-encounter',import.meta.url)),
+    mainlineDirectory:fileURLToPath(new URL('../../analysis/mainline-progression',import.meta.url)),
+    prologueBossDirectory:fileURLToPath(new URL('../../analysis/prologue-boss',import.meta.url))});
+  const id=(await request(server.address,'/profiles','POST',{displayName:'序章BOSS验收'})).body.profile.id,path='/profiles/'+id+'/mainline';
+  const play=async(encounterId,seed)=>{
+    let b=(await request(server.address,'/profiles/'+id+'/battles','POST',{requestId:'battle-'+encounterId,encounterId,seed})).body.battle;
+    for(let i=0;b.state.status==='player-turn'&&i<200;i++){
+      const instanceId=b.state.piles.hand.find(c=>b.scenario.definition.cards[b.state.cards.find(x=>x.instanceId===c).cardId].cost<=b.state.energy);
+      const response=await request(server.address,'/profiles/'+id+'/battles/'+b.id+'/actions','POST',{
+        requestId:encounterId+'-'+i,expectedRevision:b.revision,...(instanceId?{type:'play-card',instanceId}:{type:'end-turn'})});
+      assert.equal(response.status,200);b=response.body.battle;
+    }
+    return b;
+  };
+  let campaign=(await request(server.address,path)).body.campaign;
+  assert.deepEqual(campaign.challenges.map(n=>[n.id,n.encounterId,n.executable,n.status]),
+    [[3997,'tutorial-5000',true,'available'],[3998,'prologue-boss-1703',true,'locked']]);
+  const boss=await play('prologue-boss-1703',7);
+  assert.equal(boss.state.format,'hczs-battle-session-party-v1');
+  assert.deepEqual([boss.state.status,boss.state.round],['won',5]);
+  const settle=(battleId,requestId)=>request(server.address,path+'/settlements','POST',{requestId,expectedRevision:campaign.revision,contentId:campaign.contentId,battleId});
+  assert.equal((await settle(boss.id,'boss-early')).body.error.code,'CHALLENGE_LOCKED');
+  const tutorial=await play('tutorial-5000',123);
+  campaign=(await settle(tutorial.id,'tutorial')).body.campaign;
+  assert.equal(campaign.challenges[1].status,'available');
+  const done=(await settle(boss.id,'boss')).body;
+  assert.deepEqual(done.rewards,[]);
+  assert.deepEqual(done.campaign.challenges.map(n=>[n.id,n.status]),[[3997,'passed'],[3998,'passed']]);
+  assert.deepEqual(done.campaign.activityDatas,{'2':{'3997':{successTime:1},'3998':{successTime:1}}});
+  campaign=done.campaign;
+  assert.equal((await settle(boss.id,'boss-again')).body.error.code,'CHALLENGE_ALREADY_COMPLETED');
 });

@@ -1,5 +1,6 @@
-/** Pinned prologue rules that are safe to name and unsafe to play.
- * Battle 1703 stays out of the encounter directory: damage target type 9 has no caller.
+/** Pinned prologue rules.
+ * Battle 1703 damage target type 9 has no recovered caller; prologue-boss.js plays it only
+ * under the labelled first-living-in-formation reconstruction.
  * Guide 1001 stays off the worldline button: its original course trigger is a false stub,
  * and trigger value 999 is outside GuideTriggerType. */
 
@@ -19,7 +20,7 @@ export const prologueBossLimits = Object.freeze({
   maxRoundFail: 30,
   party: Object.freeze([{ characterId: 1, level: 100 }, { characterId: 3, level: 100 }]),
   damageTarget: 'unresolved-skill-target-type-9',
-  executable: false,
+  reconstructedDamageTarget: 'first-living-in-formation',
 });
 
 export const guide1001 = Object.freeze({

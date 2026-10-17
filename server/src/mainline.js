@@ -18,12 +18,14 @@ function freeze(value) {
   if (value && typeof value === 'object') { for (const child of Object.values(value)) freeze(child); Object.freeze(value); }
   return value;
 }
+const SOURCE_ENCOUNTERS = { 5000: 'tutorial-5000', 1703: 'prologue-boss-1703' };
 export async function loadMainline(directory, encounters) {
   const raw = await readFile(join(directory, 'prologue.json'));
   if (createHash('sha256').update(raw).digest('hex') !== SOURCE_SHA) throw Error('Reviewed prologue source changed');
   const source = JSON.parse(raw);
   if (source.activityId !== 2 || source.nodes.length !== 2 || !encounters?.resolve('tutorial-5000')) throw Error('Prologue requires recovered tutorial evidence');
-  const nodes = source.nodes.map(node => ({ ...node, encounterId: node.battleId === 5000 ? 'tutorial-5000' : null }));
+  const bound = battleId => SOURCE_ENCOUNTERS[battleId] && encounters.resolve(SOURCE_ENCOUNTERS[battleId]) ? SOURCE_ENCOUNTERS[battleId] : null;
+  const nodes = source.nodes.map(node => ({ ...node, encounterId: bound(node.battleId) }));
   const contentId = mainlineContentId({ sourceSha256: SOURCE_SHA, policy: MAINLINE_POLICY, nodes });
   return freeze({ activityId: 2, name: source.name, contentId, sourceSha256: SOURCE_SHA, policy: MAINLINE_POLICY,
     nodes, evidenceKind: source.authority,
