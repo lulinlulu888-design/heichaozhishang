@@ -1,0 +1,67 @@
+"""Index the two source effects named by boss skills 74501/74502/74503.
+
+Extracts only those .sfx documents, checks the APK identity, and lists the
+model/effect paths they name. It does not decode meshes, materials or particles
+and does not import anything into Unreal.
+"""
+import hashlib
+import json
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+from export_elsa_model import extract
+from extract_texture_samples import APK_SHA256
+from neox_resource_paths import read_catalogue
+
+ROOT = Path(__file__).resolve().parents[1]
+SKILLS = ROOT / 'analysis/prologue-boss/mechanism-audit/enemySkills.json'
+SKILLS_SHA = '1be4dea9663cc97674efdc37e037f993d8cbc38d5d55e0aa6919339ebfe53d29'
+OUT = ROOT / 'analysis/prologue-boss/skill-effects'
+EXPECTED = {
+    '74501': 'effects/boss/muoumaxitua/muoumaxituan_shouji_01.sfx',
+    '74502': 'effects/boss/muoumaxitua/muoumaxituan_shouji_01.sfx',
+    '74503': 'effects/boss/muoumaxitua/muoumaxituan_skill_2_03.sfx',
+}
+
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def main():
+    if sha(SKILLS.read_bytes()) != SKILLS_SHA:
+        raise SystemExit('Boss skill evidence changed')
+    rows = {str(row['id']): row['fields']['SKILL_TARGET_SFX'] for row in json.loads(SKILLS.read_text('utf8'))['rows']}
+    if rows != EXPECTED:
+        raise SystemExit('Boss skill effect paths changed')
+    apk = next(ROOT.glob('*.apk'))
+    with apk.open('rb') as stream:
+        if hashlib.file_digest(stream, 'sha256').hexdigest() != APK_SHA256:
+            raise SystemExit('APK identity mismatch')
+    catalogue = read_catalogue(apk)
+    OUT.mkdir(parents=True, exist_ok=True)
+    documents = []
+    for logical in sorted(set(EXPECTED.values())):
+        target = OUT / 'source' / Path(logical).name
+        source = extract(apk, catalogue, logical, target, APK_SHA256)
+        payload = target.read_bytes()
+        root = ET.fromstring(payload.decode('gb18030'))
+        layers = [child.tag for child in list(root)]
+        textures = sorted({el.attrib[key].replace('\\', '/') for el in root.iter() for key in ('Texture',)
+                           if key in el.attrib} | {el.attrib['Value'].replace('\\', '/') for el in root.iter('Semantic')
+                                                   if el.attrib.get('Value', '').lower().endswith(('.tga', '.png', '.dds'))})
+        documents.append({'logical': logical, 'sha256': sha(payload), 'bytes': len(payload), 'root': root.tag,
+                          'layers': layers, 'textures': textures,
+                          'source': {k: source[k] for k in ('member', 'index', 'logical_path') if k in source}})
+    report = {'apkSha256': APK_SHA256, 'skills': EXPECTED, 'documents': documents,
+              'limits': ['SFX documents and the paths they name only. Meshes, materials and particle motion are not decoded or played.']}
+    path = OUT / 'report.json'
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
+    print(json.dumps({'report': str(path), 'sha256': sha(path.read_bytes()),
+                      'documents': [{'logical': d['logical'], 'layers': len(d['layers']), 'textures': len(d['textures'])} for d in documents]},
+                    ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    sys.exit(main())
