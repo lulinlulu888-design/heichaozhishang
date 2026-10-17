@@ -166,7 +166,7 @@ private:
     TMap<FString, FVector4f> IconDrawAdjustments;
     TMap<int32, TArray<FVector3f>> CardPlacements;
     /** card_table CARD_RARITY / RPG_DESCRIPTION for attack (CARD_TYPE 0) cards with recovered face parts. */
-    struct FHczsCardFace { int32 Rarity = 0; FString Description; };
+    struct FHczsCardFace { int32 Rarity = 0; FString Description; FString Frame = TEXT("card-frame-attack"); bool bTotalDamage = false; };
     TMap<FString, FHczsCardFace> CardFaces;
     FDelegateHandle StateChangedHandle;
     FTimerHandle DealTimer;

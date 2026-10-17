@@ -137,10 +137,12 @@ namespace
         }
         return true;
     }
-    bool Effects(const TSharedPtr<FJsonObject>& O, bool bEnemy, bool bBreakdown, FString& Out, FString* FirstDamage = nullptr)
+    bool Effects(const TSharedPtr<FJsonObject>& O, bool bEnemy, bool bBreakdown, FString& Out, FString* FirstDamage = nullptr,
+        FString* TotalDamage = nullptr)
     {
         const auto* Values = Array(O, TEXT("effects"), 32); if (!Values) return false;
         TArray<FString> Lines;
+        int64 Total = 0; bool bAnyDamage = false;
         for (const auto& V : *Values)
         {
             const auto E = ObjectValue(V); FString Type, Target, Amount;
@@ -151,6 +153,12 @@ namespace
                     !Text(E, TEXT("target"), Target, 16) || (Target != TEXT("self") && Target != TEXT("opponent")) ||
                     !Text(E, TEXT("amount"), Amount, 64) || !DecimalInteger(Amount, 64)) return false;
                 if (FirstDamage && FirstDamage->IsEmpty() && Type == TEXT("damage") && Target == TEXT("opponent")) *FirstDamage = Amount;
+                if (Type == TEXT("damage") && Target == TEXT("opponent"))
+                {
+                    const int64 Value = FCString::Atoi64(*Amount);
+                    if (Value < 0 || Total > MAX_int64 - Value) return false;
+                    Total += Value; bAnyDamage = true;
+                }
                 const TCHAR* Action = Type == TEXT("damage") ? TEXT("伤害") : Type == TEXT("shield") ? TEXT("护盾") : TEXT("恢复");
                 Lines.Add(FString::Printf(TEXT("%s%s %s"), Target == TEXT("opponent") ? TEXT("对方") : TEXT("自身"), Action, *Amount));
             }
@@ -168,6 +176,7 @@ namespace
             }
             else return false;
         }
+        if (TotalDamage && bAnyDamage) *TotalDamage = FString::Printf(TEXT("%lld"), Total);
         Out = FString::Join(Lines, TEXT(" · ")); return true;
     }
     bool Status(const FString& S) { return S == TEXT("player-turn") || S == TEXT("won") || S == TEXT("lost"); }
@@ -626,7 +635,7 @@ bool ParseScenario(const TSharedPtr<FJsonObject>& O, FScenario& Out)
         const bool bFieldsValid = S.bHasUltimates ? Exact(C, {TEXT("name"), TEXT("cost"), TEXT("effects"), TEXT("ownerId"),
             TEXT("cardType"), TEXT("specialPoints"), TEXT("removeOnLeaveHand")}) : Exact(C, {TEXT("name"), TEXT("cost"), TEXT("effects")});
         if (!IsId(Key) || !bFieldsValid || !Text(C, TEXT("name"), Card.Name, 128) ||
-            !Counter(C, TEXT("cost"), Card.Cost, 0, 1000000) || !Effects(C, false, S.bHasBreakdown, Card.EffectsText, &Card.FirstDamage)) return false;
+            !Counter(C, TEXT("cost"), Card.Cost, 0, 1000000) || !Effects(C, false, S.bHasBreakdown, Card.EffectsText, &Card.FirstDamage, &Card.TotalDamage)) return false;
         if (S.bHasUltimates)
         {
             FString Owner; int32 Type = 0, Points = 0; bool bRemove = false;

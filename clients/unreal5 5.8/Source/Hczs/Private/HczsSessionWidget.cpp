@@ -505,8 +505,12 @@ void UHczsSessionWidget::NativeConstruct()
                     const auto Object = Pair.Value->AsObject();
                     FHczsCardFace Face; double Type = -1;
                     if (!Object || !Object->TryGetNumberField(TEXT("rarity"), Face.Rarity) ||
-                        !Object->TryGetNumberField(TEXT("cardType"), Type) || Type != 0 ||
+                        !Object->TryGetNumberField(TEXT("cardType"), Type) || (Type != 0 && Type != 7) ||
                         !Object->TryGetStringField(TEXT("description"), Face.Description)) continue;
+                    FString Value;
+                    if (Type == 7 && (!Object->TryGetStringField(TEXT("frame"), Face.Frame) ||
+                        !Object->TryGetStringField(TEXT("descriptionValue"), Value) || Value != TEXT("total-damage"))) continue;
+                    Face.bTotalDamage = Type == 7;
                     CardFaces.Add(FString(*Pair.Key), MoveTemp(Face));
                 }
         }
@@ -1248,6 +1252,8 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 }
                 const FString CardArt = TEXT("card-") + Card.CardId;
                 const bool bHasArt = Brushes.Contains(CardArt);
+                const FHczsCardFace* Face = CardFaces.Find(Card.CardId);
+                const FString FrameKey = Face ? Face->Frame : TEXT("card-frame-attack");
                 if (bHasArt && !bDispatching && bCardEnabled && SelectedCardInstance != Card.InstanceId)
                 {
                     const double Since = UsableOutlineSince.FindOrAdd(Card.InstanceId, PaintSeconds);
@@ -1260,10 +1266,10 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 if (bHasArt)
                 {
                     C.Image(CardArt, 2, 4, 120, 120, Tint);
-                    const FSlateBrush* Frame = Brushes.Find(TEXT("card-frame-attack"));
+                    const FSlateBrush* Frame = Brushes.Find(FrameKey);
                     if (Frame)
                     {
-                        LastPaintedSprites.Add(TEXT("card-frame-attack"));
+                        LastPaintedSprites.Add(FrameKey);
                         const FSlateRenderTransform FrameTransform(FQuat2D(PI * 0.5f), FVector2f(154, -34));
                         FSessionPainter FramePainter(CardGeometry.MakeChild(FVector2f(234, 182),
                             FSlateLayoutTransform(), FrameTransform, FVector2f::ZeroVector),
@@ -1273,7 +1279,6 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                     }
                 }
                 else C.Box(7, 113, 112, 51, FLinearColor(0.94f, 0.95f, 0.97f, 1));
-                const FHczsCardFace* Face = CardFaces.Find(Card.CardId);
                 if (Face)
                 {
                     // rare_bg (0,-20) 120x120 at 0.5 holds Ssr_NL at its centre; img_infobar anchored (.5, 1)
@@ -1289,9 +1294,10 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
                 // (0,-50), 102x24 at 12px, relative to the 126x166 card center.
                 C.Text(Card.Name, 7, 115, 112, 16, 16, FLinearColor(67 / 255.0f, 53 / 255.0f, 85 / 255.0f, 1), true, false);
                 const FLinearColor DescrColor(54 / 255.0f, 52 / 255.0f, 85 / 255.0f, 1);
-                if (Face && !Card.FirstDamage.IsEmpty())
+                const FString& DescriptionValue = Face && Face->bTotalDamage ? Card.TotalDamage : Card.FirstDamage;
+                if (Face && !DescriptionValue.IsEmpty())
                 {
-                    const TArray<FString> Lines = C.WrapLines(Face->Description.Replace(TEXT("%s"), *Card.FirstDamage), 102, 12);
+                    const TArray<FString> Lines = C.WrapLines(Face->Description.Replace(TEXT("%s"), *DescriptionValue), 102, 12);
                     for (int32 Line = 0; Line < FMath::Min(2, Lines.Num()); ++Line)
                         C.Text(Lines[Line], 12, 133 + Line * 12, 102, 12, 12, DescrColor, true, false);
                 }
@@ -2217,6 +2223,7 @@ FString UHczsSessionWidget::DevelopmentDescribeUI() const
             auto Row = MakeShared<FJsonObject>(); Row->SetStringField(TEXT("instanceId"), Card.InstanceId); Row->SetStringField(TEXT("cardId"), Card.CardId);
             Row->SetNumberField(TEXT("cost"), Card.Cost); Row->SetStringField(TEXT("ownerId"), Card.OwnerId);
             Row->SetStringField(TEXT("effects"), Card.EffectsText); Row->SetStringField(TEXT("firstDamage"), Card.FirstDamage);
+            Row->SetStringField(TEXT("totalDamage"), Card.TotalDamage);
             HandRows.Add(MakeShared<FJsonValueObject>(Row));
         }
         Root->SetArrayField(TEXT("partyMembers"), Members);

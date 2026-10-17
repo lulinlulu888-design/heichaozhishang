@@ -31,6 +31,7 @@ PINS = {
     'analysis/battle-ui/card-owner/report.json': '90b9e3ca8181114abf5bd308fe0d11c14687e957589bb5772ee158fd60bfce88',
     'analysis/battle-ui/intention/report.json': 'f5d616c2d8bd2fbaeeb85ec93aabd0415b160a5625e2df20a089d289257c0baa',
     'analysis/battle-ui/card-face/report.json': '92dbbb96fef481c9632cc0c09ff8294fa00feaefc7fafc810b2f17849dd85701',
+    'analysis/battle-ui/ultimate-card/report.json': 'cc0fc2309c72bac8fab779f93b32e3134da3df5494a655e05fabc7dcf332170c',
 }
 
 
@@ -126,6 +127,15 @@ def main():
         sprite(row['name'], row['png'], row['png_sha256'], 'analysis/battle-ui/card-face/report.json', row['logical'])
     card_faces = {cid: {'rarity': row['rarity'], 'cardType': row['cardType'], 'description': row['description']}
                   for cid, row in face['cards'].items()}
+    ultimate = sources['analysis/battle-ui/ultimate-card/report.json']
+    if ultimate['apk_sha256'] != APK_SHA or {row['name']: row['size'] for row in ultimate['frames']} != {
+            'card-410104': [286, 286], 'card-frame-ex': [234, 182]} or set(ultimate['cards']) != {'410104'}:
+        raise ValueError('Ultimate card face provenance changed')
+    for row in ultimate['frames']:
+        sprite(row['name'], row['png'], row['png_sha256'], 'analysis/battle-ui/ultimate-card/report.json', row['logical'])
+    for cid, row in ultimate['cards'].items():
+        card_faces[cid] = {'rarity': row['rarity'], 'cardType': row['cardType'], 'description': row['description'],
+                           'frame': row['frame'], 'descriptionValue': row['descriptionValue']}
     frames = sources['analysis/battle-ui/card-frames/provenance.json']
     for row in frames['frames']:
         if row['key'] in ('card/bg_atk_s.png', 'card/cost_s1.png'):
@@ -186,7 +196,7 @@ def main():
               'runtime': {'canvas': [1280, 720], 'cardPlacements': by_count, 'cardFaces': card_faces},
               'limitations': ['Original runtime colour profile is unverified.',
                              'HUD screen translations are reconstructed around the UE battle camera.',
-                             'Only the five source-linked attack card illustrations are available.',
+                             'Only the five source-linked attack card illustrations and the 410104 ultimate face are available.',
                              'Unknown illustrations remain absent; no card effects are calculated by this UI.',
                              'No original defeat-title image is yet recovered.']}
     OUT.mkdir(parents=True, exist_ok=True)

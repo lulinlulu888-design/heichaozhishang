@@ -252,6 +252,8 @@ bool FHczsSessionUltimateContractTest::RunTest(const FString& Parameters)
     {
         TestEqual(TEXT("Generated instance identity retained"), Ultimate->InstanceId, FString(TEXT("ultimate:1")));
         TestEqual(TEXT("Ultimate remains zero-cost"), Ultimate->Cost, 0);
+        TestEqual(TEXT("Ultimate face total sums the eight server hits"), Ultimate->TotalDamage, FString(TEXT("1443")));
+        TestEqual(TEXT("First hit stays separate from the face total"), Ultimate->FirstDamage, FString(TEXT("72")));
     }
     TestEqual(TEXT("City enemy remains its real identity, never tutorial cube 991"), View.EnemyId, FString(TEXT("6605")));
     TestEqual(TEXT("Explicit city encounter is retained"), View.EncounterId, FString(TEXT("city-preview-10405")));

@@ -154,9 +154,8 @@ def run():
                 ultimate = next((card for card in cards if card[1] == '410104'), None)
                 if ultimate:
                     guard.check(ultimate[2] == 0, 'Ultimate cost is not the source zero')
-                    game.play_card(ultimate[0])
                     state['ultimate'] = ultimate[0]
-                    stage('ultimate-watch')
+                    stage('ultimate-face')
                 else:
                     guard.check(state['plays'] < 8, 'Combo did not generate the source ultimate')
                     energy = int(battle.get_editor_property('energy'))
@@ -165,6 +164,36 @@ def run():
                     state['plays'] += 1
                     game.play_card(choice[0])
                     stage('between-plays')
+            elif current == 'ultimate-face':
+                widget = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)[0]
+                ui = json.loads(widget.development_describe_ui())
+                sprites, texts = set(ui.get('actualPaintedSprites', [])), ui.get('renderedTexts', [])
+                row = next((r for r in ui.get('hand', []) if r.get('instanceId') == state['ultimate']), None)
+                if not ({'card-410104', 'card-frame-ex'} <= sprites and '赤色地平线' in texts):
+                    guard.check(time.monotonic() - state['entered'] < 10, 'Ultimate source face was not painted')
+                    return
+                report['ultimateFaceTexts'] = [t for t in texts if '造成' in t or '伤害' in t]
+                report['ultimateHandRow'] = row
+                guard.check(row and row.get('totalDamage') == '1443' and any(t.startswith('造成1443') for t in texts),
+                            'Ultimate description does not show the eight-hit total')
+                state['widget'] = widget
+                shot = path.parent / ('city-ultimate-' + str(time.time_ns()) + '-ultimate-card.png')
+                state['shot'] = shot; state['shotAt'] = time.monotonic()
+                u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="' + shot.as_posix() + '" -nosuffix')
+                report['ultimateFace'] = dict(sprites=sorted(s for s in sprites if s.startswith('card-')), total=row['totalDamage'], screenshot=str(shot))
+                stage('ultimate-shot')
+            elif current == 'ultimate-shot':
+                guard.check(time.monotonic() - state['shotAt'] < 20, 'Ultimate card screenshot timed out')
+                if time.monotonic() - state['shotAt'] < 1 or not state['shot'].exists():
+                    return
+                guard.check(state['shot'].read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', 'Ultimate card screenshot is not a PNG')
+                passed('ultimate-hand-card-paints-source-art-ex-frame-and-total')
+                widget, instance = state['widget'], state['ultimate']
+                guard.check(widget.development_drag_card(instance, 'enemy', False, 'begin'), 'Ultimate pointer down failed')
+                guard.check(widget.development_drag_card(instance, 'enemy', False, 'move'), 'Ultimate pointer move failed')
+                guard.check(widget.development_drag_card(instance, 'enemy', False, 'release'), 'Ultimate pointer up failed')
+                report['ultimatePlayedBy'] = 'native-pointer-drag'
+                stage('ultimate-watch')
             elif current == 'between-plays' and game.can_submit_battle_intent() and not busy:
                 stage('ready')
             elif current == 'ultimate-watch':
