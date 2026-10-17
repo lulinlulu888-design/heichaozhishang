@@ -119,6 +119,10 @@ struct HCZS_API FHczsBattleView
     UPROPERTY(BlueprintReadOnly) FString OutcomeReason;
     UPROPERTY(BlueprintReadOnly) TArray<FHczsHandCard> Hand;
     UPROPERTY(BlueprintReadOnly) FString EnemyIntentText;
+    /** Scenario skill ids behind EnemyIntentText, in order. */
+    UPROPERTY(BlueprintReadOnly) TArray<FString> EnemyIntentSkills;
+    /** Per EnemyIntentSkills entry: the single opponent damage amount, or empty when the skill has none or several. */
+    UPROPERTY(BlueprintReadOnly) TArray<FString> EnemyIntentDamage;
     UPROPERTY(BlueprintReadOnly) int32 DrawCount = 0;
     UPROPERTY(BlueprintReadOnly) int32 DiscardCount = 0;
 };

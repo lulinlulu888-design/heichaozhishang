@@ -29,6 +29,7 @@ PINS = {
     'analysis/battle-ui/top-turn/report.json': '585847836daf959844bc1b9d0d23041b15b0e9a40510627c63b23ef3dc260530',
     'analysis/battle-ui/card-usable/report.json': '635f2c8785aaf847725a1adc2de16337bdc4b817167c7a39f642035753c78e5b',
     'analysis/battle-ui/card-owner/report.json': '90b9e3ca8181114abf5bd308fe0d11c14687e957589bb5772ee158fd60bfce88',
+    'analysis/battle-ui/intention/report.json': 'f5d616c2d8bd2fbaeeb85ec93aabd0415b160a5625e2df20a089d289257c0baa',
 }
 
 
@@ -109,6 +110,12 @@ def main():
     for row in owner['frames']:
         sprite(row['name'], row['png'], row['png_sha256'],
                'analysis/battle-ui/card-owner/report.json', row['logical'])
+    intention = sources['analysis/battle-ui/intention/report.json']
+    if intention['apk_sha256'] != APK_SHA or [row['size'] for row in intention['frames']] != [[86, 98], [86, 98], [52, 52]]:
+        raise ValueError('Monster intention provenance changed')
+    for row in intention['frames']:
+        sprite(row['name'], row['png'], row['png_sha256'],
+               'analysis/battle-ui/intention/report.json', row['logical'])
     frames = sources['analysis/battle-ui/card-frames/provenance.json']
     for row in frames['frames']:
         if row['key'] in ('card/bg_atk_s.png', 'card/cost_s1.png'):
@@ -183,7 +190,7 @@ def main():
         'deck-icon': '左下抽牌/弃牌计数旁图标；绘制 39×43 设计像素',
         'card-cost': '每张手牌左上费用宝石；绘制 32×38 设计像素',
     }
-    inventory = {'schemaVersion': 1, 'scope': 'all 41 source assets imported by the new UE playable session HUD',
+    inventory = {'schemaVersion': 1, 'scope': 'all 44 source assets imported by the new UE playable session HUD',
                  'consumer': 'clients/unreal5 5.8/Source/Hczs/Private/HczsSessionWidget.cpp',
                  'sourceAsset': '/Game/Recovered/Battle/UI/BattlePresentation.BattlePresentation',
                  'variantAsset': '/Game/Recovered/Battle/UI/AI/BattlePresentationHD.BattlePresentationHD',

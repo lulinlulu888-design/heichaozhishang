@@ -143,6 +143,8 @@ public:
     TSet<FString>* PaintedSprites;
     bool bSmoothCard = false;
     float Opacity = 1;
+    int32 OutlinePixels = 1;
+    float OutlineAlpha = 0.72f;
     FSessionPainter(const FGeometry& InGeometry, FSlateWindowElementList& InElements, int32 InLayer,
         const TMap<FString, FSlateBrush>& InBrushes, const TMap<FString, FVector4f>& InAdjustments,
         TSharedPtr<const FCompositeFont> InFont, TArray<FString>* InPaintedTexts = nullptr,
@@ -231,8 +233,8 @@ public:
         if (PaintedTexts) PaintedTexts->Add(Text);
         Color.A *= Opacity;
         FFontOutlineSettings Outline;
-        Outline.OutlineSize = bShadow ? 1 : 0;
-        Outline.OutlineColor = FLinearColor(0, 0, 0, 0.72f * Opacity);
+        Outline.OutlineSize = bShadow ? OutlinePixels : 0;
+        Outline.OutlineColor = FLinearColor(0, 0, 0, OutlineAlpha * Opacity);
         FSlateFontInfo Info = Font ? FSlateFontInfo(Font, Pixels * 72.0f / FontConstants::RenderDPI,
             TEXT("Regular"), Outline) : FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), FMath::RoundToInt(Pixels * 0.75f));
         const FVector2f Measured(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, Info));
@@ -1016,9 +1018,46 @@ int32 UHczsSessionWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             }
             P.Layer = Round.Layer;
         }
-        // The source row is IntentionArea items on ModelUIArea, following the model head.
-        // This sentence is the reconstructed skill text until those icons and numbers are wired.
-        P.Wrapped(Battle.EnemyIntentText, 946, 139, 300, 16, 3, Warm);
+        // IntentionArea on ModelUIArea: skill_table SKILL_INTENTIONS sends 990/991 to monster_intention_table
+        // 102 (attack, every MELEE tier is attack_ad3) and 992 to 2 (防御). Other encounters keep the text line.
+        {
+            struct FIntentItem { const TCHAR* Icon; FString Label; };
+            TArray<FIntentItem> Items;
+            for (int32 I = 0; I < Battle.EnemyIntentSkills.Num(); ++I)
+            {
+                const FString& Skill = Battle.EnemyIntentSkills[I];
+                const FString Damage = Battle.EnemyIntentDamage.IsValidIndex(I) ? Battle.EnemyIntentDamage[I] : FString();
+                if ((Skill == TEXT("990") || Skill == TEXT("991")) && !Damage.IsEmpty())
+                    Items.Add({TEXT("intention-attack"), SimpleNum(FCString::Atod(*Damage))});
+                else if (Skill == TEXT("992")) Items.Add({TEXT("intention-defense"), TEXT("防御")});
+                else { Items.Reset(); break; }
+            }
+            FVector2f Root, Head;
+            if (Battle.Status == TEXT("player-turn") && !Items.IsEmpty() && ProjectEnemyHead(Root, Head))
+            {
+                const FString Key = FString::Printf(TEXT("%s:%d:%s"), *Battle.Id, Battle.Round, *FString::Join(Battle.EnemyIntentSkills, TEXT(",")));
+                const double Now = FSlateApplication::Get().GetCurrentTime();
+                if (Key != IntentionKey) { IntentionKey = Key; IntentionSince = Now; }
+                FSessionPainter Intent(Canvas, Elements, P.Layer, Brushes, IconDrawAdjustments, CompositeFont,
+                    &LastPaintedTexts, &LastPaintedSprites);
+                Intent.Opacity = FMath::Clamp(float(Now - IntentionSince) / 0.3f, 0.0f, 1.0f);
+                Intent.OutlinePixels = 2; Intent.OutlineAlpha = 1;
+                // setEntityPosition: area at (root.x, head.y + 30); arrange: item i at
+                // x = -(60n+46)/2 + 23 + 60i + 30, y = IntentionItem.y(40) + 20. Cocos y-up, so subtract here.
+                const int32 N = Items.Num();
+                for (int32 I = 0; I < N; ++I)
+                {
+                    const FVector2f C(Root.X - (60.f * N + 46) / 2 + 53 + 60.f * I, Head.Y - 30 - 60);
+                    Intent.Image(TEXT("intention-bg"), C.X - 26, C.Y - 26, 52, 52, FLinearColor::White, false, true);
+                    // sprite_light shares the Intention_NL texture with a normal premultiplied blend.
+                    Intent.Image(Items[I].Icon, C.X - 43, C.Y - 49, 86, 98, FLinearColor::White, false, true);
+                    Intent.Image(Items[I].Icon, C.X - 43, C.Y - 49, 86, 98, FLinearColor::White, false, true);
+                    Intent.Text(Items[I].Label, C.X + 6, C.Y, 85, 24, 20, FLinearColor::White, false, true);
+                }
+                P.Layer = Intent.Layer;
+            }
+            else if (Items.IsEmpty()) P.Wrapped(Battle.EnemyIntentText, 946, 139, 300, 16, 3, Warm);
+        }
         {
             FSessionPainter Energy = Group(CardNow, OwnCardInRest, TEXT("Energy"));
             FVector2D EnergySlot(0, 555);
@@ -1524,6 +1563,39 @@ bool UHczsSessionWidget::ProjectActorBounds(FName Tag, FSlateRect& DesignBounds)
     if (Matches != 1 || Bounds.GetSize().X <= 0 || Bounds.GetSize().Y <= 0) return false;
     DesignBounds = Bounds;
     return true;
+}
+
+bool UHczsSessionWidget::ProjectEnemyHead(FVector2f& Root, FVector2f& Head) const
+{
+    const UWorld* World = GetWorld();
+    APlayerController* Controller = GetOwningPlayer();
+    auto* Client = World ? World->GetGameViewport() : nullptr;
+    if (!World || !Controller || !Client || !Client->Viewport) return false;
+    const FIntPoint View = Client->Viewport->GetSizeXY();
+    const FVector2f Available(LastPaintGeometry.GetLocalSize());
+    const float Scale = FMath::Min(Available.X / DesignSize.X, Available.Y / DesignSize.Y);
+    if (View.X <= 0 || View.Y <= 0 || Scale <= 0) return false;
+    const FVector2f Offset = (Available - DesignSize * Scale) * 0.5f;
+    const USkeletalMeshComponent* Component = nullptr;
+    for (TActorIterator<AActor> It(World); It; ++It)
+        if (It->ActorHasTag(TEXT("HCZSBattleEnemy")))
+        {
+            if (Component) return false;
+            Component = It->FindComponentByClass<USkeletalMeshComponent>();
+        }
+    // 991's GIM ui_head has no BoneName, so it is MatrixToBone translation (0.997159, 18.78299, -1.169679)
+    // from the model root; the cube import maps source (x, y, z) to component (100x, 100z, 100y).
+    if (!Component || !Component->IsVisible() || !Component->GetSkeletalMeshAsset()
+        || Component->GetSkeletalMeshAsset()->GetPathName() != TEXT("/Game/Recovered/Battle/Cube/cube_battle.cube_battle")) return false;
+    const FTransform& Model = Component->GetComponentTransform();
+    auto Project = [&](const FVector& Location, FVector2f& Out)
+    {
+        FVector2D Screen;
+        if (!Controller->ProjectWorldLocationToScreen(Location, Screen, false)) return false;
+        Out = (FVector2f(Screen.X * Available.X / View.X, Screen.Y * Available.Y / View.Y) - Offset) / Scale;
+        return true;
+    };
+    return Project(Model.GetLocation(), Root) && Project(Model.TransformPosition(FVector(99.7159, -116.9679, 1878.299)), Head);
 }
 
 void UHczsSessionWidget::RecordGestureEvent(const FString& Kind, const FVector2f& Point, bool bTargetHit)

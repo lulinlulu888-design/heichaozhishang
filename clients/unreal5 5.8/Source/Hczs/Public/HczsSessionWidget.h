@@ -103,6 +103,8 @@ private:
     void CancelCardGesture(const FString& Reason);
     bool CanDragCard(const FString& InstanceId) const;
     bool ProjectActorBounds(FName Tag, FSlateRect& DesignBounds) const;
+    /** ModelUIArea anchors for the tagged enemy: model root and its root-relative ui_head socket, in design pixels. */
+    bool ProjectEnemyHead(FVector2f& Root, FVector2f& Head) const;
     void RecordGestureEvent(const FString& Kind, const FVector2f& Point, bool bTargetHit = false);
     int32 PaintSourceTargetArrow(const FGeometry& Canvas, FSlateWindowElementList& Elements,
         int32 Layer, const FVector2f& Start, const FVector2f& End) const;
@@ -149,6 +151,9 @@ private:
     mutable TMap<FString, double> UsableOutlineSince;
     /** NameLabelArea._fadeIn start; negative while the label is hidden. */
     mutable double NameLabelSince = -1;
+    /** IntentionItem.playAnimIn fade start for the current battle/round intent set. */
+    mutable FString IntentionKey;
+    mutable double IntentionSince = 0;
     TMap<FString, FSlateBrush> Brushes;
     /** ScaleXY/offsetXY maps full generated canvases onto original content bounds. */
     TMap<FString, FVector4f> IconDrawAdjustments;

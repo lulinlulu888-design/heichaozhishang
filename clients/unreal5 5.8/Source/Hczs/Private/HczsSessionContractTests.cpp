@@ -203,6 +203,8 @@ bool FHczsSessionBattleContractTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Only source hand becomes interactive cards"), View.Hand.Num(), 1);
     TestEqual(TEXT("Server decimal is retained"), View.PlayerHp.Decimal, FString(TEXT("100")));
     TestEqual(TEXT("Scenario energyPerRound is the HUD maximum"), View.EnergyPerRound, 1);
+    TestTrue(TEXT("Round intent keeps skill ids and the single opponent damage"),
+        View.EnemyIntentSkills == TArray<FString>{TEXT("9911")} && View.EnemyIntentDamage == TArray<FString>{TEXT("2")});
     TestFalse(TEXT("Cross-profile response is rejected"), ParseBattle(Fixture(), TEXT("33333333-3333-3333-3333-333333333333"), BattleId, View));
     TestFalse(TEXT("Wrong battle response is rejected"), ParseBattle(Fixture(), ProfileId, TEXT("33333333-3333-3333-3333-333333333333"), View));
     auto Bad = Fixture(); Bad->SetNumberField(TEXT("revision"), 2);

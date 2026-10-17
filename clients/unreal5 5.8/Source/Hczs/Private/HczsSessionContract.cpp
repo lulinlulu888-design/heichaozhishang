@@ -463,6 +463,14 @@ bool ParseScenario(const TSharedPtr<FJsonObject>& O, FScenario& Out)
         auto Skill = ObjectValue(Entry.Value); FString Description;
         if (!IsId(Key) || !Exact(Skill, {TEXT("effects")}) || !Effects(Skill, true, S.bHasBreakdown, Description)) return false;
         S.EnemySkills.Add(Key, MoveTemp(Description));
+        TArray<FString> Damage;
+        for (const auto& V : *Array(Skill, TEXT("effects"), 32))
+        {
+            const auto E = ObjectValue(V); FString Type, Target, Amount;
+            if (Text(E, TEXT("type"), Type, 24) && Type == TEXT("damage") && Text(E, TEXT("target"), Target, 16)
+                && Target == TEXT("opponent") && Text(E, TEXT("amount"), Amount, 64)) Damage.Add(Amount);
+        }
+        if (Damage.Num() == 1) S.EnemySkillDamage.Add(Key, Damage[0]);
     }
     const auto* Deck = Array(D, TEXT("deck"), 64); if (!Deck || Deck->IsEmpty()) return false;
     TSet<FString> Instances;
@@ -598,6 +606,12 @@ bool ParseBattle(const TSharedPtr<FJsonObject>& O, const FString& ProfileId, con
     const TArray<FString>& Intent = Scenario.EnemyIntents.IsValidIndex(B.Round - 1) ? Scenario.EnemyIntents[B.Round - 1] : Scenario.EnemyFallback;
     TArray<FString> IntentDescriptions; for (const FString& Skill : Intent) IntentDescriptions.Add(Scenario.EnemySkills[Skill]);
     B.EnemyIntentText = FString::Join(IntentDescriptions, TEXT(" / "));
+    B.EnemyIntentSkills = Intent;
+    for (const FString& Skill : Intent)
+    {
+        const FString* Damage = Scenario.EnemySkillDamage.Find(Skill);
+        B.EnemyIntentDamage.Add(Damage ? *Damage : FString());
+    }
     B.EncounterId = Scenario.EncounterId; B.Title = Scenario.Title; B.Notice = Scenario.Notice;
     B.PlayerId = Scenario.PlayerId; B.EnemyId = Scenario.EnemyId; B.PlayerName = Scenario.PlayerName; B.EnemyName = Scenario.EnemyName;
     B.PlayerMaxHp = Scenario.PlayerMaxHp; B.EnemyMaxHp = Scenario.EnemyMaxHp; B.MaxRounds = Scenario.MaxRounds;

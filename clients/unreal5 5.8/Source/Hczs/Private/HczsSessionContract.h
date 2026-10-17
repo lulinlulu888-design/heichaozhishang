@@ -13,6 +13,8 @@ namespace HczsSessionContract
         FHczsScalar PlayerMaxHp, EnemyMaxHp;
         TMap<FString, FHczsHandCard> Cards;
         TMap<FString, FString> EnemySkills;
+        /** Skills with exactly one opponent damage effect, mapped to its amount. */
+        TMap<FString, FString> EnemySkillDamage;
         TArray<TArray<FString>> EnemyIntents;
         TArray<FString> EnemyFallback;
         TArray<TPair<FString, FString>> Deck;
