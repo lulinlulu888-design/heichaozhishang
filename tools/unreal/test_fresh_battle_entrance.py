@@ -134,6 +134,14 @@ def run():
                     bones[bone]=[value.translation.x,value.translation.y,value.translation.z,
                                  value.rotation.x,value.rotation.y,value.rotation.z,value.rotation.w]
             guard.check(len(bones)>=2 and mesh.get_num_bones()==180, 'Source battle skeleton readback missing')
+            if report['entranceFx']:
+                fx=json.loads(presenter.get_entrance_source_fx().development_describe())
+                sample['entranceFx']=fx
+                for name, low, high in (('entrance-fx-early', .08, .2), ('entrance-fx-late', .3, .5)):
+                    if fx.get('playing') and low < fx['seconds'] < high and name not in state:
+                        target = path.parent/(prefix+'-'+name+'.png')
+                        state[name] = target
+                        u.SystemLibrary.execute_console_command(world, 'Shot SHOWUI filename="'+target.as_posix()+'" -nosuffix')
             current=game.get_editor_property('current_battle')
             sample.update(battleId=current.get_editor_property('id'), revision=int(current.get_editor_property('revision')),
                 actionIndex=int(current.get_editor_property('action_index')), playing=bool(presenter.is_entrance_playing()),
@@ -142,6 +150,8 @@ def run():
                 actorHidden=bool(player_actor.get_editor_property('hidden')), clip=clip,
                 actualClipPosition=float(mesh.get_position()), bones=bones, camera=dict(path=camera.get_path_name(),
                     location=[camera.get_actor_location().x,camera.get_actor_location().y,camera.get_actor_location().z],
+                    rotation=[cc.get_world_rotation().roll,cc.get_world_rotation().pitch,cc.get_world_rotation().yaw],
+                    worldLocation=[cc.get_world_location().x,cc.get_world_location().y,cc.get_world_location().z],
                     fov=float(cc.get_editor_property('field_of_view')), aspect=float(cc.get_editor_property('aspect_ratio')),
                     constrainAspect=bool(cc.get_editor_property('constrain_aspect_ratio')),
                     viewport=[float(v) for v in (u.WidgetLayoutLibrary.get_viewport_size(world).x, u.WidgetLayoutLibrary.get_viewport_size(world).y)]))
@@ -234,8 +244,14 @@ def run():
             times=[int(re.search(r'atUnixMs=(\d+)',line)[1]) for line in (starts[0],shows[0],ends[0])]
             guard.check(times[1]-times[0]>=450, 'Native source SHOW started before the authored0.5s wait')
             guard.check(('completed=1' if index==0 else 'completed=0') in ends[0], 'Native completion/cancellation outcome differs')
+            fx_starts=matching('HCZS entrance source fx started:'); fx_ends=matching('HCZS entrance source fx finished:')
+            if report['entranceFx'] and index==0:
+                guard.check(len(fx_starts)==1 and len(fx_ends)==1 and 'reason=complete' in fx_ends[0]
+                            and 'maxActiveLayers=3' in fx_ends[0], 'Entrance source fx did not start once and complete')
+            else:
+                guard.check(not fx_starts, 'Entrance source fx played without the cue/opt-in')
             if index==0:
-                guard.check(times[2]-times[1]>=3600 and 'effectPlayed=0' in cues[0]
+                guard.check(times[2]-times[1]>=3600 and ('effectPlayed=1' if report['entranceFx'] else 'effectPlayed=0') in cues[0]
                             and float(re.search(r'position=([0-9.]+)',cues[0])[1])>=3.7*.144595-.000002,
                             'Native actual-position completion/source event differs')
             events.append(dict(battleId=battle_id,freshStarts=1,showStarts=1,sourceCueCount=len(cues),
@@ -317,6 +333,23 @@ def run():
                     report['sourceCamera']=dict(viewport=view['viewport'],aspect=width/height,horizontalFov=view['fov'],expectedHorizontalFov=expected)
                     passed('source-camera-battle-fov-by-aspect')
                     report['firstBattleId']=sample['battleId']; passed('fresh-create-hidden-show-actual-position-unlock')
+                    if report['entranceFx']:
+                        fx_rows=[r['entranceFx'] for r in history if (r.get('entranceFx') or {}).get('playing')]
+                        mesh_path=actor('HCZSBattlePlayer').get_component_by_class(u.SkeletalMeshComponent).get_path_name()
+                        guard.check(len(fx_rows)>5 and any(sum(l.get('visible',False) for l in r['layers'])==3 for r in fx_rows),
+                                    'Entrance source fx layers were not all observed visible')
+                        guard.check(all(l['attachParent']==mesh_path and l.get('worldAxes') for r in fx_rows for l in r['layers']),
+                                    'Entrance source fx is not following the player origin with world axes')
+                        cue=[r for r in history if r.get('position',0)>=3.7*.144595-.002]
+                        guard.check(cue and fx_rows[0]['seconds']<.1, 'Entrance source fx did not start at event_1')
+                        final=sample['entranceFx']
+                        guard.check(not final['playing'] and final['outcome']=='complete' and final['playCount']==1 and final['maxActiveLayers']==3,
+                                    'Entrance source fx did not complete exactly once')
+                        shots=[state.get('entrance-fx-early'), state.get('entrance-fx-late')]
+                        guard.check(all(s and s.exists() for s in shots), 'Entrance source fx screenshots missing')
+                        report['entranceFxResult']=dict(samples=len(fx_rows), screenshots=[str(s) for s in shots],
+                                                        first=fx_rows[0], mid=fx_rows[len(fx_rows)//2], final=final)
+                        passed('entrance-sfx-model-layers-reconstruction-plays-once-at-event1')
                     if report.get('roundStartDeal'):
                         game.end_turn(); stage('round-deal')
                     elif report.get('rejectPlay'):
@@ -537,6 +570,7 @@ def run():
     report['roundStartDeal'] = guard.flag(command, 'HczsRoundStartDeal')
     report['dragRetest'] = guard.flag(command, 'HczsDragRetest')
     report['rejectPlay'] = guard.flag(command, 'HczsRejectPlay')
+    report['entranceFx'] = guard.flag(command, 'HczsEntranceFxReconstruction')
     guard.check(sum(bool(report[name]) for name in ('roundStartDeal', 'dragRetest', 'rejectPlay')) <= 1, 'Choose one acceptance mode')
     if report['rejectPlay']:
         guard.check(manifest.get('rejectFirstPlay') is True and manifest.get('faults') is False

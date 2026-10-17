@@ -13,6 +13,7 @@ class USkeletalMeshComponent;
 class UHczsGameInstance;
 class UHczsUltimateSequence;
 class UHczsWeaponSourceFx;
+class UHczsEntranceSourceFx;
 struct FHczsCardIntentVisual;
 
 /** Original source clip names; actual imported UObject references live in the maps below. */
@@ -120,6 +121,7 @@ public:
     bool CanPresentBattle(const FHczsBattleView& View) const;
     UHczsUltimateSequence* GetUltimateSequence() const { return UltimateSequence; }
     UFUNCTION(BlueprintPure, Category="HCZS|Presentation") UHczsWeaponSourceFx* GetWeaponSourceFx() const { return WeaponSourceFx; }
+    UFUNCTION(BlueprintPure, Category="HCZS|Presentation") UHczsEntranceSourceFx* GetEntranceSourceFx() const { return EntranceSourceFx; }
     FOnHczsBattlePresentationChanged OnPresentationChangedNative;
 
     UPROPERTY(EditAnywhere, Category="Recovered") TObjectPtr<UHczsBattleSceneAssets> SceneAssets;
@@ -147,6 +149,7 @@ private:
     void StopEntrance(bool bCompleted, const FString& Reason, bool bRestoreStablePose = true);
     UPROPERTY() TObjectPtr<UHczsUltimateSequence> UltimateSequence;
     UPROPERTY() TObjectPtr<UHczsWeaponSourceFx> WeaponSourceFx;
+    UPROPERTY() TObjectPtr<UHczsEntranceSourceFx> EntranceSourceFx;
     bool bUltimatePlaying = false;
     FHczsCardVisualGate UltimateIntent;
     bool bUltimateIntentAborted = false;

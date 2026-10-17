@@ -1,4 +1,5 @@
 #include "HczsBattlePresentation.h"
+#include "HczsEntranceSourceFx.h"
 #include "HczsUltimateSequence.h"
 #include "HczsWeaponSourceFx.h"
 
@@ -93,6 +94,7 @@ AHczsBattlePresentation::AHczsBattlePresentation()
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
     UltimateSequence = CreateDefaultSubobject<UHczsUltimateSequence>(TEXT("UltimateSequence"));
     WeaponSourceFx = CreateDefaultSubobject<UHczsWeaponSourceFx>(TEXT("WeaponSourceFx"));
+    EntranceSourceFx = CreateDefaultSubobject<UHczsEntranceSourceFx>(TEXT("EntranceSourceFx"));
     Tags.Add(TEXT("HCZSBattlePresentation"));
 }
 
@@ -311,10 +313,11 @@ void AHczsBattlePresentation::ObserveEntrance()
     if (!bEntranceEventEmitted && EntranceLastPosition / EntranceAnimation->GetPlayLength() >= SourceEntranceEffectRatio)
     {
         bEntranceEventEmitted = true;
-        // Explicit source event hook. The original chuchang.sfx is not yet
-        // imported, so do not substitute a generic flash or claim it played.
-        UE_LOG(LogTemp, Display, TEXT("HCZS entrance source cue: battle=%s event=event_1 ratio=0.144595 position=%.6f socket=fx_center sfx=effects/player/001/fight_idle_show_chuchang.sfx effectPlayed=0 atUnixMs=%lld"),
-            *EntranceBattleId, EntranceLastPosition, VisualUnixMs());
+        // Without the opt-in flag the cue stays a hook only: the SFX timeline is a
+        // data-derived reconstruction and must not stand in for the original by default.
+        const bool bPlayed = HczsEntranceFxReconstructionEnabled() && EntranceSourceFx->Play(PlayerComponent, EntranceBattleId);
+        UE_LOG(LogTemp, Display, TEXT("HCZS entrance source cue: battle=%s event=event_1 ratio=0.144595 position=%.6f socket=fx_center sfx=effects/player/001/fight_idle_show_chuchang.sfx effectPlayed=%d mode=%s atUnixMs=%lld"),
+            *EntranceBattleId, EntranceLastPosition, bPlayed ? 1 : 0, bPlayed ? TEXT("reconstruction") : TEXT("hook-only"), VisualUnixMs());
     }
     if (EntranceLastPosition >= EntranceAnimation->GetPlayLength() - .002f)
     {
@@ -345,6 +348,7 @@ void AHczsBattlePresentation::StopEntrance(bool bCompleted, const FString& Reaso
     GetWorldTimerManager().ClearTimer(EntranceVisibleTimer);
     GetWorldTimerManager().ClearTimer(EntranceFinishTimer);
     if (Session) Session->CompleteFreshBattleEntrance(EntranceBattleId);
+    if (!bCompleted) EntranceSourceFx->Stop(TEXT("entrance-cancelled"));
     EntranceDeadline = 0; EntranceHiddenWorldStart = -1.0; EntranceShowWorldStart = -1.0;
     EntrancePhase = bCompleted ? TEXT("complete") : TEXT("cancelled"); EntranceDiagnostic = Reason;
     if (bRestoreStablePose && bSceneReady) ApplyStablePose(DesiredSnapshot);
