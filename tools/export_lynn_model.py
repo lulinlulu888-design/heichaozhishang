@@ -14,6 +14,73 @@ from verify_lynn_idle import verify_reference_skin, sampled_to_reference_layout
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'analysis/characters/lynn/export'
 
+def drop_unanimated_leaf_bones(model, library_names):
+    """Remove mesh bones absent from the animation library that are unweighted leaves.
+
+    No vertex references them, so geometry and skinning are unchanged; joint
+    indices above each removed bone shift down by one.
+    """
+    library_names=set(library_names)
+    while True:
+        parents={b['parent'] for b in model['bones']}
+        drop=next((i for i,b in enumerate(model['bones']) if b['name'] not in library_names
+                   and i not in model['used_bones'] and i not in parents),None)
+        if drop is None:
+            return model
+        model.setdefault('dropped_unanimated_leaf_bones',[]).append(model['bones'][drop]['name'])
+        shift=lambda j:j-1 if j!=255 and j>drop else j
+        del model['bones'][drop]
+        for b in model['bones']:
+            if b['parent'] is not None and b['parent']>drop:b['parent']-=1
+        model['joints']=[tuple(shift(j) for j in js) for js in model['joints']]
+        model['used_bones']=[shift(j) for j in model['used_bones']]
+
+
+def remove_bind_shear(model, frame0, max_displacement_over_height=0.02):
+    """Reconstruction: re-bind to the nearest shear-free locals so TRS skeletons can hold the bind.
+
+    Each bind world keeps its position; its axes become the closest rotation
+    with one uniform scale, so every local composes identically as TRS in UE.
+    Vertices move by the blended old->new bind delta, so single-weight vertices
+    skin exactly as before; blended ones are checked on sampled frame 0.
+    """
+    import copy
+    from verify_lynn_idle import skin_vertices
+    old=[np.asarray(matrix_rows(b['matrix_raw'])) for b in model['bones']]
+    new={}
+    def world(i):
+        if i not in new:
+            u_,_,vh=np.linalg.svd(old[i][:3,:3])
+            fixed=old[i].copy();fixed[:3,:3]=(u_@vh)*np.cbrt(abs(np.linalg.det(old[i][:3,:3])))
+            new[i]=fixed
+        return new[i]
+    delta=np.asarray([world(i)@np.linalg.inv(old[i]) for i in range(len(old))])
+    weights=np.asarray(model['weights']);joints=np.where(weights>0,np.asarray(model['joints'],dtype=int),0)
+    positions=np.column_stack((np.asarray(model['positions']),np.ones(len(model['positions']))))
+    moved=np.sum(np.einsum('nvij,nj->nvi',delta[joints],positions)*weights[:,:,None],axis=1)[:,:3]
+    linear=np.linalg.inv(delta[:,:3,:3]).transpose(0,2,1)
+    normals=np.sum(np.einsum('nvij,nj->nvi',linear[joints],np.asarray(model['normals']))*weights[:,:,None],axis=1)
+    normals/=np.maximum(np.linalg.norm(normals,axis=1,keepdims=True),1e-12)
+    rebound=copy.deepcopy(model)
+    rebound['positions']=[tuple(map(float,p)) for p in moved]
+    rebound['normals']=[tuple(map(float,n)) for n in normals]
+    for i,b in enumerate(rebound['bones']):
+        b['matrix_raw']=[float(x) for x in world(i).T.flatten()]
+    homogeneous=np.column_stack((moved,np.ones(len(moved))))
+    for j in rebound['used_bones']:
+        local=(homogeneous[np.any((joints==j)&(weights>0),axis=1)]@np.linalg.inv(world(j)).T)[:,:3]
+        centre=(local.min(0)+local.max(0))/2;half=(local.max(0)-local.min(0))/2
+        rebound['bones'][j]['auxiliary_unknown']=tuple(map(float,(*centre,*half,np.linalg.norm(half))))
+    _,before=skin_vertices(model,frame0);_,after=skin_vertices(rebound,frame0)
+    height=float(np.ptp(np.asarray(model['positions'])[:,1]))
+    error=float(np.max(np.linalg.norm(after-before,axis=1))/height)
+    if error>max_displacement_over_height:
+        raise ModelError('shear-free re-bind moves sampled frame-0 vertices too far')
+    return rebound,dict(frame0_max_displacement_over_height=error,limit=max_displacement_over_height,
+        auxiliary_bounds='recomputed for the re-bound mesh; original bounds validated before re-binding',
+        scope='Reconstruction for TRS skeletons, not original bind data')
+
+
 def export_character(out, model_path, library_path, clip_name, character_name, clip_directory=None):
     global OUT
     OUT=Path(out)
@@ -25,8 +92,9 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
         return p.read_bytes()
     selected=next(m for m in audit['models'] if m['path']==model_path)
     mesh_path=model_path[:-4]+'.mesh'
-    model=parse_model(read(mesh_path))
+    model=parse_model(read(mesh_path),repair_normals=True)
     library=parse_library(read(library_path),allow_empty_roots=True)
+    model=drop_unanimated_leaf_bones(model,library['bone_names'])
     clip_directory=Path(clip_directory) if clip_directory else OUT.parent/'idle'
     metadata_path=clip_directory/(clip_name+'.json')
     metadata=json.loads(metadata_path.read_text('utf8'))
@@ -71,17 +139,24 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
     except ModelError as error:
         if 'unsupported shear' not in str(error):raise
         binds=[np.asarray(matrix_rows(b['matrix_raw'])) for b in model['bones']]
+        weighted_shear=[]
         for i,b in enumerate(model['bones']):
             local=binds[i] if b['parent'] is None else np.linalg.inv(binds[b['parent']])@binds[i]
             axes=local[:3,:3]/np.linalg.norm(local[:3,:3],axis=0)
             if i in model['used_bones'] and np.max(np.abs(axes.T@axes-np.eye(3)))>1e-4:
-                raise ModelError('weighted bone bind carries shear that TRS skeletons cannot reproduce: '+b['name'])
-        locals_by_name={}
-        for b in model['bones']:
-            p=reference[b['name']];m=np.eye(4);m[:3,:3]=quaternion_matrix(p[3:7])*p[7:10];m[:3,3]=p[:3]
-            locals_by_name[b['name']]=m.tolist()
-        base,doc,_=encode_reference(model,selected['bindings'],materials,textures,locals_by_name)
-        joint_local_source='library reference TRS; only unweighted bones carry bind shear that glTF nodes cannot hold'
+                weighted_shear.append(b['name'])
+        if weighted_shear:
+            model,shear_rebind=remove_bind_shear(model,frame0)
+            bind['shear_rebind']=dict(shear_rebind,weighted_sheared_bones=weighted_shear)
+            base,doc,_=encode_reference(model,selected['bindings'],materials,textures)
+            joint_local_source='mesh re-bound to nearest shear-free bind (reconstruction), replaced by reference TRS below'
+        else:
+            locals_by_name={}
+            for b in model['bones']:
+                p=reference[b['name']];m=np.eye(4);m[:3,:3]=quaternion_matrix(p[3:7])*p[7:10];m[:3,3]=p[:3]
+                locals_by_name[b['name']]=m.tolist()
+            base,doc,_=encode_reference(model,selected['bindings'],materials,textures,locals_by_name)
+            joint_local_source='library reference TRS; only unweighted bones carry bind shear that glTF nodes cannot hold'
     doc,binary=split_glb(base)
     for node in doc['nodes']:
         if 'mesh' in node:node['name']=character_name+'Mesh'
@@ -93,11 +168,17 @@ def export_character(out, model_path, library_path, clip_name, character_name, c
         metadata_sha256=file_sha256(metadata_path),metadata=metadata,
         mapping=metadata['bone_mappings'][mesh_path])
     animated,reports,_=encode(base,[clip]);doc,binary=split_glb(animated)
-    for index in doc['skins'][0]['joints']:
-        node=doc['nodes'][index];p=reference[node['name']]
-        node.pop('matrix',None);node.update(translation=list(p[:3]),rotation=list(p[3:7]),scale=list(p[7:10]))
+    # UE bakes skinned vertices into the node rest pose, so a rest pose far from
+    # the bind distorts blended vertices; keep bind TRS when the reference differs.
+    keep_bind_rest='reference_pose_mismatch' in bind and joint_local_source.startswith('mesh')
+    if not keep_bind_rest:
+        for index in doc['skins'][0]['joints']:
+            node=doc['nodes'][index];p=reference[node['name']]
+            node.pop('matrix',None);node.update(translation=list(p[:3]),rotation=list(p[3:7]),scale=list(p[7:10]))
     doc['extras'].pop('knownBindDifference',None)
-    doc['extras']['referenceSkeletonPolicy']='Full original local reference TRS, including unweighted ancestors; original inverse bind matrices unchanged'
+    doc['extras']['referenceSkeletonPolicy']=('Rest pose is the mesh bind TRS because the library reference differs from it; '
+        'every joint is clip-driven' if keep_bind_rest else
+        'Full original local reference TRS, including unweighted ancestors; original inverse bind matrices unchanged')
     doc['extras']['character']=character_name
     animated=pack_glb(doc,binary)
     verified=validate_roundtrip(base,animated,[clip])

@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 
 from decode_ktx import parse_ktx
 from export_elsa_model import extract, parse_materials, bind_materials, write_json
-from export_lynn_model import export_character
+from export_lynn_model import export_character, drop_unanimated_leaf_bones
 from extract_texture_samples import APK_SHA256
 from inspect_neox_animation import parse_library, parse_clip, clip_path, map_bones
 from inspect_neox_model import parse_model, summary
@@ -65,9 +65,11 @@ def recover(character_id, purpose, apk, catalogue):
     mesh_path = model_path[:-4] + '.mesh'
     if xml.get('Mesh', mesh_path).replace('\\','/') != mesh_path.replace('\\','/'):
         raise ValueError('This exporter needs an explicit adapter for a non-sibling mesh')
-    model = parse_model(get(mesh_path))
+    model = parse_model(get(mesh_path), repair_normals=True)
     materials = parse_materials(get(model_path[:-4]+'.mtg'), expected_slots=None)
-    bindings = bind_materials(model, gim, materials)
+    bindings = bind_materials(model, gim, materials, allow_bounds_mismatch=True)
+    selected['boundsMismatchedSubmeshes'] = [row['submesh_index'] for row in bindings if row['bounds_max_error'] > 1e-4]
+    selected['normalRepairs'] = model.get('normal_repairs')
     texture_sources = {}
     for material in materials:
         for key, path in material['params'].items():
@@ -79,6 +81,8 @@ def recover(character_id, purpose, apk, catalogue):
         raise ValueError('Animation library is missing or ambiguous')
     library_path = libraries[0]
     library = parse_library(get(library_path), allow_empty_roots=True)
+    model = drop_unanimated_leaf_bones(model, library['bone_names'])
+    selected['droppedUnanimatedLeafBones'] = model.get('dropped_unanimated_leaf_bones', [])
     clip_name = selected['clip']
     records = [row for row in library['clips'] if row['name'] == clip_name]
     if len(records) != 1:

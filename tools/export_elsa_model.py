@@ -75,8 +75,12 @@ def parse_materials(payload, *, expected_slots=9):
     return result
 
 
-def bind_materials(model, gim, materials):
-    """Validate the XML->mesh ordinal association using independent AABBs."""
+def bind_materials(model, gim, materials, *, allow_bounds_mismatch=False):
+    """Validate the XML->mesh ordinal association using independent AABBs.
+
+    allow_bounds_mismatch keeps the ordinal MtlIdx binding when GIM bounds are
+    stale, recording each disagreement instead of raising.
+    """
     children = ET.fromstring(gim).find('SubMesh')
     if len(children) != len(model['submeshes']):
         raise ModelError('GIM submesh count mismatch')
@@ -95,7 +99,8 @@ def bind_materials(model, gim, materials):
         errors = [abs(lo[k]-(center[k]-half[k])) for k in range(3)]
         errors += [abs(hi[k]-(center[k]+half[k])) for k in range(3)]
         if not all(math.isfinite(x) for x in errors) or max(errors) > 1e-4:
-            raise ModelError(f'GIM independent bounds mismatch for submesh {i}')
+            if not allow_bounds_mismatch:
+                raise ModelError(f'GIM independent bounds mismatch for submesh {i}')
         if not sub['uvs'] or any(len(uv) != sub['vertex_count'] for uv in sub['uvs']):
             raise ModelError('missing or mismatched UV arrays')
         rows.append({'submesh_index': i, 'name': el.attrib['Name'], 'material_slot': slot,
@@ -229,7 +234,7 @@ def encode_reference(model, bindings, materials, textures, joint_locals=None):
         # claimed; source values are retained for an eventual engine port.
         alpha = 'BLEND' if effect else ('OPAQUE' if eye else 'MASK')
         factor = [1.0]*4
-        if material['name'] == 'siwa':
+        if material['name'] == 'siwa' and 'StockingColor' in material['params']:
             factor = [float(v) for v in material['params']['StockingColor'].split(',')]
         m = {'name': f"{material['slot']}: {material['name']} (colour reference)",
              'pbrMetallicRoughness': {'baseColorTexture': {'index': texture_indices[logical], 'texCoord': 0},

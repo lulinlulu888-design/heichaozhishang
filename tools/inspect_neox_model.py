@@ -138,7 +138,9 @@ def validate_bind_pose(model, tolerance=1e-4):
             'max_radius_error': max(x['radius_error'] for x in rows)}
 
 
-def parse_model(data: bytes, subset_count: int | None = None, *, preserve_nonunit_normals: bool = False):
+def parse_model(data: bytes, subset_count: int | None = None, *, preserve_nonunit_normals: bool = False,
+                repair_normals: bool = False):
+    """repair_normals: reconstruct (not recover) non-unit normals; zero ones from area-weighted faces."""
     if len(data) > MAX_BYTES:
         raise ModelError('payload exceeds 32 MiB investigation budget')
     r = Reader(data)
@@ -223,11 +225,38 @@ def parse_model(data: bytes, subset_count: int | None = None, *, preserve_nonuni
     norms = [math.sqrt(sum(x*x for x in v)) for v in normals]
     if preserve_nonunit_normals and any(n < 1e-8 for n in norms):
         raise ModelError('zero-length normal cannot be preserved as a direction')
-    if not preserve_nonunit_normals and any(abs(n-1) > 0.01 for n in norms):
+    if not preserve_nonunit_normals and not repair_normals and any(abs(n-1) > 0.01 for n in norms):
         raise ModelError('normal length differs from unit by more than 0.01')
     auxiliary_present = r.scalar('H', 'vertex_auxiliary_present')
     vertex_auxiliary = r.vectors(nv, 3, 'vertex_auxiliary_float3_unknown') if auxiliary_present else None
     indices = list(r.unpack(f'{nt*3}H', 'triangle_indices_uint16'))
+    normal_repairs = None
+    if repair_normals and any(abs(n-1) > 0.01 for n in norms):
+        face_sum = [[0.0, 0.0, 0.0] for _ in range(nv)]
+        for t in range(nt):
+            a, b, c = (positions[i] for i in indices[t*3:t*3+3])
+            u = [b[k]-a[k] for k in range(3)]
+            w = [c[k]-a[k] for k in range(3)]
+            cross = [u[1]*w[2]-u[2]*w[1], u[2]*w[0]-u[0]*w[2], u[0]*w[1]-u[1]*w[0]]
+            for i in indices[t*3:t*3+3]:
+                face_sum[i] = [face_sum[i][k]+cross[k] for k in range(3)]
+        normal_repairs = dict(normalized=0, from_faces=0, unrecoverable=0)
+        normals = list(normals)
+        for i, n in enumerate(norms):
+            if abs(n-1) <= 0.01:
+                continue
+            if n >= 1e-8:
+                normals[i] = tuple(x/n for x in normals[i])
+                normal_repairs['normalized'] += 1
+                continue
+            length = math.sqrt(sum(x*x for x in face_sum[i]))
+            if length < 1e-12:
+                normals[i] = (0.0, 1.0, 0.0)
+                normal_repairs['unrecoverable'] += 1
+            else:
+                normals[i] = tuple(x/length for x in face_sum[i])
+                normal_repairs['from_faces'] += 1
+        norms = [math.sqrt(sum(x*x for x in v)) for v in normals]
     subsets = []
     vo = io = 0
     for v, t, u, c in descriptors:
@@ -281,6 +310,9 @@ def parse_model(data: bytes, subset_count: int | None = None, *, preserve_nonuni
             'used_bones': sorted(used_bones), 'bounds': bbox,
             'normal_length_range': [min(norms), max(norms)],
             'normal_policy': 'preserved source nonzero vectors' if preserve_nonunit_normals else 'unit within 0.01',
+            **({'normal_repairs': normal_repairs, 'normal_repair_scope':
+                'Reconstruction: source normals were non-unit; zero ones replaced by area-weighted face normals.'}
+               if normal_repairs else {}),
             'max_weight_sum_error': max_weight_error, 'ranges': r.ranges,
             'limitations': ['Bind matrix and 28B local-bound roles require validate_bind_pose for each skinned export.',
                             'Float3 vertex auxiliary semantics are not yet confirmed.',
