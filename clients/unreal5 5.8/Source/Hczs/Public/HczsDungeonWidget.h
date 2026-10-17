@@ -18,6 +18,7 @@ protected:
         const FSlateRect& CullingRect, FSlateWindowElementList& Elements, int32 LayerId,
         const FWidgetStyle& Style, bool bParentEnabled) const override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
+    virtual FReply NativeOnTouchStarted(const FGeometry& Geometry, const FPointerEvent& Event) override;
     virtual FReply NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
 private:
     FReply PressAt(const FGeometry& Geometry, const FVector2D& AbsolutePosition);
@@ -27,4 +28,5 @@ private:
     struct FControl { FString Action; FVector2f Size = FVector2f::ZeroVector; FSlateRenderTransform Transform; bool bEnabled = false; };
     TArray<FControl> Controls;
     bool bSourceReady = false;
+    int32 Avg138Index = -1;
 };

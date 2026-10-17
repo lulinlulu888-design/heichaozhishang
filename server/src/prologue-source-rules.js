@@ -38,3 +38,16 @@ export const guide1001 = Object.freeze({
   endRoundDetail: Object.freeze({ id: 1857, detail: 'D_END_ROUND' }),
   unresolvedTriggerValue: 999,
 });
+
+/** Spoken text of dialogue 138, source rows 120-128. The #f(z:0) and #l markup is not part of the spoken line. */
+export const prologueAvg138 = Object.freeze([
+  ['ailisha_voice', '就是“这里”了吗？'],
+  ['mxt_vo', '哦？来人了？没想到，在这最后的时刻，还能拥有演出的机会。'],
+  ['mxt_vo', '你们是特意来到这特等席，观赏第三次黑潮的壮丽景象的吗？还是，来阻止的呢？'],
+  ['ailisha_voice', '第三次黑潮，并不是什么壮丽景象，它就是一场灾难。'],
+  ['ailisha_voice', '这场灾难已经吞噬了琳、诺、瓦列莉亚和佐伊……我不会再让它吞噬更多的人……'],
+  ['mxt_vo', '哦，看来是后者了。就凭你们两个人，也想阻止黑潮吗？'],
+  ['future_voice', '我们没有选择。'],
+  ['ailisha_voice', '是的，我们没有选择，无论如何，我们都必须打败你！'],
+  ['mxt_vo', '打败我？那就试试看吧！'],
+].map(([voice, text]) => Object.freeze({ voice, text })));

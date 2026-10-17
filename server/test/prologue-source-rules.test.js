@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prologueBossIntention, prologueBossLimits, guide1001 } from '../src/prologue-source-rules.js';
+import { prologueBossIntention, prologueBossLimits, guide1001, prologueAvg138 } from '../src/prologue-source-rules.js';
 
 test('the prologue boss announces the verified behavior-tree skill and does not become a battle', () => {
   assert.deepEqual([1, 2, 3, 4, 5, 30].map(prologueBossIntention), [74503, 74501, 74502, 74503, 74502, 74503]);
@@ -19,4 +19,8 @@ test('guide 1001 round-start copy stays separate from the worldline entry', () =
   assert.equal(guide1001.cardPlayedDetail.detail, 'D_OUT_CARD');
   assert.equal(guide1001.endRoundDetail.detail, 'D_END_ROUND');
   assert.equal(guide1001.unresolvedTriggerValue, 999);
+  assert.equal(prologueAvg138.length, 9);
+  assert.equal(prologueAvg138[0].text, '就是“这里”了吗？');
+  assert.equal(prologueAvg138[6].voice, 'future_voice');
+  assert.equal(prologueAvg138.at(-1).text, '打败我？那就试试看吧！');
 });

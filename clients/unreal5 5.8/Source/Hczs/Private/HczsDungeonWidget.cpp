@@ -1,4 +1,5 @@
 #include "HczsDungeonWidget.h"
+#include "HczsPrologueAvg.h"
 #include "HczsGameInstance.h"
 #include "Engine/FontFace.h"
 #include "Dom/JsonObject.h"
@@ -174,10 +175,23 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
     if (bBossUnlocked && NoticeItem)
     {
         const FSlateFontInfo& Font = NoticeItem->Font;
-        const FString Notice = TEXT("3998 已解锁，首领战尚未恢复");
+        const bool bAvgFinished = Avg138Index >= HczsPrologueAvg138().Num();
+        const FString Notice = bAvgFinished ? TEXT("AVG138 已按序播完，1703 仍未开打") : TEXT("3998 已解锁，首领战尚未恢复");
         const FVector2f TextSize(Measure->Measure(Notice, Font));
         const FGeometry NoticeGeometry = Geometry.MakeChild(TextSize, FSlateLayoutTransform(Scale, Offset + FVector2f(930, 560)));
         FSlateDrawElement::MakeText(Elements, ++Layer, NoticeGeometry.ToPaintGeometry(), Notice, Font, ESlateDrawEffect::None, FLinearColor::White);
+    }
+    const auto Dialogue = HczsPrologueAvg138();
+    if (Avg138Index >= 0 && Avg138Index < Dialogue.Num())
+    {
+        const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 22);
+        const FString Line = FString::Printf(TEXT("%s：%s"), Dialogue[Avg138Index].Voice, Dialogue[Avg138Index].Text);
+        const FVector2f Band(1100, 72);
+        const FGeometry BandGeometry = Geometry.MakeChild(Band, FSlateLayoutTransform(Scale, Offset + FVector2f(90, 600)));
+        FSlateDrawElement::MakeBox(Elements, ++Layer, BandGeometry.ToPaintGeometry(), FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")),
+            ESlateDrawEffect::None, FLinearColor(0.02f, 0.02f, 0.03f, 0.88f));
+        FSlateDrawElement::MakeText(Elements, ++Layer, BandGeometry.ToPaintGeometry(FVector2f(1060, 48), FSlateLayoutTransform(FVector2f(20, 18))),
+            Line, Font, ESlateDrawEffect::None, FLinearColor::White);
     }
     return Layer;
 }
@@ -199,6 +213,7 @@ FReply UHczsDungeonWidget::PressAt(const FGeometry& Geometry, const FVector2D& A
         {
             const bool bBossUnlocked = Session && Session->MainlineProgress.bIsValid && Session->MainlineProgress.bFirstChallengePassed;
             if (!bBossUnlocked) OnExploreRequested.Broadcast();
+            else Avg138Index = HczsAdvancePrologueAvg138(Avg138Index);
         }
         return FReply::Handled();
     }
@@ -208,6 +223,11 @@ FReply UHczsDungeonWidget::PressAt(const FGeometry& Geometry, const FVector2D& A
 FReply UHczsDungeonWidget::NativeOnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
 {
     return Event.GetEffectingButton() == EKeys::LeftMouseButton ? PressAt(Geometry, Event.GetScreenSpacePosition()) : FReply::Unhandled();
+}
+
+FReply UHczsDungeonWidget::NativeOnTouchStarted(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+    return PressAt(Geometry, Event.GetScreenSpacePosition());
 }
 
 FReply UHczsDungeonWidget::NativeOnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
