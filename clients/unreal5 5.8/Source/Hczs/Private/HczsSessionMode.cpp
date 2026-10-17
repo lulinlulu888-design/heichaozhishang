@@ -275,8 +275,8 @@ void AHczsDungeonMode::Leave()
 void AHczsDungeonMode::Explore()
 {
     if (!Session || Session->bRequestInFlight || Session->bHasPendingIntent || bWaitingExplore) return;
-    // This panel describes challenge 3997. 3998 stays locked until that challenge has a successTime,
-    // and its two-character battle is a later entry, so this button never starts it.
+    // After 3997 has a successTime, 3998 is unlocked. Battle 1703 is not a rules encounter yet.
+    if (Session->MainlineProgress.bIsValid && Session->MainlineProgress.bFirstChallengePassed) return;
     bWaitingExplore = true;
     Session->SelectEncounter(TEXT("tutorial-5000"));
     if (!Session->bRequestInFlight) bWaitingExplore = false;

@@ -14,6 +14,8 @@
 namespace
 {
 const FVector2f DesignSize(1280, 720);
+const TCHAR* Challenge3997Desc = TEXT("在未来的回忆里，这是她与艾尔莎的最后一战——阻止第三次黑潮。然而她们的队友已经……");
+const TCHAR* Challenge3998Desc = TEXT("在未来的回忆里，这是她与艾尔莎的最后一战——阻止第三次黑潮。然而这次战斗……");
 bool ReadNumbers(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, int32 Count, TArray<double>& Result)
 {
     const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -128,6 +130,8 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         return Layer;
     }
     const auto Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+    const UHczsGameInstance* Session = Cast<UHczsGameInstance>(GetGameInstance());
+    const bool bBossUnlocked = Session && Session->MainlineProgress.bIsValid && Session->MainlineProgress.bFirstChallengePassed;
     for (int32 Index = 0; Index < Items.Num(); ++Index)
     {
         const auto& Item = Items[Index];
@@ -138,6 +142,7 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             continue;
         }
         FString Remaining = Item.Text;
+        if (bBossUnlocked && Remaining == Challenge3997Desc) Remaining = Challenge3998Desc;
         float LineTop = 0;
         const float LineHeight = Measure->GetMaxCharacterHeight(Item.Font);
         while (!Remaining.IsEmpty() && LineTop + LineHeight <= Item.Size.Y + 1)
@@ -165,6 +170,15 @@ int32 UHczsDungeonWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             LineTop += LineHeight;
         }
     }
+    const FHczsHallDrawItem* NoticeItem = Items.FindByPredicate([](const FHczsHallDrawItem& Item) { return Item.bText; });
+    if (bBossUnlocked && NoticeItem)
+    {
+        const FSlateFontInfo& Font = NoticeItem->Font;
+        const FString Notice = TEXT("3998 已解锁，首领战尚未恢复");
+        const FVector2f TextSize(Measure->Measure(Notice, Font));
+        const FGeometry NoticeGeometry = Geometry.MakeChild(TextSize, FSlateLayoutTransform(Scale, Offset + FVector2f(930, 560)));
+        FSlateDrawElement::MakeText(Elements, ++Layer, NoticeGeometry.ToPaintGeometry(), Notice, Font, ESlateDrawEffect::None, FLinearColor::White);
+    }
     return Layer;
 }
 
@@ -181,7 +195,11 @@ FReply UHczsDungeonWidget::PressAt(const FGeometry& Geometry, const FVector2D& A
         const FVector2f Local = TransformPoint(Inverse(Control.Transform), Point);
         if (!Control.bEnabled || Local.X < 0 || Local.Y < 0 || Local.X > Control.Size.X || Local.Y > Control.Size.Y) continue;
         if (Control.Action == TEXT("back")) OnBackRequested.Broadcast();
-        else if (Control.Action == TEXT("explore")) OnExploreRequested.Broadcast();
+        else if (Control.Action == TEXT("explore"))
+        {
+            const bool bBossUnlocked = Session && Session->MainlineProgress.bIsValid && Session->MainlineProgress.bFirstChallengePassed;
+            if (!bBossUnlocked) OnExploreRequested.Broadcast();
+        }
         return FReply::Handled();
     }
     return FReply::Unhandled();
