@@ -1,8 +1,9 @@
-"""Import every passed battle-idle hero GLB and photograph them on the theatre party line.
+"""Import every passed hero idle GLB and photograph them on the theatre party line.
 
-Run with -ExecCmds="py <this file>". Inputs come from analysis/characters/batch-battle.json;
-each import lives in /Game/Recovered/Heroes/HeroNNN/Battle/v_<sha16>. L_Theatre is not saved.
-Scope: native import, idle playback and framing only. NeoX shading and gameplay are not ported.
+Run with -ExecCmds="py <this file>"; add -HczsLineupPurpose=hall for the hall idles (default battle).
+Inputs come from analysis/characters/batch-<purpose>.json; each import lives in
+/Game/Recovered/Heroes/HeroNNN/{Battle|HallIdle}/v_<sha16>. L_Theatre is not saved and is only a neutral
+inspection stage for hall idles. Scope: native import, idle playback and framing only.
 """
 import hashlib
 import json
@@ -23,8 +24,12 @@ import xml.etree.ElementTree as ET
 MAP = '/Game/Recovered/SourceStages/Maps/L_Theatre'
 SCENE = ROOT / 'analysis/prologue-boss/resource-audit/source/scene/boss_theatre/boss_theatre.scn'
 SCENE_SHA = 'a403f116cb65da739457a8ddf32c8ae65820c7428cfdec51735e41baa1c05921'
-BATCH = ROOT / 'analysis/characters/batch-battle.json'
-OUT = ROOT / 'analysis/characters/battle-lineup'
+_purpose = [a.split('=', 1)[1] for a in u.SystemLibrary.get_command_line().split() if a.startswith('-HczsLineupPurpose=')]
+PURPOSE = _purpose[0] if _purpose else 'battle'
+if PURPOSE not in ('battle', 'hall'):
+    raise RuntimeError('Unsupported lineup purpose ' + PURPOSE)
+BATCH = ROOT / 'analysis/characters' / ('batch-' + PURPOSE + '.json')
+OUT = ROOT / 'analysis/characters' / (PURPOSE + '-lineup')
 PAGE = 6
 TAG = 'HczsHeroBattleGLB'
 results = dict(heroes=[], pages=[], mapSaved=False)
@@ -60,12 +65,14 @@ def theatre_line():
 
 
 def import_hero(row):
-    report_path = ROOT / 'analysis/characters' / ('hero-' + str(row['characterId']).zfill(3)) / 'battle/export/export-report.json'
+    report_path = ROOT / 'analysis/characters' / ('hero-' + str(row['characterId']).zfill(3)) / PURPOSE / 'export/export-report.json'
     report = json.loads(report_path.read_text('utf8'))
     glb = Path(report['output'])
     check(glb.is_file() and sha(glb) == row['sha256'] == report['sha256'], 'Hero GLB identity changed: ' + str(row['characterId']))
-    check(report['selection']['purpose'] == 'battle' and report['selection']['characterId'] == row['characterId'], 'Not a battle export')
-    destination = '/Game/Recovered/Heroes/Hero' + str(row['characterId']).zfill(3) + '/Battle/v_' + row['sha256'][:16]
+    check(report['selection']['purpose'] == PURPOSE and report['selection']['characterId'] == row['characterId'], 'Not a ' + PURPOSE + ' export')
+    # Hall/ already holds untagged single-hero preview imports (Hero003), so hall lineups use HallIdle/.
+    destination = ('/Game/Recovered/Heroes/Hero' + str(row['characterId']).zfill(3) + '/'
+                   + ('Battle' if PURPOSE == 'battle' else 'HallIdle') + '/v_' + row['sha256'][:16])
     paths = u.EditorAssetLibrary.list_assets(destination, True, False)
     if not paths:
         pipeline, overrides = make_pipeline(u, dict(import_operation='asset'))
@@ -83,8 +90,16 @@ def import_hero(row):
             u.EditorAssetLibrary.set_metadata_tag(asset, TAG, row['sha256'])
             check(u.EditorAssetLibrary.save_loaded_asset(asset, False), 'Hero asset save failed')
     objects = [u.load_asset(path) for path in paths]
+    tags = [u.EditorAssetLibrary.get_metadata_tag(a, TAG) for a in objects]
+    if row['sha256'] in tags and all(t in ('', row['sha256']) for t in tags):
+        # Interchange can register late assets after the first tagging pass; this hash-named namespace is ours.
+        for asset, tag in zip(objects, tags):
+            if not tag:
+                u.EditorAssetLibrary.set_metadata_tag(asset, TAG, row['sha256'])
+                check(u.EditorAssetLibrary.save_loaded_asset(asset, False), 'Hero asset save failed')
     check(objects and all(u.EditorAssetLibrary.get_metadata_tag(a, TAG) == row['sha256'] for a in objects),
-          'Unowned or partial hero import namespace')
+          'Unowned or partial hero import namespace %s: %s' % (destination, sorted(
+              {a.get_name() + '=' + (u.EditorAssetLibrary.get_metadata_tag(a, TAG) or '-')[:8] for a in objects})[:8]))
     meshes = [a for a in objects if isinstance(a, u.SkeletalMesh)]
     sequences = [a for a in objects if isinstance(a, u.AnimSequence)]
     check(len(meshes) == 1 and len(sequences) == 1, 'Expected one mesh and one idle for hero ' + str(row['characterId']))
@@ -149,7 +164,7 @@ def build():
         cam.set_actor_label('HCZSHeroFrontCamera' + str(entry['characterId']).zfill(3))
         cam.get_component_by_class(u.CameraComponent).set_editor_property('field_of_view', 45)
         pages.append(dict(camera=cam, actors=[actor], ids=[entry['characterId']], front=True, location=line))
-    results.update(page=PAGE, slotWidth=width, cameraSide=camera_side, frontSide=boss_side,
+    results.update(purpose=PURPOSE, page=PAGE, slotWidth=width, cameraSide=camera_side, frontSide=boss_side,
                    sourceLine='Future instance 3_4 position and rotation; front close-ups look from the boss side',
                    engineVersion=u.SystemLibrary.get_engine_version())
 

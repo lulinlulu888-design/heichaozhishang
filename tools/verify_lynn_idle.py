@@ -44,14 +44,29 @@ def frame_skin_stats(model, poses_by_name):
         return dict(finite=False)
     height = float(np.ptp(bind[:, 1]))
     displacement = np.linalg.norm((posed - posed.mean(0)) - (bind - bind.mean(0)), axis=1)
+    triangles = np.asarray(model['indices'], dtype=int).reshape(-1, 3)
+    edges = np.unique(np.sort(np.concatenate((triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]])), axis=1), axis=0)
+    bind_length = np.linalg.norm(bind[edges[:, 0]] - bind[edges[:, 1]], axis=1)
+    keep = bind_length > 1e-5 * height
+    stretch = np.abs(np.log(np.linalg.norm(posed[edges[keep, 0]] - posed[edges[keep, 1]], axis=1) / bind_length[keep]))
     return dict(finite=True, bind_height=height,
         diagonal_ratio=float(np.linalg.norm(np.ptp(posed, 0)) / np.linalg.norm(np.ptp(bind, 0))),
         median_displacement_over_height=float(np.median(displacement) / height),
-        p95_displacement_over_height=float(np.percentile(displacement, 95) / height))
+        p95_displacement_over_height=float(np.percentile(displacement, 95) / height),
+        edge_log_stretch_p99=float(np.percentile(stretch, 99)) if stretch.size else 0.0,
+        edge_log_stretch_p999=float(np.percentile(stretch, 99.9)) if stretch.size else 0.0)
 
 
 SAMPLED_SKIN_ENVELOPE = dict(diagonal_ratio=(0.7, 1.2), median_displacement_over_height=(0.0, 0.15),
     p95_displacement_over_height=(0.0, 0.5))
+# Strong hall poses move far from the bind but keep triangles near rigid. Bounds are the
+# 24 accepted bind-mismatch idles (p99 0.22-0.57, p99.9 0.59-1.38) plus ~15% margin.
+SAMPLED_STRETCH_ENVELOPE = dict(diagonal_ratio=(0.6, 1.3), edge_log_stretch_p99=(0.0, 0.65),
+    edge_log_stretch_p999=(0.0, 1.6))
+
+
+def inside(stats, envelope):
+    return all(low <= stats[key] <= high for key, (low, high) in envelope.items())
 
 
 def verify_reference_skin(library, model, sampled_poses=None):
@@ -97,14 +112,17 @@ def verify_reference_skin(library, model, sampled_poses=None):
         if sampled_poses is None or set(sampled_poses) != {b['name'] for b in model['bones']}:
             raise ValueError('Source reference skin reconstruction exceeds tolerance')
         stats = frame_skin_stats(model, sampled_poses)
-        if not stats['finite'] or any(not low <= stats[key] <= high
-                for key, (low, high) in SAMPLED_SKIN_ENVELOPE.items()):
-            raise ValueError('Reference pose differs from bind and sampled frame skins outside envelope')
+        accepted_by = None if not stats['finite'] else 'displacement' if inside(stats, SAMPLED_SKIN_ENVELOPE) \
+            else 'local-stretch' if inside(stats, SAMPLED_STRETCH_ENVELOPE) else None
+        if not accepted_by:
+            raise ValueError('Reference pose differs from bind and sampled frame skins outside envelope: '
+                             + json.dumps({k: v for k, v in stats.items() if isinstance(v, float)}))
         return dict(weighted_bones=len(model['used_bones']),
             max_weighted_global_matrix_error=weighted_error,
             max_reference_vertex_component_error=vertex_error,
             reference_pose_mismatch=[r for r in rows if r['max_global_matrix_error'] >= 1e-4],
-            sampled_frame0=stats, envelope=SAMPLED_SKIN_ENVELOPE, correction_applied=False,
+            sampled_frame0=stats, envelope=SAMPLED_SKIN_ENVELOPE, stretch_envelope=SAMPLED_STRETCH_ENVELOPE,
+            accepted_by=accepted_by, correction_applied=False,
             scope='Library reference pose is not the mesh bind; every bone is clip-driven and '
                 'original inverse binds are kept. GLB rest pose differs from bind; idle playback only.')
     return dict(weighted_bones=len(model['used_bones']),

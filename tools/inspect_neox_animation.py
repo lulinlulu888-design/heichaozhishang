@@ -167,12 +167,23 @@ def map_bones(library: dict, clip: dict, model_names: list[str], *, allow_librar
     if len(set(hashes)) != len(hashes):
         raise ValueError('ambiguous bone hash collision')
     mesh_covered = set(names) >= set(model_names) if allow_library_extras else set(names) == set(model_names)
-    if set(hashes) != set(clip['bone_ids']) or not mesh_covered:
-        raise ValueError('clip/library/model skeleton identities differ')
+    tracks_match = set(hashes) == set(clip['bone_ids'])
+    if allow_library_extras and not tracks_match:
+        # Tracks for bones outside the library drive nothing; untracked library bones are
+        # tolerated only when the mesh does not use them.
+        untracked = {names[i] for i, h in enumerate(hashes) if h not in set(clip['bone_ids'])}
+        tracks_match = not (untracked & set(model_names))
+    if not tracks_match or not mesh_covered:
+        raise ValueError('clip/library/model skeleton identities differ: ' + json.dumps(dict(
+            clipOnly=len(set(clip['bone_ids']) - set(hashes)), libraryOnly=len(set(hashes) - set(clip['bone_ids'])),
+            meshOnly=sorted(set(model_names) - set(names))[:12],
+            untrackedMeshBones=sorted({names[i] for i, h in enumerate(hashes) if h not in set(clip['bone_ids'])} & set(model_names))[:12])))
     library_by_hash = {value: index for index, value in enumerate(hashes)}
     model_by_name = {name: index for index, name in enumerate(model_names)}
     result = []
     for index, value in enumerate(clip['bone_ids']):
+        if value not in library_by_hash:
+            continue
         library_index = library_by_hash[value]
         name = names[library_index]
         if name not in model_by_name:
