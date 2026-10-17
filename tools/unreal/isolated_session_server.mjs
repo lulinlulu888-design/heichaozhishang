@@ -22,6 +22,7 @@ const { values } = parseArgs({ options: { port: { type: 'string' },
   'record-directory': { type: 'string' }, faults: { type: 'boolean', default: false },
   'card-response-delay-ms': { type: 'string' },
   'reject-first-play': { type: 'boolean', default: false },
+  'lose-first-play-response': { type: 'boolean', default: false },
   mainline: { type: 'boolean' },
   'mainline-faults': { type: 'boolean', default: false },
   'preserve-database': { type: 'boolean', default: false }, 'resume-manifest': { type: 'string' } } });
@@ -33,9 +34,16 @@ function parseCardResponseDelayMs(value) {
 const requestedCardResponseDelayMs = parseCardResponseDelayMs(values['card-response-delay-ms'] ?? '0');
 const rejectFirstPlay = values['reject-first-play'] === true;
 if (rejectFirstPlay && values.faults) throw Error('--reject-first-play cannot be combined with --faults');
+// The first committed play-card response is held past the UE client's 8 s transport
+// timeout, so the client must recover through a same-request-id replay.
+const LOST_RESPONSE_DELAY_MS = 9500;
+const loseFirstPlayResponse = values['lose-first-play-response'] === true;
+if (loseFirstPlayResponse && (values.faults || rejectFirstPlay || values['card-response-delay-ms'] !== undefined))
+  throw Error('--lose-first-play-response cannot be combined with other battle faults or delays');
+let lostPlayResponse = false;
 const resumeMode = Boolean(values['resume-manifest']);
 const mainlineFaults = resolveMainlineFaultOption(values['mainline-faults'], {mainlineEnabled:values.mainline===true,faults:values.faults,resume:resumeMode});
-if(resumeMode && (values.port || values['record-directory'] || values.faults || values['reject-first-play'] || values['card-response-delay-ms'] !== undefined || values.mainline !== undefined))throw Error('Resume inherits its test port, directory, response delay and mainline mode; overrides and faults are forbidden');
+if(resumeMode && (values.port || values['record-directory'] || values.faults || values['reject-first-play'] || loseFirstPlayResponse || values['card-response-delay-ms'] !== undefined || values.mainline !== undefined))throw Error('Resume inherits its test port, directory, response delay and mainline mode; overrides and faults are forbidden');
 const allowedRoot = resolve(root, 'analysis/unreal/session-test');
 const previousManifestPath = resumeMode ? resolve(values['resume-manifest']) : null;
 const recordDirectory = resumeMode ? dirname(previousManifestPath) : resolve(values['record-directory'] ?? resolve(allowedRoot, randomUUID()));
@@ -84,8 +92,11 @@ let firstCreation, historicalBattleId, postCreationDelivered = false, delayedRea
 let creationMutationCount = 0;
 const note = value => appendFile(tracePath, JSON.stringify({ time: Date.now(), processIdentity, processIndex, ...value }) + '\n');
 async function deliverResponse(response, result, event) {
-  const delayMs = event.method === 'POST' && /\/battles\/[0-9a-f-]{36}\/actions$/.test(event.path)
-    && event.type === 'play-card' && result.status === 200 ? cardResponseDelayMs : 0;
+  const committedPlay = event.method === 'POST' && /\/battles\/[0-9a-f-]{36}\/actions$/.test(event.path)
+    && event.type === 'play-card' && result.status === 200;
+  const loseThis = committedPlay && loseFirstPlayResponse && !lostPlayResponse;
+  if (loseThis) lostPlayResponse = true;
+  const delayMs = loseThis ? LOST_RESPONSE_DELAY_MS : committedPlay ? cardResponseDelayMs : 0;
   if (delayMs === 0) {
     response.writeHead(result.status, {'content-type':'application/json; charset=utf-8'}).end(result.text);
     return;
@@ -94,7 +105,7 @@ async function deliverResponse(response, result, event) {
   const timing = { requestId: event.requestId, path: event.path, type: event.type,
     revision: event.revision, battleId: event.battleId, status: result.status,
     receivedAtUnixMs: event.receivedAtUnixMs, upstreamCompletedAtUnixMs: event.upstreamCompletedAtUnixMs,
-    delayMs, delayStartedAtUnixMs: Date.now() };
+    delayMs, lostResponse: loseThis, delayStartedAtUnixMs: Date.now() };
   await note({phase:'ue-response-delayed', ...timing});
   await waitForResponseDelay(delayMs);
   if (response.destroyed) {
@@ -307,7 +318,7 @@ try {
   await new Promise((resolveListen, reject) => { proxy.once('error', reject); proxy.listen(port, '127.0.0.1', resolveListen); });
   const manifest = { schemaVersion: 2, mode: 'isolated-native-session-test', pid: process.pid, address: `http://127.0.0.1:${port}`, port,
     mongoDatabase, mongoEndpoint: '127.0.0.1:27027', mongoUriSha256, runId, databaseIdentity, processIdentity, processIndex,
-    preserveDatabase:values['preserve-database'], faults: values.faults, rejectFirstPlay, cardResponseDelayMs, mainlineEnabled, mainlineFaults, controlToken, recordDirectory, tracePath,
+    preserveDatabase:values['preserve-database'], faults: values.faults, rejectFirstPlay, loseFirstPlayResponse, cardResponseDelayMs, mainlineEnabled, mainlineFaults, controlToken, recordDirectory, tracePath,
     ...(resumeMode?{previousManifestSha256:previousManifestHash,firstManifestSha256:previousManifest.firstManifestSha256??previousManifestHash,
       previousProcessIdentity:previousManifest.processIdentity,previousPid:previousManifest.pid,resumeCheckpoint:previousCheckpoint}: {}) };
   const manifestText=JSON.stringify(manifest,null,2);manifestHash=digest(manifestText);

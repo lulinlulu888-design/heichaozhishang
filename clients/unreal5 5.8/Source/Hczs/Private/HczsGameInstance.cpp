@@ -61,7 +61,7 @@ void UHczsGameInstance::Shutdown()
     }
     bRequestInFlight = false;
     OnStateChanged.Clear(); OnStateChangedNative.Clear();
-    OnCardIntentDispatchedNative.Clear(); OnCardIntentSettledNative.Clear();
+    OnCardIntentDispatchedNative.Clear(); OnCardIntentSettledNative.Clear(); OnCardIntentUncertainNative.Clear();
     if (!bIsIsolatedAutomationSession) Super::Shutdown();
 }
 #if WITH_DEV_AUTOMATION_TESTS
@@ -548,6 +548,13 @@ void UHczsGameInstance::ClearPendingIntent(bool bConfirmedCard)
     PendingVisualReceipt = FHczsBattleVisualReceipt();
     if (bWasDispatched) OnCardIntentSettledNative.Broadcast(VisualRequest, bConfirmedCard);
 }
+void UHczsGameInstance::NotifyCardIntentUncertain()
+{
+    if (PendingIntentKind != TEXT("action") || !PendingCardVisual.bDispatched || PendingCardVisual.RequestId.IsEmpty()) return;
+    UE_LOG(LogTemp, Display, TEXT("HCZS card intent uncertain: request=%s revision=%lld; kept pending for same-id retry"),
+        *PendingCardVisual.RequestId, PendingCardVisual.ExpectedRevision);
+    OnCardIntentUncertainNative.Broadcast(PendingCardVisual.RequestId);
+}
 void UHczsGameInstance::CreateSelectedBattle()
 {
     if (!CanStartRead() || !bLocalServiceAvailable || SelectedProfileId.IsEmpty() || !bProfileStateCurrent || !bEncounterScenarioReady || !bAllowNewBattles) return;
@@ -655,7 +662,11 @@ void UHczsGameInstance::SendPendingIntent()
                 if (Kind == TEXT("hall")) ReadHall(); else if (!Battle.IsEmpty()) ReadBattle(Battle); else RefreshBattles();
             }
             else if (Code == 0 || Code >= 500 || Error == TEXT("INVALID_JSON") || Error == TEXT("RESPONSE_TOO_LARGE"))
-            { bPendingIntentRetryable = true; bBattleStateCurrent = false; Fail(Error, TEXT("操作结果尚未确认。请重试原操作，确认同一次操作的保存结果。")); }
+            {
+                bPendingIntentRetryable = true; bBattleStateCurrent = false;
+                Fail(Error, TEXT("操作结果尚未确认。请重试原操作，确认同一次操作的保存结果。"));
+                NotifyCardIntentUncertain();
+            }
             else
             {
                 const FString Kind = PendingIntentKind, Battle = PendingIntentBattle; ClearPendingIntent(); Fail(Error, FriendlyError(Code, Error));
@@ -700,7 +711,11 @@ void UHczsGameInstance::SendPendingIntent()
         if (!bCreate) { Intent->TryGetStringField(TEXT("type"), ActionType); Intent->TryGetStringField(TEXT("instanceId"), Instance); }
         if (Code != (bCreate ? 201 : 200) || !ParseReceipt(O, PendingIntentProfile, PendingIntentBattle, PendingIntentEncounter, PendingIntentRevision, Receipt, Events, ActionType, Instance, &Visual) ||
             (bCreate && (Receipt.PlayerId != SelectedPlayerId || Receipt.EnemyId != SelectedEnemyId)))
-        { bPendingIntentRetryable = true; bBattleStateCurrent = false; Fail(TEXT("UNEXPECTED_RESPONSE"), TEXT("操作回执不符合战斗契约。请重试原操作确认，未替换当前画面。")); return; }
+        {
+            bPendingIntentRetryable = true; bBattleStateCurrent = false;
+            Fail(TEXT("UNEXPECTED_RESPONSE"), TEXT("操作回执不符合战斗契约。请重试原操作确认，未替换当前画面。"));
+            NotifyCardIntentUncertain(); return;
+        }
         if (bCreate)
         {
             FString Template;

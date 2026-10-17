@@ -155,7 +155,7 @@ def run():
                     fov=float(cc.get_editor_property('field_of_view')), aspect=float(cc.get_editor_property('aspect_ratio')),
                     constrainAspect=bool(cc.get_editor_property('constrain_aspect_ratio')),
                     viewport=[float(v) for v in (u.WidgetLayoutLibrary.get_viewport_size(world).x, u.WidgetLayoutLibrary.get_viewport_size(world).y)]))
-            if report.get('roundStartDeal') or report.get('dragRetest'):
+            if report.get('roundStartDeal') or report.get('dragRetest') or report.get('lostPlay'):
                 guard.check(sample['actionIndex'] in (0, 1) and sample['revision'] == sample['actionIndex'] + 1,
                             'Acceptance changed more than one authoritative action')
             else:
@@ -270,12 +270,13 @@ def run():
             if not game: return
             current=state['stage']; elapsed=time.monotonic()-state['entered']; sample=observe(game,world)
             if game.get_editor_property('request_in_flight'):
-                if current == 'reject-hold':
+                if current in ('reject-hold', 'lost-hold'):
                     clip = sample.get('clip') or ''
                     if sample.get('busy') and 'idle' not in clip:
                         state['sawAttackWindup'] = clip
                 return
-            if not (report.get('rejectPlay') and current in ('reject-hold', 'reject-recover')):
+            if not ((report.get('rejectPlay') and current in ('reject-hold', 'reject-recover'))
+                    or (report.get('lostPlay') and current in ('lost-hold', 'lost-shot', 'lost-confirm'))):
                 guard.check(not game.get_editor_property('has_pending_intent') and not game.get_editor_property('error_code'), 'Native request failed or left an unresolved intent')
             if current=='prepare' and future.done():
                 state['profile']=future.result(); report['profileId']=state['profile']; game.refresh_bootstrap(); stage('profile')
@@ -354,6 +355,8 @@ def run():
                         game.end_turn(); stage('round-deal')
                     elif report.get('rejectPlay'):
                         state['read'] = pool.submit(read_battle, sample['battleId']); stage('reject-choose')
+                    elif report.get('lostPlay'):
+                        state['read'] = pool.submit(read_battle, sample['battleId']); stage('lost-choose')
                     elif report.get('dragRetest'):
                         state['steps'] = [
                             ('mouse', 'tap', 'tap', 'below-drag-threshold'),
@@ -412,7 +415,7 @@ def run():
                             'Animated instances are not the authoritative new hand')
                 passed('round-start-draw-uses-source-flight-and-ui-cues')
                 finish()
-            elif current=='reject-choose' and state['read'].done():
+            elif current in ('reject-choose', 'lost-choose') and state['read'].done():
                 battle = state['read'].result()
                 cards = {card['instanceId']: card['cardId'] for card in battle['state']['cards']}
                 definition = battle['scenario']['definition']['cards']
@@ -427,7 +430,62 @@ def run():
                 guard.check(widget.development_drag_card(choice, 'enemy', False, 'move'), 'Pointer move failed for the rejected play')
                 guard.check(widget.development_drag_card(choice, 'enemy', False, 'release'), 'Pointer up failed for the rejected play')
                 state['rejectStarted'] = time.time()
-                stage('reject-hold')
+                stage('lost-hold' if current == 'lost-choose' else 'reject-hold')
+            elif current=='lost-hold' and not game.get_editor_property('request_in_flight'):
+                guard.check(time.time() - state['rejectStarted'] < 15, 'Lost response did not surface as an unknown outcome')
+                if not game.get_editor_property('has_pending_intent'):
+                    guard.fail('Lost response cleared the intent instead of keeping it for a same-id retry')
+                if not game.get_editor_property('pending_intent_retryable'):
+                    return
+                guard.check(state.get('sawAttackWindup'), 'Windup did not start before the lost response')
+                guard.check(sample['actionIndex'] == 0 and sample['revision'] == 1, 'Client applied an unconfirmed play')
+                log = native_log.read_text('utf8', errors='replace')
+                if 'HCZS visual intent uncertain:' not in log and time.time() - state['rejectStarted'] < 13:
+                    return
+                guard.check('HCZS card intent uncertain: request=' in log and 'HCZS visual intent uncertain:' in log
+                            and 'abortedPending=1' in log, 'Unknown outcome did not release the held windup')
+                guard.check(not sample.get('busy') and sample.get('clip') and 'idle_1' in sample['clip'],
+                            'Held windup still blocks the battle after the timeout')
+                widget = u.WidgetLibrary.get_all_widgets_of_class(world, u.load_class(None, '/Script/Hczs.HczsSessionWidget'), True)[0]
+                ui = json.loads(widget.development_describe_ui())
+                retry = [c for c in ui.get('controls', []) if c.get('action') == 'retry-intent']
+                guard.check(len(retry) == 1 and retry[0].get('enabled'), 'Retry prompt for the same operation is not shown')
+                state['lostWidget'] = widget
+                report['lostHold'] = dict(windup=state['sawAttackWindup'], restoredIdle=sample['clip'], error=game.get_editor_property('error_code'))
+                capture('lost-response-retry'); stage('lost-shot')
+            elif current=='lost-shot' and shot_done():
+                guard.check(state['lostWidget'].development_press_control('retry-intent'), 'Retry control press failed')
+                state['retryAt'] = time.time(); stage('lost-confirm')
+            elif current=='lost-confirm':
+                guard.check(time.time() - state['retryAt'] < 15, 'Same-id retry did not confirm')
+                if game.get_editor_property('has_pending_intent') or sample.get('busy') or sample['actionIndex'] != 1:
+                    return
+                guard.check(sample['revision'] == 2 and sample['canSubmit'] and 'idle_1' in (sample.get('clip') or ''),
+                            'Replayed receipt did not settle at the authoritative pose')
+                state['read'] = pool.submit(read_battle, sample['battleId']); stage('lost-read')
+            elif current=='lost-read' and state['read'].done():
+                battle = state['read'].result()
+                guard.check(battle['revision'] == 2 and battle['state']['actionIndex'] == 1
+                            and state['rejectCard'] not in battle['state']['piles']['hand'], 'Authoritative play missing or duplicated')
+                rows = [json.loads(line) for line in Path(manifest['tracePath']).read_text('utf8').splitlines() if line.strip()]
+                plays = [r for r in rows if r.get('phase') == 'ue-request' and r.get('method') == 'POST' and str(r.get('path', '')).endswith('/actions')]
+                lost = [r for r in rows if r.get('phase') == 'ue-response-delivery-aborted' and r.get('lostResponse')]
+                if not lost and time.time() - state['retryAt'] < 15:
+                    return
+                guard.check(len(plays) == 2 and plays[0].get('requestId') == plays[1].get('requestId')
+                            and [p.get('status') for p in plays] == [200, 200] and [p.get('replayed') for p in plays] == [False, True]
+                            and len(lost) == 1 and lost[0].get('requestId') == plays[0].get('requestId'),
+                            'Lost response was not recovered by exactly one same-id replay')
+                log = native_log.read_text('utf8', errors='replace')
+                guard.check(log.count('HCZS card intent windup:') == 1 and log.count('HCZS card intent dispatched:') == 1,
+                            'Retry restarted the local attack')
+                guard.check('HCZS confirmed receipt visual sequence: actionIndex=1' not in log,
+                            'Replayed receipt replayed the already-started attack')
+                report['lostPlayResult'] = dict(cardId=state['rejectCardId'], instanceId=state['rejectCard'], requestId=plays[0]['requestId'],
+                                                statuses=[p['status'] for p in plays], replayed=[p['replayed'] for p in plays],
+                                                screenshot=report['screenshots'][-1]['path'])
+                passed('lost-response-releases-windup-shows-retry-and-same-id-replay-applies-once')
+                finish()
             elif current=='reject-hold' and not game.get_editor_property('request_in_flight'):
                 if not state.get('sawAttackWindup') and time.time() - state['rejectStarted'] < 3:
                     return
@@ -571,7 +629,11 @@ def run():
     report['dragRetest'] = guard.flag(command, 'HczsDragRetest')
     report['rejectPlay'] = guard.flag(command, 'HczsRejectPlay')
     report['entranceFx'] = guard.flag(command, 'HczsEntranceFxReconstruction')
-    guard.check(sum(bool(report[name]) for name in ('roundStartDeal', 'dragRetest', 'rejectPlay')) <= 1, 'Choose one acceptance mode')
+    report['lostPlay'] = guard.flag(command, 'HczsLostPlayResponse')
+    guard.check(sum(bool(report[name]) for name in ('roundStartDeal', 'dragRetest', 'rejectPlay', 'lostPlay')) <= 1, 'Choose one acceptance mode')
+    if report['lostPlay']:
+        guard.check(manifest.get('loseFirstPlayResponse') is True and manifest.get('faults') is False,
+                    'Lost-response acceptance needs --lose-first-play-response')
     if report['rejectPlay']:
         guard.check(manifest.get('rejectFirstPlay') is True and manifest.get('faults') is False
                     and manifest.get('cardResponseDelayMs', 0) >= 2000, 'Rejection acceptance needs a delayed pre-commit 409')

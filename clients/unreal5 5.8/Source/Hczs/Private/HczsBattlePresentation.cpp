@@ -108,6 +108,7 @@ void AHczsBattlePresentation::BeginPlay()
     {
         IntentDispatchedHandle = Session->OnCardIntentDispatchedNative.AddUObject(this, &AHczsBattlePresentation::IntentDispatched);
         IntentSettledHandle = Session->OnCardIntentSettledNative.AddUObject(this, &AHczsBattlePresentation::IntentSettled);
+        IntentUncertainHandle = Session->OnCardIntentUncertainNative.AddUObject(this, &AHczsBattlePresentation::IntentUncertain);
     }
 }
 
@@ -117,6 +118,7 @@ void AHczsBattlePresentation::EndPlay(const EEndPlayReason::Type EndPlayReason)
     {
         Session->OnCardIntentDispatchedNative.Remove(IntentDispatchedHandle);
         Session->OnCardIntentSettledNative.Remove(IntentSettledHandle);
+        Session->OnCardIntentUncertainNative.Remove(IntentUncertainHandle);
     }
     CancelPresentation(); Cursor.Reset();
     WeaponSourceFx->Release();
@@ -167,6 +169,25 @@ void AHczsBattlePresentation::IntentSettled(const FString& RequestId, bool bConf
     // A transport failure stays unresolved in GI and does not invoke this callback.
     CancelPresentation();
     if (Session && CanPresentBattle(Session->CurrentBattle)) ApplyStablePose(Session->CurrentBattle);
+}
+
+void AHczsBattlePresentation::IntentUncertain(const FString& RequestId)
+{
+    // Holding the windup would keep the presentation busy and hide the retry prompt.
+    // Keep the intent identity so the same-id replayed receipt only synchronizes
+    // the authoritative pose instead of replaying the attack.
+    if (!UltimateIntent.RequestId.IsEmpty() && UltimateIntent.RequestId == RequestId && !UltimateIntent.bConfirmed)
+    {
+        bUltimatePlaying = false; bUltimateIntentAborted = true;
+        if (UltimateSequence) UltimateSequence->Cancel();
+        SetBusy(false);
+    }
+    else if (!LocalCard.RequestId.IsEmpty() && LocalCard.RequestId == RequestId && !LocalCard.bConfirmed)
+        CancelPresentation(true);
+    else return;
+    if (Session && CanPresentBattle(Session->CurrentBattle)) ApplyStablePose(Session->CurrentBattle);
+    UE_LOG(LogTemp, Display, TEXT("HCZS visual intent uncertain: request=%s released=1 keptIdentity=1 atUnixMs=%lld"),
+        *RequestId, VisualUnixMs());
 }
 
 void AHczsBattlePresentation::Tick(float DeltaSeconds)

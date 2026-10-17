@@ -73,6 +73,8 @@ public:
         const FString& Phase = TEXT("begin"));
     /** Captures actual last paint controls/text/source texture references for acceptance. */
     UFUNCTION(BlueprintCallable, Category="HCZS|Test") FString DevelopmentDescribeUI() const;
+    /** Mainline UI tests only: dispatch a currently painted, enabled control by action. */
+    UFUNCTION(BlueprintCallable, Category="HCZS|Test") bool DevelopmentPressControl(const FString& Action);
     /** Explicit inspection-only original page paint observation for native screenshots. */
     FString DevelopmentDescribeWorldlineUI() const;
 protected:

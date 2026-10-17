@@ -2289,6 +2289,20 @@ FReply UHczsSessionWidget::NativeOnKeyDown(const FGeometry& Geometry, const FKey
     return Super::NativeOnKeyDown(Geometry, Event);
 }
 
+bool UHczsSessionWidget::DevelopmentPressControl(const FString& Action)
+{
+#if UE_BUILD_SHIPPING
+    return false;
+#else
+    if (!FParse::Param(FCommandLine::Get(), TEXT("HczsMainlineUITest")) || !IsInViewport()) return false;
+    const FHczsSessionControl* Control = Controls.FindByPredicate([&Action](const FHczsSessionControl& C) { return C.Action == Action && C.bEnabled; });
+    if (!Control) return false;
+    const FHczsSessionControl Copy = *Control;
+    DispatchControl(Copy);
+    return true;
+#endif
+}
+
 void UHczsSessionWidget::DispatchControl(const FHczsSessionControl& Control)
 {
     if (!Session) return;

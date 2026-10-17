@@ -170,7 +170,7 @@ private:
     bool bEnemyDeathPresented = false;
     bool bUnsupportedLogged = false;
     UPROPERTY() TObjectPtr<UHczsGameInstance> Session;
-    FDelegateHandle IntentDispatchedHandle, IntentSettledHandle;
+    FDelegateHandle IntentDispatchedHandle, IntentSettledHandle, IntentUncertainHandle;
     FHczsCardVisualGate LocalCard;
     TArray<FString> LocalPlayerClips;
     int32 LocalPlayerClipIndex = 0;
@@ -198,6 +198,7 @@ private:
     void SetBusy(bool bBusy);
     void IntentDispatched(const FHczsCardIntentVisual& Intent);
     void IntentSettled(const FString& RequestId, bool bConfirmed);
+    void IntentUncertain(const FString& RequestId);
     void PlayLocalPlayerClip();
     void FinishLocalPlayerClip();
     void FinishVisualsIfIdle();

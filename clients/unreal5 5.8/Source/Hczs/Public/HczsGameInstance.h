@@ -21,6 +21,8 @@ struct FHczsCardIntentVisual
 };
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnHczsCardIntentDispatched, const FHczsCardIntentVisual&);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnHczsCardIntentSettled, const FString&, bool);
+/** The dispatched intent's outcome is unknown (timeout/transport/bad receipt); it stays pending for a same-id retry. */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnHczsCardIntentUncertain, const FString&);
 
 /** Process-local presentation permission, never reconstructed from revision 1 alone. */
 struct HCZS_API FHczsFreshBattleEntranceGate
@@ -84,6 +86,7 @@ public:
     FOnHczsSessionChanged OnStateChangedNative;
     FOnHczsCardIntentDispatched OnCardIntentDispatchedNative;
     FOnHczsCardIntentSettled OnCardIntentSettledNative;
+    FOnHczsCardIntentUncertain OnCardIntentUncertainNative;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") EHczsSessionPhase Phase = EHczsSessionPhase::Connecting;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") TArray<FHczsLocalProfile> Profiles;
     UPROPERTY(BlueprintReadOnly, Category="HCZS|Session") TArray<FHczsEncounterSummary> Encounters;
@@ -159,6 +162,7 @@ private:
     void BeginIntent(const FString& Kind, const FString& Verb, const FString& Route, const FString& Body, int64 ExpectedRevision);
     void SendPendingIntent();
     void ClearPendingIntent(bool bConfirmedCard = false);
+    void NotifyCardIntentUncertain();
     void StartBattleAction(const FString& Type, const FString& InstanceId);
     FString ProfilesRoute() const;
     FString BattlesRoute() const;
