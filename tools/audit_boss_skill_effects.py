@@ -29,6 +29,26 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def summarize(payload):
+    """Literal layer fields. TrackType, DirType and BlendMode are not interpreted."""
+    root = ET.fromstring(payload.decode('gb18030'))
+    layers = []
+    for el in root.iter():
+        if el.tag not in ('Sprite', 'ParticleSystem', 'Model'):
+            continue
+        layers.append({
+            'tag': el.tag,
+            'name': el.attrib.get('Name', ''),
+            'texture': el.attrib.get('Texture', '').replace('\\', '/'),
+            'start': el.attrib.get('FxStartTime', ''),
+            'lifespan': el.attrib.get('FxLifeSpan', ''),
+            'trackType': el.attrib.get('TrackType', ''),
+            'dirType': el.attrib.get('DirType', ''),
+            'blendMode': el.attrib.get('BlendMode', ''),
+        })
+    return root.tag, layers
+
+
 def main():
     if sha(SKILLS.read_bytes()) != SKILLS_SHA:
         raise SystemExit('Boss skill evidence changed')
@@ -46,16 +66,13 @@ def main():
         target = OUT / 'source' / Path(logical).name
         source = extract(apk, catalogue, logical, target, APK_SHA256)
         payload = target.read_bytes()
-        root = ET.fromstring(payload.decode('gb18030'))
-        layers = [child.tag for child in list(root)]
-        textures = sorted({el.attrib[key].replace('\\', '/') for el in root.iter() for key in ('Texture',)
-                           if key in el.attrib} | {el.attrib['Value'].replace('\\', '/') for el in root.iter('Semantic')
-                                                   if el.attrib.get('Value', '').lower().endswith(('.tga', '.png', '.dds'))})
-        documents.append({'logical': logical, 'sha256': sha(payload), 'bytes': len(payload), 'root': root.tag,
+        root_tag, layers = summarize(payload)
+        textures = sorted({layer['texture'] for layer in layers if layer['texture']})
+        documents.append({'logical': logical, 'sha256': sha(payload), 'bytes': len(payload), 'root': root_tag,
                           'layers': layers, 'textures': textures,
                           'source': {k: source[k] for k in ('member', 'index', 'logical_path') if k in source}})
     report = {'apkSha256': APK_SHA256, 'skills': EXPECTED, 'documents': documents,
-              'limits': ['SFX documents and the paths they name only. Meshes, materials and particle motion are not decoded or played.']}
+              'limits': ['Layer fields are copied from the SFX. TrackType, DirType and BlendMode are not interpreted, and nothing is played.']}
     path = OUT / 'report.json'
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
     print(json.dumps({'report': str(path), 'sha256': sha(path.read_bytes()),
