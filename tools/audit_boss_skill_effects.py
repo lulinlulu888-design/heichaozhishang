@@ -82,8 +82,40 @@ def main():
         if found is None:
             texture_gaps.append(logical)
             continue
-        if not found.endswith(('.tga', '.ktx')):
-            texture_gaps.append(logical)
+        if found.endswith('.spr'):
+            # The .spr names effect/texture/<stem>.tga, which is not in the pack.
+            # The same-stem .ktx next to the .spr is; frames are cropped from it.
+            sheet = str(Path(found).with_suffix('.ktx'))
+            if len(lookup_logical(catalogue, sheet)) != 1:
+                texture_gaps.append(logical)
+                continue
+            spr_path = OUT / 'textures' / (stem + '.spr')
+            extract(apk, catalogue, found, spr_path, APK_SHA256)
+            frames = []
+            for line in spr_path.read_text('utf8', errors='replace').splitlines()[3:]:
+                parts = line.split()
+                if len(parts) != 5:
+                    texture_gaps.append(logical)
+                    frames = []
+                    break
+                frames.append([int(v) for v in parts[1:]])
+            if not frames:
+                continue
+            sheet_path = OUT / 'textures' / (stem + '.ktx')
+            extract(apk, catalogue, sheet, sheet_path, APK_SHA256)
+            decoded = convert([sheet_path], OUT / 'textures' / ('decoded-' + stem), DEFAULT_DECODER)['textures'][0]['outputs'][0]
+            with Image.open(ROOT / decoded['png']) as image:
+                image = image.convert('RGBA')
+                if any(x1 > image.width or y1 > image.height for _, _, x1, y1 in frames):
+                    texture_gaps.append(logical)
+                    continue
+                crops = []
+                for index, (x0, y0, x1, y1) in enumerate(frames):
+                    crop = OUT / 'textures' / f'{stem}-{index}.png'
+                    image.crop((x0, y0, x1, y1)).save(crop)
+                    crops.append({'rect': [x0, y0, x1, y1], 'pngSha256': sha(crop.read_bytes())})
+                textures.append({'logical': logical, 'packed': found, 'sheet': sheet, 'size': list(image.size),
+                                 'frames': crops, 'pathNote': 'spr texture path is not indexed; frames come from the same-stem ktx'})
             continue
         target = OUT / 'textures' / (stem + Path(found).suffix)
         extract(apk, catalogue, found, target, APK_SHA256)

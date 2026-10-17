@@ -26,7 +26,10 @@ class BossSkillEffectSummaryTest(unittest.TestCase):
         glow = next(row for row in report['textures'] if row['logical'].endswith('glow_002.tga'))
         self.assertEqual(glow['size'], [128, 128])
         self.assertTrue(glow['packed'].replace('\\', '/').endswith('glow_002.ktx'))
-        self.assertEqual(report['textureGaps'], ['effects/tex/star/suixie_xuelie01.spr'])
+        sheet = next(row for row in report['textures'] if row['logical'].endswith('.spr'))
+        self.assertEqual(len(sheet['frames']), 9)
+        self.assertEqual(sheet['frames'][0]['rect'], [0, 0, 169, 169])
+        self.assertEqual(report['textureGaps'], [])
 
 
 if __name__ == '__main__':
